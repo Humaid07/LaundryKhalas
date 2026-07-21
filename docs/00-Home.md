@@ -36,7 +36,23 @@ Windows `next build` quirk), and the next recommended build steps. No code chang
 
 ## Latest Build Report
 
-[[2026-07-21-supabase-dev-test-setup]] —
+[[2026-07-21-evolution-whatsapp-adapter]] —
+`build-reports/2026-07-21-evolution-whatsapp-adapter.md` — builds the **Evolution
+API WhatsApp adapter** (current provider, `WHATSAPP_MODE=evolution`, mock by
+default). Adds `channels/evolution_whatsapp.py` (`send_text` →
+`POST /message/sendText/{instance}`; `parse_evolution_webhook`), an inbound
+webhook `POST /webhooks/evolution` that upserts customer+conversation into the
+**Supabase inbox**, stores the message, drafts a reply and **flags escalations**
+(refund→urgent/Finance, etc.), and outbound live send wired into the inbox
+`human-message` endpoint (gated by `evolution_live_ready`). Agent never
+auto-sends by default (`EVOLUTION_AUTO_REPLY=false`); the sanctioned live path is
+a human operator reply. Privacy kept: full number only in `phone_e164`
+(backend-only) + `phone_hash`, APIs return `masked_phone`. `pytest` **174
+passed**, ruff clean; **live-verified** inbound round-trip against the running
+Evolution server + dev/test Supabase (masked phone, refund flag, no leak).
+See [[evolution-whatsapp-integration]].
+
+Previous: [[2026-07-21-supabase-dev-test-setup]] —
 `build-reports/2026-07-21-supabase-dev-test-setup.md` — sets up the **separate
 dev/test Supabase project** as the WhatsApp Agent database (Dashboard → FastAPI →
 Supabase; NOT production). Adds `supabase/migrations/*` (10 tables — customers,

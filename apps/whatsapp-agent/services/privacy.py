@@ -12,6 +12,7 @@ Deliberately conservative: only phone-shaped digit runs (8+ digits) and
 emails are masked, so short tokens like an order ID (LK-1023) or a pickup
 time (7pm) are never mangled.
 """
+import hashlib
 import re
 
 # 8+ "phone-ish" characters, not glued to a word char on either side, so a
@@ -31,3 +32,21 @@ def mask_pii(text: str | None) -> str | None:
     masked = _EMAIL.sub(EMAIL_PLACEHOLDER, text)
     masked = _PHONE.sub(PHONE_PLACEHOLDER, masked)
     return masked
+
+
+def mask_phone(phone: str | None) -> str:
+    """Human-safe masked phone for the `masked_phone` column / any display —
+    keeps the leading country/prefix and last 2 digits, masks the middle
+    (e.g. '+971 50 •••• 24'). The full number is stored only in phone_e164
+    (backend-only, used to send) and never returned by the read APIs."""
+    digits = re.sub(r"[^\d+]", "", phone or "")
+    if len(digits) < 6:
+        return "•••• ••••"
+    return f"{digits[:5]} •••• {digits[-2:]}"
+
+
+def hash_phone(phone: str | None) -> str:
+    """Stable, non-reversible hash of the phone digits — used to look up / dedupe
+    a customer without scattering extra copies of the raw number."""
+    digits = re.sub(r"[^\d]", "", phone or "")
+    return hashlib.sha256(digits.encode()).hexdigest() if digits else ""

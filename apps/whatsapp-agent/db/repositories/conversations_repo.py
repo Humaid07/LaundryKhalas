@@ -106,3 +106,69 @@ async def touch_last_message(conversation_id: str, text: str) -> None:
         conversation_id,
         text,
     )
+
+
+# --------------------------------------------------------------------------
+# Inbound (Evolution / real WhatsApp) helpers
+# --------------------------------------------------------------------------
+async def get_or_create_for_customer(
+    customer_id: str, channel: str = "whatsapp", external_id: str | None = None
+) -> dict:
+    """Latest non-resolved conversation for the customer, or a new bot-handled one."""
+    existing = await database.fetchrow(
+        "select * from conversations where customer_id = $1 and status <> 'resolved' "
+        "order by last_message_at desc nulls last limit 1",
+        customer_id,
+    )
+    if existing:
+        return existing
+    return await database.fetchrow(
+        """
+        insert into conversations
+            (customer_id, external_conversation_id, channel, status, unread_count,
+             is_test_data, is_demo, environment, created_by_seed)
+        values ($1, $2, $3, 'bot', 0, false, false, 'dev', false)
+        returning *
+        """,
+        customer_id,
+        external_id,
+        channel,
+    )
+
+
+async def register_inbound(conversation_id: str, text: str) -> None:
+    """Bump the preview + unread counter for a newly-received customer message."""
+    await database.execute(
+        "update conversations set last_message = $2, last_message_at = now(), "
+        "unread_count = unread_count + 1 where id = $1",
+        conversation_id,
+        text,
+    )
+
+
+async def set_flagged(conversation_id: str, *, reason: str, priority: str, team: str) -> None:
+    await database.execute(
+        """
+        update conversations
+           set status = 'human_needed',
+               priority = $2,
+               human_intervention_required = true,
+               handoff_reason = $3,
+               assigned_team = $4
+         where id = $1 and status <> 'human_takeover'
+        """,
+        conversation_id,
+        priority,
+        reason,
+        team,
+    )
+
+
+async def get_customer_phone(conversation_id: str) -> str | None:
+    """Backend-only: the real phone (phone_e164) needed to send an outbound
+    reply. Never returned by the read APIs (those expose masked_phone only)."""
+    return await database.fetchval(
+        "select cust.phone_e164 from conversations c "
+        "join customers cust on cust.id = c.customer_id where c.id = $1",
+        conversation_id,
+    )

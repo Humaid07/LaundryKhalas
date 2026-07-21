@@ -3,7 +3,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import chat, conversations, flags, health, orders, settings_route, webhooks
+from api import (
+    chat,
+    conversations,
+    evolution_webhooks,
+    flags,
+    health,
+    orders,
+    settings_route,
+    webhooks,
+)
 from db import AsyncSessionLocal, database, init_db
 from services import order_store
 from settings import get_settings
@@ -49,6 +58,7 @@ app.include_router(conversations.router)
 app.include_router(flags.router)
 app.include_router(settings_route.router)
 app.include_router(webhooks.router)
+app.include_router(evolution_webhooks.router)
 app.include_router(health.router)
 
 

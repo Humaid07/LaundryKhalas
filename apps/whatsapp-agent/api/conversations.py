@@ -8,11 +8,16 @@ SQLite chat + order flow keeps working unchanged.
 Dashboard → FastAPI → Supabase. Customer messages are NOT authored here; only
 human-operator replies during a takeover.
 """
+import structlog
 from fastapi import APIRouter, HTTPException
 
+from channels.evolution_whatsapp import EvolutionWhatsAppChannel
 from db import database
 from db.repositories import conversations_repo, messages_repo
 from schemas import HumanMessageRequest, HumanTakeoverRequest
+from settings import get_settings
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -79,6 +84,24 @@ async def human_message(conversation_id: str, payload: HumanMessageRequest):
     message = await messages_repo.add_message(conversation_id, "human", text)
     if message is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    # Deliver the human-approved reply live via Evolution when configured. A
+    # human operator's manual reply is the sanctioned way to send live WhatsApp
+    # in the MVP (the agent never auto-sends). In mock mode this is skipped.
+    send_status = "stored"
+    settings = get_settings()
+    if settings.evolution_live_ready:
+        phone = await conversations_repo.get_customer_phone(conversation_id)
+        if phone:
+            try:
+                result = await EvolutionWhatsAppChannel.from_settings().send_text(
+                    to_phone=phone, text=text
+                )
+                send_status = result.status  # "sent"
+            except Exception as exc:  # noqa: BLE001 - report, don't 500 the reply
+                logger.warning("evolution_send_failed", error=str(exc))
+                send_status = "send_failed"
+    message["send_status"] = send_status
     return message
 
 

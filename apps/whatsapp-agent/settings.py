@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     evolution_api_base_url: str = ""
     evolution_api_key: str = ""
     evolution_instance_name: str = ""
+    # When true, the agent's happy-path draft reply is auto-sent via Evolution on
+    # inbound. Default false = replies are held for human approval (MVP rule);
+    # escalations are always held regardless.
+    evolution_auto_reply: bool = False
 
     # Meta WhatsApp Cloud API — FUTURE provider. Placeholders; required only when
     # whatsapp_mode=meta. Never required for mock or evolution.
@@ -126,6 +130,12 @@ class Settings(BaseSettings):
         """True only in meta mode with all Meta config present. Used by the Meta
         Cloud API webhook to decide whether to actually send a live reply."""
         return self.whatsapp_mode.lower() == "meta" and not self.missing_whatsapp_config
+
+    @property
+    def evolution_live_ready(self) -> bool:
+        """True only in evolution mode with all Evolution config present. Gates
+        live sends/receives via the Evolution API."""
+        return self.whatsapp_mode.lower() == "evolution" and not self.missing_whatsapp_config
 
     def validate_whatsapp_config(self) -> None:
         """Raise if the ACTIVE mode is unknown or missing its required vars.
