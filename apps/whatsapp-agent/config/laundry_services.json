@@ -1,0 +1,48 @@
+{
+  "_note": "Single source of truth for the LaundryKhalaas service catalog: the service-selection quick-reply buttons (id = key, text = label), the keywords used to detect a service from free text, and configured per-service pricing. Editing this file changes the agent with no code change (restart to reload). Keep apps/whatsapp-chat/lib/constants.ts SERVICE_OPTIONS in sync with the `label` values. A null `pricing` means no price is configured yet — the agent must NOT invent one (RULE 7).",
+  "currency_default": "AED",
+  "services": [
+    {
+      "key": "wash_and_fold",
+      "label": "Wash & Fold",
+      "keywords": ["wash and fold", "wash & fold", "wash my clothes", "laundry pickup", "regular laundry"],
+      "pricing": { "unit": "kg", "price": 8.0, "currency": "AED", "min_price": 25.0 }
+    },
+    {
+      "key": "dry_cleaning",
+      "label": "Dry Cleaning",
+      "keywords": ["dry clean", "dryclean", "suit", "blazer", "coat"],
+      "pricing": { "unit": "item", "price": 15.0, "currency": "AED", "min_price": 25.0 }
+    },
+    {
+      "key": "ironing",
+      "label": "Ironing / Pressing",
+      "keywords": ["iron", "press my", "pressing", "ironing / pressing", "ironing/pressing"],
+      "pricing": { "unit": "item", "price": 7.0, "currency": "AED", "min_price": 15.0 }
+    },
+    {
+      "key": "blankets_duvets",
+      "label": "Blankets / Duvets",
+      "keywords": ["blanket", "duvet", "comforter"],
+      "pricing": null
+    },
+    {
+      "key": "curtains_upholstery",
+      "label": "Curtains / Upholstery",
+      "keywords": ["curtain", "upholstery", "sofa", "couch"],
+      "pricing": null
+    },
+    {
+      "key": "business_laundry",
+      "label": "Business Laundry",
+      "keywords": ["business laundry", "office laundry", "bulk laundry", "corporate laundry"],
+      "pricing": null
+    },
+    {
+      "key": "other_cleaning",
+      "label": "Other Cleaning Request",
+      "keywords": ["other cleaning", "other cleaning request", "something else"],
+      "pricing": null
+    }
+  ]
+}

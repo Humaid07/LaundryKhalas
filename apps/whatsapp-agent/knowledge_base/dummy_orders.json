@@ -1,0 +1,82 @@
+[
+  {
+    "order_id": "LC-TEST-1001",
+    "customer_name": "Ahmed Khan",
+    "phone_number": "+971500000101",
+    "area": "Dubai Marina",
+    "address": "Marina View Tower, Apartment 1204, Dubai Marina",
+    "service": "Wash and Iron",
+    "items": [
+      { "item": "Shirt", "quantity": 5, "unit_price_aed": 9 },
+      { "item": "Trousers", "quantity": 2, "unit_price_aed": 11 }
+    ],
+    "subtotal_aed": 67,
+    "delivery_charge_aed": 0,
+    "estimated_total_aed": 67,
+    "payment_method": "Cash on delivery",
+    "status": "Processing",
+    "pickup_time": "2026-07-20 10:00",
+    "estimated_delivery_time": "2026-07-21 16:00",
+    "delivery_window": "4:00 PM to 6:00 PM",
+    "special_instructions": "Call before arrival"
+  },
+  {
+    "order_id": "LC-TEST-1002",
+    "customer_name": "Sara Ali",
+    "phone_number": "+971500000102",
+    "area": "Business Bay",
+    "address": "Business Central Tower, Apartment 805, Business Bay",
+    "service": "Dry Cleaning",
+    "items": [
+      { "item": "Dress", "quantity": 1, "unit_price_aed": 40 },
+      { "item": "Jacket or blazer", "quantity": 1, "unit_price_aed": 40 }
+    ],
+    "subtotal_aed": 80,
+    "delivery_charge_aed": 0,
+    "estimated_total_aed": 80,
+    "payment_method": "Online payment link",
+    "status": "Out for delivery",
+    "pickup_time": "2026-07-19 13:00",
+    "estimated_delivery_time": "2026-07-21 16:00",
+    "delivery_window": "4:00 PM to 6:00 PM",
+    "special_instructions": "Customer must be called before delivery"
+  },
+  {
+    "order_id": "LC-TEST-1003",
+    "customer_name": "Omar Hassan",
+    "phone_number": "+971500000103",
+    "area": "Al Barsha",
+    "address": "Al Barsha Residence, Villa 18, Al Barsha",
+    "service": "Wash and Fold",
+    "items": [
+      { "item": "6kg bag", "quantity": 1, "unit_price_aed": 60 }
+    ],
+    "subtotal_aed": 60,
+    "delivery_charge_aed": 0,
+    "estimated_total_aed": 60,
+    "payment_method": "Card on delivery",
+    "status": "Delivered",
+    "pickup_time": "2026-07-16 11:00",
+    "actual_delivery_time": "2026-07-18 15:30",
+    "special_instructions": "None"
+  },
+  {
+    "order_id": "LC-TEST-1004",
+    "customer_name": "Fatima Noor",
+    "phone_number": "+971500000104",
+    "area": "Jumeirah",
+    "address": "Jumeirah Beach Residence, Villa 7, Jumeirah",
+    "service": "Dry Cleaning",
+    "items": [
+      { "item": "White silk dress", "quantity": 1, "unit_price_aed": 40 }
+    ],
+    "subtotal_aed": 40,
+    "delivery_charge_aed": 0,
+    "estimated_total_aed": 40,
+    "payment_method": "Cash on delivery",
+    "status": "Delivered",
+    "pickup_time": "2026-07-20 09:00",
+    "actual_delivery_time": "2026-07-21 12:00",
+    "special_instructions": "Delicate silk — handle with care"
+  }
+]

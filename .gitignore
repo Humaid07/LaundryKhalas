@@ -1,0 +1,56 @@
+# ============================================================
+# LaundryKhalas — root .gitignore
+# Commit only source, docs, configs and .env.example files.
+# Never commit real secrets, dependencies or build artifacts.
+# ============================================================
+
+# --- Secrets / environment ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+.next-verify/
+out/
+dist/
+build/
+.turbo/
+.cache/
+coverage/
+*.tsbuildinfo
+.eslintcache
+
+# --- Python ---
+.venv/
+venv/
+pw-venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# --- Databases / local data ---
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Logs ---
+logs/
+*.log
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*.swp
+
+# --- Local tooling state (Claude Code) ---
+.claude/

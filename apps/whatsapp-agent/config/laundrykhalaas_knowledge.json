@@ -1,0 +1,92 @@
+{
+  "_note": "Area gazetteer + market/pickup/handoff notes used by the system prompt and area detection. The SERVICE CATALOG and PRICING moved to config/laundry_services.json (single source of truth); this file no longer holds them.",
+  "brand_name": "LaundryKhalaas",
+  "markets": ["UAE", "Qatar"],
+  "service_areas_note": "Service areas are configurable. If unsure, ask the customer for their area and tell them the team will confirm availability.",
+  "pricing_note": "Prices must be confirmed from configured pricing. If exact price is unavailable, do not invent it.",
+  "pickup_note": "Pickup time depends on area and availability.",
+  "handoff_note": "For complaints, refunds, cancellations, or unclear requests, tell the customer the LaundryKhalaas team will assist.",
+  "service_areas": {
+    "note": "Editable, config-driven area gazetteer for detecting a customer's pickup area from free text. Not exhaustive of every sub-community - covers all 7 emirates plus Qatar at the level a customer would actually type. Add new areas here, no code change needed - see agents/whatsapp_agent/tools.py.",
+    "Dubai": [
+      "Dubai Marina", "Downtown Dubai", "Jumeirah Beach Residence", "JBR",
+      "Business Bay", "Deira", "Bur Dubai", "Jumeirah Village Circle", "JVC",
+      "Jumeirah Lake Towers", "JLT", "Jumeirah", "Jumeirah 1", "Jumeirah 2",
+      "Jumeirah 3", "Al Barsha", "Al Barsha South", "Al Quoz",
+      "Al Quoz Industrial", "Al Qusais", "Al Qusais Industrial", "Al Nahda",
+      "Al Karama", "Al Satwa", "Al Mizhar", "Mirdif", "Discovery Gardens",
+      "International City", "Dubai Silicon Oasis", "Dubai Sports City",
+      "Motor City", "Arabian Ranches", "The Springs", "The Meadows",
+      "The Lakes", "The Villa", "Emirates Hills", "Palm Jumeirah",
+      "Dubai Investment Park", "DIP", "Al Furjan", "Dubailand", "Dubai Hills",
+      "Dubai South", "Dubai Festival City", "Al Rashidiya", "Al Warqa",
+      "Nad Al Sheba", "Nad Al Hamar", "Umm Suqeim", "Al Sufouh", "Zabeel",
+      "Al Jaddaf", "Culture Village", "The Greens", "The Views", "TECOM",
+      "Barsha Heights", "Al Safa", "Al Wasl", "Al Manara", "Al Khawaneej",
+      "Al Twar", "Ras Al Khor", "Ras Al Khor Industrial", "Umm Ramool",
+      "Al Garhoud", "Port Saeed", "Hor Al Anz", "Naif", "Al Muteena",
+      "Al Baraha", "Al Ras", "Al Shindagha", "Oud Metha", "Al Jafiliya",
+      "Al Kifaf", "Trade Centre", "World Trade Centre", "DIFC",
+      "Sheikh Zayed Road", "Umm Al Sheif", "Al Thanyah", "Mudon", "Villanova",
+      "Damac Hills", "Akoya", "Town Square", "Al Barari", "Remraam", "Meydan",
+      "Jebel Ali", "The Gardens", "Ibn Battuta", "Knowledge Village",
+      "Media City", "Internet City", "Emaar Beachfront", "Bluewaters",
+      "City Walk", "La Mer", "Al Muraqqabat", "Abu Hail", "Al Lisaili",
+      "Al Awir", "Academic City", "Arjan", "Jumeirah Golf Estates",
+      "Dubai Production City", "Dubai Studio City", "IMPZ", "Al Rigga"
+    ],
+    "Abu Dhabi": [
+      "Abu Dhabi", "Al Ain", "Khalifa City", "Al Reem Island", "Yas Island",
+      "Saadiyat Island", "Al Raha", "Mussafah", "Al Bateen", "Al Nahyan",
+      "Al Mushrif", "Al Khalidiyah", "Al Zahiyah", "Corniche Abu Dhabi",
+      "Al Maryah Island", "Al Mina", "Madinat Zayed", "Al Wahda", "Al Zaab",
+      "Baniyas", "Shakhbout City", "Al Shamkha", "Al Rahba",
+      "Mohammed Bin Zayed City", "MBZ City", "Al Falah", "Al Maqtaa",
+      "Al Bahia", "Al Karamah", "Tourist Club Area", "Al Reef"
+    ],
+    "Sharjah": [
+      "Sharjah", "Al Nahda Sharjah", "Al Majaz", "Al Qasimia", "Muwaileh",
+      "Al Taawun", "Al Khan", "Al Qasba", "Al Nud", "Al Yarmook",
+      "Al Ghubaiba", "University City Sharjah", "Al Suyoh", "Al Rahmaniya",
+      "Al Butina", "Tilal City", "Aljada", "Maryam Island"
+    ],
+    "Ajman": [
+      "Ajman", "Al Rashidiya Ajman", "Al Nuaimiya", "Al Jurf", "Al Rawda",
+      "Al Mowaihat", "Ajman Corniche", "Al Hamidiya"
+    ],
+    "Ras Al Khaimah": [
+      "Ras Al Khaimah", "RAK", "Al Hamra", "Al Marjan Island", "Al Nakheel",
+      "Al Dhait", "Khuzam", "Mina Al Arab", "Julphar"
+    ],
+    "Fujairah": [
+      "Fujairah", "Dibba Fujairah", "Al Faseel", "Sakamkam", "Mirbah"
+    ],
+    "Umm Al Quwain": [
+      "Umm Al Quwain", "UAQ", "Al Salamah", "Al Raas"
+    ],
+    "Qatar": [
+      "Doha", "West Bay", "The Pearl", "Al Sadd", "Al Rayyan", "Al Waab",
+      "Lusail", "Msheireb", "Al Wakrah", "Al Khor", "Education City",
+      "Aspire Zone", "Al Dafna", "Old Airport", "Al Mansoura", "Al Aziziya",
+      "Bin Mahmoud", "Muaither", "Al Gharrafa", "Al Thumama", "Al Duhail",
+      "Umm Salal", "Al Shamal", "Mesaimeer", "Abu Hamour", "Al Sailiya",
+      "Barwa City", "Ain Khaled"
+    ],
+    "aliases": {
+      "marina": "Dubai Marina",
+      "downtown": "Downtown Dubai",
+      "barsha": "Al Barsha",
+      "quoz": "Al Quoz",
+      "difc": "DIFC",
+      "tecom": "TECOM",
+      "jbr": "JBR",
+      "jvc": "JVC",
+      "jlt": "JLT",
+      "dip": "DIP",
+      "rak": "RAK",
+      "uaq": "UAQ",
+      "mbz": "MBZ City",
+      "mbz city": "MBZ City"
+    }
+  }
+}

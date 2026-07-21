@@ -1,0 +1,23 @@
+{
+  "_note": "How the agent talks about its own mode so it is always honest (RULE 9 / CLAUDE.md §20). In WHATSAPP_MODE=mock nothing is real — the strings under `mock` are appended to replies so the agent never implies a real action happened. When WHATSAPP_MODE=live is properly configured, the `live` (empty) tags are used instead so the extra demo wording disappears. The agent knows its mode from settings.py.",
+  "mock": {
+    "order_tag": " (Demo mode — not connected to a live order system yet.)",
+    "support_tag": " (Demo mode — not connected to a live support team yet.)",
+    "booking_ack": "Demo mode — I've created a mock booking request for testing.",
+    "tracking_unavailable": "Demo mode — live order tracking is not connected yet.",
+    "disabled_in_mock": [
+      "real WhatsApp messages",
+      "real orders",
+      "real driver assignment",
+      "real cancellation",
+      "real refund",
+      "real support connection"
+    ]
+  },
+  "live": {
+    "order_tag": "",
+    "support_tag": "",
+    "booking_ack": "",
+    "tracking_unavailable": ""
+  }
+}

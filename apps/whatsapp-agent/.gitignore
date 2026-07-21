@@ -1,0 +1,12 @@
+.env
+*.db
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+# Laundry Class agent runtime artifacts (regenerated at runtime)
+*.sqlite
+laundry_class_memory.sqlite
+logs/
+.venv/
+*.egg-info/

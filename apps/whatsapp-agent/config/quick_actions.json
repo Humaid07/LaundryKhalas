@@ -1,0 +1,20 @@
+{
+  "_note": "The interactive quick-reply buttons that are attached INSIDE a specific agent message (never rendered as a permanent footer/toolbar bar), the deterministic mapping from a clicked button's id to the intent it resolves to (so a click never depends on re-parsing its own label), and the shared service-button intent. Service-selection buttons themselves come from laundry_services.json (id = service key, text = label).",
+  "main_menu": [
+    { "id": "book_pickup", "label": "Book Pickup", "intent": "new_pickup_request" },
+    { "id": "track_order", "label": "Track Order", "intent": "track_order_request" },
+    { "id": "change_pickup_time", "label": "Change Pickup Time", "intent": "change_pickup_time_request" },
+    { "id": "add_more_items", "label": "Add More Items", "intent": "add_items_request" },
+    { "id": "cancel_order", "label": "Cancel Order", "intent": "cancel_order_request" },
+    { "id": "call_support", "label": "Call Support", "intent": "call_support_request" }
+  ],
+  "service_action_intent": "new_pickup_request",
+  "behavior_notes": {
+    "book_pickup": "Start the booking flow (ask which service, then collect item details, area, time, review, confirm).",
+    "track_order": "Ask for the order ID. In mock mode say live order tracking is not connected yet.",
+    "change_pickup_time": "Ask for the order ID and preferred new pickup time. Never confirm the change automatically.",
+    "add_more_items": "Ask what items the customer wants to add.",
+    "cancel_order": "Ask for the order ID and say the team will confirm whether it can still be cancelled. Never cancel automatically.",
+    "call_support": "Say the LaundryKhalaas support team will follow up. In mock mode say it is not connected to a live support team yet."
+  }
+}

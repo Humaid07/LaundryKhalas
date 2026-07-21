@@ -1,0 +1,43 @@
+{
+  "_note": "Topics the agent must hand off to the human LaundryKhalaas team instead of resolving autonomously (RULE 6 / CLAUDE.md §6). On a keyword match the agent short-circuits with the handoff message — no LLM call and no autonomous resolution, refund, compensation, or promise — and logs a handoff decision. IMPORTANT: cancellation, reschedule and order-tracking are intentionally NOT listed here; they are handled by their own dedicated safe quick-action flows (quick_actions.json) which already hand off to the team without taking any real action. Listing them here too would double-handle them. Keywords are matched case-insensitively as substrings, so keep them specific to avoid false positives (e.g. use 'delivered late', not bare 'late').",
+  "handoff_message": "Thanks for letting us know — I've flagged this for the LaundryKhalaas team and they'll follow up with you shortly.",
+  "attach_actions": ["call_support"],
+  "categories": [
+    {
+      "category": "complaint",
+      "keywords": ["complain", "complaint", "not happy", "unhappy", "disappointed", "poor service", "bad service"]
+    },
+    {
+      "category": "refund",
+      "keywords": ["refund", "money back", "reimburse"]
+    },
+    {
+      "category": "damaged_item",
+      "keywords": ["damaged", "ruined", "torn", "shrunk", "shrank", "discolored", "discoloured", "colour ran", "color ran", "burn mark", "you stained"]
+    },
+    {
+      "category": "missing_item",
+      "keywords": ["missing item", "item is missing", "lost my", "didn't get back", "did not get back", "one sock", "gone missing"]
+    },
+    {
+      "category": "late_delivery",
+      "keywords": ["delivered late", "still not delivered", "haven't received", "have not received", "where is my delivery", "delayed", "overdue", "running very late"]
+    },
+    {
+      "category": "payment_issue",
+      "keywords": ["charged twice", "double charged", "overcharged", "payment failed", "wrong amount", "billing issue", "charged me twice"]
+    },
+    {
+      "category": "b2b_quotation",
+      "keywords": ["quotation", "quote for", "bulk order", "contract", "tender", "hotel laundry", "restaurant laundry", "corporate account", "b2b enquiry"]
+    },
+    {
+      "category": "legal_safety",
+      "keywords": ["lawyer", "legal action", "take you to court", "sue you", "call the police", "hazard", "chemical burn", "injury"]
+    },
+    {
+      "category": "angry",
+      "keywords": ["terrible", "worst", "furious", "unacceptable", "disgusting", "outrageous", "never again", "fed up"]
+    }
+  ]
+}

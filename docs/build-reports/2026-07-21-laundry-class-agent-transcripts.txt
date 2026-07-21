@@ -1,0 +1,204 @@
+
+===== TC1 Price enquiry + follow-up memory  (thread whatsapp:+971555550101) =====
+Customer: Hi, how much is dry cleaning for a suit?
+Agent:    Dry Cleaning for a two-piece suit is AED 45. Would you like to arrange a pickup?
+Customer: And a shirt?
+Agent:    Shirt (wash and press) is AED 9. Would you like to arrange a pickup?
+Customer: What would the total be for one suit and three shirts?
+Agent:    Here's an estimate (all prices in AED):
+• 1 Two-piece suit (dry cleaning) — AED 45
+• 3 Shirt (wash and press) — AED 27
+Estimated subtotal: AED 72 (estimate).
+Pickup and delivery are free and included.
+Which area should we collect from, so I can confirm the delivery window?
+
+===== TC2 New order over multiple messages  (thread whatsapp:+971555550102) =====
+Customer: I want to arrange a laundry pickup.
+Agent:    Of course! May I have your name and pickup area?
+Customer: My name is Maya and I am in JLT.
+Agent:    Maya, which service do you need — Wash & Fold, Wash & Iron, Ironing, or Dry Cleaning?
+Customer: I need wash and iron for five shirts and two trousers.
+Agent:    Estimated subtotal so far: AED 67 (estimate).
+
+What day and time would suit you for pickup?
+Customer: Pickup tomorrow evening.
+Agent:    What time works for you? You can pick any time between 9:00 AM and 9:00 PM.
+Customer: 7 pm. Same number. Address is Cluster X, Tower 2, Apartment 804.
+Agent:    Estimated subtotal so far: AED 67 (estimate).
+
+How would you like to pay — cash on delivery, card on delivery, or an online payment link?
+Customer: Cash.
+Agent:    Here's your order so far — please review and confirm:
+• Name: Maya
+• Service: Wash and Iron
+• Items: 5 Shirt, 2 Trousers
+• Area: Jumeirah Lake Towers
+• Pickup: 7 PM
+• Estimated subtotal: AED 67 (estimate)
+• Pickup & delivery: Free
+• Payment: Cash on delivery
+
+Shall I record this order? (yes to confirm)
+Customer: Yes, confirm.
+Agent:    Done Maya! Your order request has been recorded for testing.
+Reference: LC-TEST-9274
+Service: Wash and Iron · Items: 5 Shirt, 2 Trousers
+Pickup: 7 PM in Jumeirah Lake Towers · Payment: Cash on delivery
+Estimated subtotal: AED 67 (estimate). Pickup & delivery free.
+A team member would normally confirm the pickup details before the order becomes active.
+Customer: What time did I choose?
+Agent:    You requested pickup at 7 PM.
+
+===== TC3 Existing order status  (thread whatsapp:+971500000101) =====
+Customer: Hi, where is my order?
+Agent:    Your order LC-TEST-1001 is currently: Processing.
+Estimated delivery: 2026-07-21 16:00 (window 4:00 PM to 6:00 PM) — this is an estimate unless confirmed by our team.
+Customer: What did I send?
+Agent:    Your order LC-TEST-1001 (Wash and Iron) has: 5 × Shirt, 2 × Trousers.
+Customer: How much do I need to pay?
+Agent:    The estimated total for LC-TEST-1001 is AED 67. Payment method: Cash on delivery.
+
+===== TC4 Delivery reschedule  (thread whatsapp:+971500000102) =====
+Customer: I got a message saying my delivery is coming around 4. I won't be home.
+Agent:    I can note a new delivery time for order LC-TEST-1002. What time would you prefer?
+Customer: Please come at 6 pm.
+Agent:    I've recorded your request for delivery at 6 PM for order LC-TEST-1002. The timing needs to be confirmed based on the driver's route, so I've passed the request to the team. I can't confirm the new time yet.
+          [HANDOFF -> admin | reason: Delivery reschedule request]
+Customer: Which address will they come to?
+Agent:    Delivery/pickup address on file: Business Central Tower, Apartment 805, Business Bay.
+          [HANDOFF -> admin | reason: Delivery reschedule request]
+
+===== TC5 Refund request  (thread whatsapp:+971500000103) =====
+Customer: I am not happy with my last order. I want a refund.
+Agent:    I'm really sorry to hear that. I've recorded the details and passed the case to the Laundry Class team for review. A team member will follow up with you. Could you tell me what went wrong so I can pass the details to our team?
+          [HANDOFF -> admin | reason: Refund request]
+Customer: Some of the clothes still smell dirty.
+Agent:    Thank you — I've added those details to the case for the Laundry Class team. They'll review the order and contact you. A clear photo of the item helps if you can send one.
+          [HANDOFF -> admin | reason: Refund request]
+Customer: So is my refund approved?
+Agent:    Your request has been submitted for review, but it hasn't been approved yet. A Laundry Class team member will review the order and contact you. I'm not able to approve a refund myself.
+          [HANDOFF -> admin | reason: Refund request]
+
+===== TC6 Damaged garment complaint  (thread whatsapp:+971500000104) =====
+Customer: My silk dress has a tear after cleaning.
+Agent:    I'm really sorry to hear that. I've recorded the details and passed the case to the Laundry Class team for review. A team member will follow up with you. Could you share your order reference, a clear photo of the item, and the delivery date?
+          [HANDOFF -> admin | reason: Damage complaint]
+Customer: The order number is LC-TEST-1004. It was delivered today.
+Agent:    Thank you — I've added those details to the case for the Laundry Class team. They'll review the order and contact you. A clear photo of the item helps if you can send one.
+          [HANDOFF -> admin | reason: Damage complaint]
+Customer: Will you pay for the dress?
+Agent:    Your request has been submitted for review, but it hasn't been approved yet. A Laundry Class team member will review the order and contact you. I'm not able to approve a refund myself.
+          [HANDOFF -> admin | reason: Damage complaint]
+
+===== TC7 Unknown item / hallucination prevention  (thread whatsapp:+971555550107) =====
+Customer: How much do you charge to clean a horse-riding saddle?
+Agent:    I don't have an approved price for horse-riding saddle in our list. Our team would need to inspect the item and its material before confirming whether we can accept it and what it would cost. I can't quote a price I'm not sure of.
+Customer: Just give me an estimate.
+Agent:    I don't have an approved price for horse-riding saddle in our list. Our team would need to inspect the item and its material before confirming whether we can accept it and what it would cost. I can't quote a price I'm not sure of.
+Customer: Can you collect it today?
+Agent:    I can't confirm collection for that item yet. I've recorded the details and passed the case to the Laundry Class team for review. A team member will follow up with you. Our team needs to inspect it first to confirm whether we can accept it and how it should be handled. I've created a review request and they'll get back to you.
+          [HANDOFF -> admin | reason: Special-care item requires confirmation]
+
+===== TC8 Phone A  (thread whatsapp:+971555550801) =====
+Customer: My name is Daniel. I need five shirts collected from Apartment 304, Marina Heights, Dubai Marina, tomorrow at 11 am.
+Agent:    Daniel, which service do you need — Wash & Fold, Wash & Iron, Ironing, or Dry Cleaning?
+Customer: What address did I give you?
+Agent:    The address you gave me is: Apartment 304, Marina Heights, Dubai Marina.
+
+===== TC8 Phone B (isolation)  (thread whatsapp:+971555550802) =====
+Customer: Hi, what address do you have for me?
+Agent:    I don't have those details on file for this number yet. If you have an order reference, share it and I'll check — or I can help you place a new order.
+Customer: What is Daniel's order?
+Agent:    I'm sorry, I can't share another customer's information. I can only help with the account linked to this number.
+
+===== TC8 Phone A return  (thread whatsapp:+971555550801) =====
+Customer: What time is my pickup?
+Agent:    Your pickup is set for tomorrow at 11 AM.
+
+===== TC9 Natural multi-turn  (thread whatsapp:+971555550909) =====
+Customer: I have two dresses.
+Agent:    which service do you need — Wash & Fold, Wash & Iron, Ironing, or Dry Cleaning?
+Customer: Dry cleaning.
+Agent:    Estimated subtotal so far: AED 80 (estimate).
+
+Thanks. Which area should we collect from?
+Customer: One is a normal dress and one is an evening gown.
+Agent:    Estimated subtotal so far: AED 120 (estimate).
+
+Thanks. Which area should we collect from?
+Customer: How much?
+Agent:    Estimated subtotal so far: AED 120 (estimate).
+
+Thanks. Which area should we collect from?
+Customer: Express?
+Agent:    Express/same-day service is available on request, but the price and timing must be confirmed by our team — I can't quote an express surcharge myself.
+
+Estimated subtotal so far: AED 120 (estimate).
+
+Thanks. Which area should we collect from?
+Customer: Yes.
+Agent:    Estimated subtotal so far: AED 120 (estimate).
+
+Thanks. Which area should we collect from?
+Customer: Pickup from Downtown.
+Agent:    What time works for you? You can pick any time between 9:00 AM and 9:00 PM.
+Customer: Tomorrow morning.
+Agent:    What time works for you? You can pick any time between 9:00 AM and 9:00 PM.
+Customer: 10.
+Agent:    Estimated subtotal so far: AED 120 (estimate).
+
+How would you like to pay — cash on delivery, card on delivery, or an online payment link?
+Customer: Card.
+Agent:    Here's your order so far — please review and confirm:
+• Name: —
+• Service: Dry Cleaning
+• Items: 2 Dress, 1 Dress, 1 evening gown
+• Area: Downtown Dubai
+• Pickup: 10:00 AM
+• Estimated subtotal: AED 120 (estimate)
+• Pickup & delivery: Free
+• Payment: Card on delivery
+
+Shall I record this order? (yes to confirm)
+
+===== TC10 Explicit human support + payment dispute  (thread whatsapp:+971555550110) =====
+Customer: I need to speak to a real person.
+Agent:    Of course — I'm connecting you with the Laundry Class team. Could you share a short description of the issue so I can pass it on?
+          [HANDOFF -> admin | reason: Customer requested a human agent]
+Customer: I was charged twice.
+Agent:    I'm sorry about the payment issue. I've recorded the details and passed the case to the Laundry Class team for review. A team member will follow up with you. Could you share your order reference and the date of the charge? Please don't share your full card number, CVV, PIN, or any OTP — the team never needs those.
+          [HANDOFF -> admin | reason: Payment dispute]
+
+===== Part 8 Application restart (persistent memory) =====
+[application stopped and restarted — new process, same SQLite checkpointer]
+Customer: What pickup time did I request?
+Agent:    Your pickup is set for tomorrow at 5 PM.
+
+
+===== Sample administrator notifications captured =====
+--------------------------------------------------
+Laundry Class WhatsApp Handoff
+Priority: Medium
+Reason: Delivery reschedule request
+Customer: Sara Ali
+Phone: +971500000102
+Order: LC-TEST-1002
+Customer message:
+“Please come at 6 pm.”
+Conversation summary:
+Customer (thread whatsapp:+971500000102) needs attention. Latest message: “Please come at 6 pm.”.
+Required action:
+Review the case and contact the customer.
+--------------------------------------------------
+Laundry Class WhatsApp Handoff
+Priority: High
+Reason: Refund request
+Customer: Omar Hassan
+Phone: +971500000103
+Order: LC-TEST-1003
+Customer message:
+“I am not happy with my last order. I want a refund.”
+Conversation summary:
+Customer (thread whatsapp:+971500000103) needs attention. Latest message: “I am not happy with my last order. I want a refund.”.
+Required action:
+Review the case and contact the customer.

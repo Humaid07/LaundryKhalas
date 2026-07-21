@@ -1,0 +1,59 @@
+{
+  "_note": "Master business & safety rule config for the standalone LaundryKhalaas WhatsApp agent. Human-readable rules plus the exact strings the agent uses at runtime. Companion files: laundry_services.json (service catalog + pricing), quick_actions.json (interactive buttons), escalation_rules.json (human handoff), mock_mode_rules.json (demo-mode honesty), agent_tone_rules.json (tone/system-prompt). Loaded via rules.py and cached — restart the service after editing.",
+  "brand_name": "LaundryKhalaas",
+  "domain": {
+    "description": "The agent only helps with laundry, dry cleaning, ironing / pressing, cleaning services, pickup & delivery, LaundryKhalaas orders and support, LaundryKhalaas pricing/policies where configured, and commercial / B2B laundry. Anything else is out of domain.",
+    "allowed_topics": [
+      "laundry",
+      "dry cleaning",
+      "ironing / pressing",
+      "cleaning services",
+      "pickup and delivery",
+      "LaundryKhalaas services",
+      "LaundryKhalaas order support",
+      "LaundryKhalaas pricing/policies (if configured)",
+      "commercial / B2B laundry"
+    ],
+    "refusal_message": "Sorry, I can only help with LaundryKhalaas laundry and cleaning services. You can ask me about booking a pickup, tracking an order, dry cleaning, ironing, or cleaning services.",
+    "skip_llm_when_out_of_domain": true
+  },
+  "welcome": {
+    "message": "Hi 👋 Welcome to LaundryKhalaas. How can we help you today?",
+    "triggers": ["greeting", "help", "start", "hi", "hello", "menu"],
+    "quick_actions_source": "quick_actions.json:main_menu"
+  },
+  "booking_flow": {
+    "steps": [
+      "select_service",
+      "add_item_details",
+      "select_pickup_address_or_area",
+      "select_pickup_time",
+      "review_order",
+      "confirm_booking"
+    ],
+    "service_prompt": "Great. Which service do you need today?",
+    "ask_one_missing_slot_at_a_time": true,
+    "never_claim_real_order": true
+  },
+  "no_invented_data": {
+    "never_invent": [
+      "prices",
+      "policies",
+      "facility details",
+      "driver details",
+      "exact pickup times",
+      "delivery guarantees",
+      "discounts",
+      "refund rules",
+      "cancellation eligibility",
+      "compensation",
+      "service coverage"
+    ],
+    "fallback_message": "Our team will confirm that with you shortly."
+  },
+  "privacy": {
+    "mask_fields": ["phone", "email", "exact_address", "payment_info"],
+    "prefer_area_or_city": true,
+    "note": "Never expose customer PII in the agent audit log or in facility-facing / driver-facing outputs. Use area/city instead of full address where possible. See services/privacy.py."
+  }
+}

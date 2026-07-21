@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  color: theme("colors.wa.text");
+}
+
+/* Subtle CSS-only texture for the chat background - an original dot
+   pattern, not a reproduction of any WhatsApp asset. */
+.wa-chat-bg {
+  background-color: theme("colors.wa.bg");
+  background-image: radial-gradient(rgba(17, 27, 33, 0.045) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.wa-bubble-tail-out::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -6px;
+  width: 10px;
+  height: 13px;
+  background: theme("colors.wa.outgoing");
+  clip-path: polygon(0 0, 0% 100%, 100% 0);
+}
+
+.wa-bubble-tail-in::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -6px;
+  width: 10px;
+  height: 13px;
+  background: theme("colors.wa.incoming");
+  clip-path: polygon(100% 0, 0% 0, 100% 100%);
+}
+
+/* Typing indicator dots - three dots that fade in sequence, like WhatsApp.
+   Uses currentColor-independent muted grey so it reads in light and (future)
+   dark chat backgrounds without an overlay. */
+.wa-typing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: theme("colors.wa.muted");
+  display: inline-block;
+  opacity: 0.35;
+  animation: wa-typing 1.2s infinite ease-in-out;
+}
+.wa-typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.wa-typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes wa-typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 0.9;
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wa-typing-dot {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(17, 27, 33, 0.15);
+  border-radius: 999px;
+}
