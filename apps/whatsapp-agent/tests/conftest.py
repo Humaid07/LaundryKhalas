@@ -11,6 +11,9 @@ os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
 os.environ.setdefault("LLM_PROVIDER", "mock")
 os.environ.setdefault("WHATSAPP_MODE", "mock")
 os.environ.setdefault("META_WHATSAPP_VERIFY_TOKEN", "test-verify-token")
+# Pin tests to local SQLite mode regardless of what a developer's .env sets
+# (e.g. DATABASE_MODE=supabase for live work) so the suite stays hermetic.
+os.environ.setdefault("DATABASE_MODE", "sqlite")
 
 
 @pytest.fixture(autouse=True, scope="session")

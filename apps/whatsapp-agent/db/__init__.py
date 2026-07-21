@@ -15,7 +15,22 @@ from settings import get_settings
 
 settings = get_settings()
 
-engine = create_async_engine(settings.database_url, echo=False)
+
+def _orm_url(raw: str) -> str:
+    """SQLAlchemy needs an explicit async driver. A bare ``postgresql://`` URL
+    would default to psycopg2 (sync, not installed). In supabase mode the ORM
+    engine is not used for queries (the asyncpg layer in ``db.database`` is), but
+    it must still be constructible at import — so map bare Postgres URLs to the
+    installed asyncpg driver. SQLite/local URLs pass through unchanged.
+    """
+    if raw.startswith("postgresql://"):
+        return "postgresql+asyncpg://" + raw[len("postgresql://"):]
+    if raw.startswith("postgres://"):
+        return "postgresql+asyncpg://" + raw[len("postgres://"):]
+    return raw
+
+
+engine = create_async_engine(_orm_url(settings.database_url), echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
