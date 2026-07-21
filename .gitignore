@@ -54,3 +54,7 @@ Thumbs.db
 
 # --- Local tooling state (Claude Code) ---
 .claude/
+
+apps/admin/.open-next/
+
+apps/admin/.open-next/
