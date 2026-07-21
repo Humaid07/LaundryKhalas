@@ -11,6 +11,11 @@ from settings import get_settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail fast on a misconfigured WhatsApp provider: the ACTIVE mode's required
+    # vars must be present. mock needs nothing; evolution/meta require only their
+    # own vars (blank Meta keys never block evolution/mock, and vice versa).
+    get_settings().validate_whatsapp_config()
+
     # In local SQLite mode: create the ORM tables and seed the demo orders
     # (LK-AE-1024..1027) so tracking/cancel/change flows and the dashboard have
     # data on a fresh database. Idempotent.

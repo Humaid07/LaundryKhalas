@@ -7,6 +7,28 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# WhatsApp providers FastAPI can use. The dashboard never chooses a provider —
+# it talks to FastAPI only; FastAPI decides based on WHATSAPP_MODE.
+WHATSAPP_MODES = ("mock", "evolution", "meta")
+
+# Required env vars per mode. mock needs nothing; each live provider requires
+# ONLY its own vars — a blank var for the other provider never causes a failure.
+_WHATSAPP_REQUIRED: dict[str, list[str]] = {
+    "mock": [],
+    "evolution": [
+        "evolution_api_base_url",
+        "evolution_api_key",
+        "evolution_instance_name",
+    ],
+    "meta": [
+        "meta_whatsapp_access_token",
+        "meta_whatsapp_phone_number_id",
+        "meta_whatsapp_business_account_id",
+        "meta_whatsapp_verify_token",
+        "meta_whatsapp_app_secret",
+    ],
+}
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -42,7 +64,17 @@ class Settings(BaseSettings):
     agent_min_typing_delay_ms: int = 2000
     agent_max_typing_delay_ms: int = 3000
 
-    whatsapp_mode: str = "mock"  # mock | live
+    # WhatsApp provider: mock (default) | evolution (current) | meta (future).
+    whatsapp_mode: str = "mock"
+
+    # Evolution API — CURRENT provider for WhatsApp testing. Required only when
+    # whatsapp_mode=evolution.
+    evolution_api_base_url: str = ""
+    evolution_api_key: str = ""
+    evolution_instance_name: str = ""
+
+    # Meta WhatsApp Cloud API — FUTURE provider. Placeholders; required only when
+    # whatsapp_mode=meta. Never required for mock or evolution.
     meta_whatsapp_access_token: str = ""
     meta_whatsapp_phone_number_id: str = ""
     meta_whatsapp_business_account_id: str = ""
@@ -71,13 +103,47 @@ class Settings(BaseSettings):
         return False
 
     @property
+    def _whatsapp_required_fields(self) -> list[str]:
+        return _WHATSAPP_REQUIRED.get(self.whatsapp_mode.lower(), [])
+
+    @property
+    def missing_whatsapp_config(self) -> list[str]:
+        """Required env vars (UPPERCASE) for the ACTIVE mode that are blank.
+        Never includes another provider's vars — so blank Meta keys don't count
+        in evolution/mock mode, and vice versa."""
+        return [f.upper() for f in self._whatsapp_required_fields if not getattr(self, f, "")]
+
+    @property
     def live_whatsapp_ready(self) -> bool:
-        """True only if live mode is requested AND all required Meta config is present."""
-        return self.whatsapp_mode == "live" and bool(
-            self.meta_whatsapp_access_token
-            and self.meta_whatsapp_phone_number_id
-            and self.meta_whatsapp_verify_token
-        )
+        """True only when a real provider (evolution|meta) is selected AND all of
+        its required config is present. Mock is never 'live'."""
+        if self.whatsapp_mode.lower() not in ("evolution", "meta"):
+            return False
+        return not self.missing_whatsapp_config
+
+    @property
+    def meta_live_ready(self) -> bool:
+        """True only in meta mode with all Meta config present. Used by the Meta
+        Cloud API webhook to decide whether to actually send a live reply."""
+        return self.whatsapp_mode.lower() == "meta" and not self.missing_whatsapp_config
+
+    def validate_whatsapp_config(self) -> None:
+        """Raise if the ACTIVE mode is unknown or missing its required vars.
+
+        mock requires nothing (never raises). evolution/meta require ONLY their
+        own vars — blank vars for the other provider never cause startup to fail.
+        """
+        mode = self.whatsapp_mode.lower()
+        if mode not in WHATSAPP_MODES:
+            raise ValueError(
+                f"WHATSAPP_MODE must be one of {'|'.join(WHATSAPP_MODES)} (got '{self.whatsapp_mode}')."
+            )
+        missing = self.missing_whatsapp_config
+        if missing:
+            raise ValueError(
+                f"WHATSAPP_MODE={mode} requires these env vars to be set: "
+                f"{', '.join(missing)}. (Do not commit real keys.)"
+            )
 
 
 @lru_cache

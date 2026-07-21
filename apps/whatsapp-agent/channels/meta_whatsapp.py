@@ -1,8 +1,8 @@
 """Official Meta WhatsApp Cloud API channel. Only ever selected when
-settings.live_whatsapp_ready is True (WHATSAPP_MODE=live AND access
-token/phone-number-id/verify-token are all present) - see api/webhooks.py
-and how the agent layer picks a channel. No unofficial automation, no
-browser/WhatsApp-Web scraping - this talks to graph.facebook.com only.
+settings.meta_live_ready is True (WHATSAPP_MODE=meta AND all META_WHATSAPP_*
+config present) - see api/webhooks.py and how the agent layer picks a channel.
+No unofficial automation, no browser/WhatsApp-Web scraping - this talks to
+graph.facebook.com only.
 """
 import hashlib
 import hmac

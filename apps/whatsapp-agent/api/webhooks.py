@@ -1,8 +1,8 @@
-"""Official Meta WhatsApp Cloud API webhook endpoints. Only ever sends a
-live reply when settings.live_whatsapp_ready is True; otherwise inbound
-webhook traffic is still stored (useful for testing signature/parsing) but
-no outbound call is made and the mock channel is used for the stored
-"reply" record.
+"""Official Meta WhatsApp Cloud API webhook endpoints (used only when
+WHATSAPP_MODE=meta). Only ever sends a live reply when settings.meta_live_ready
+is True; otherwise inbound webhook traffic is still stored (useful for testing
+signature/parsing) but no outbound call is made and the mock channel is used for
+the stored "reply" record. Evolution API uses its own inbound path (future).
 """
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -75,7 +75,7 @@ async def receive_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             text=item["text"], history=history, db=db, conversation=conversation
         )
 
-        if settings.live_whatsapp_ready:
+        if settings.meta_live_ready:
             send_channel = MetaWhatsAppChannel(
                 settings.meta_whatsapp_access_token, settings.meta_whatsapp_phone_number_id
             )
