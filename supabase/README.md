@@ -38,6 +38,21 @@ supabase db push            # applies migrations in order
 Option B — run the SQL directly (e.g. Supabase SQL editor or psql) in order:
 `000001` (schema) then `000002` (seed).
 
+### Connection note (IPv4 networks)
+
+The **direct** DB host `db.<ref>.supabase.co` is **IPv6-only** and will fail with
+`getaddrinfo failed` on IPv4-only networks. Use the **Session pooler**
+(Dashboard → Connect → Session pooler), which is IPv4-friendly and works with
+asyncpg on port 5432:
+
+```
+postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+```
+
+(Note the username is `postgres.<ref>`, not `postgres`.) After a **Reset database
+password**, the pooler can take up to ~1–2 minutes to propagate the new
+credential before it authenticates.
+
 ## Seed / reset from the backend (guarded)
 
 From `apps/whatsapp-agent` with `.env` set to the dev/test project

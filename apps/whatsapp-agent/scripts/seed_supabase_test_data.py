@@ -24,8 +24,9 @@ from _safety import SEED_BATCH_ID, SEED_TABLES_DELETE_ORDER, check_seed_allowed 
 from db import database  # noqa: E402
 from settings import get_settings  # noqa: E402
 
+# scripts → whatsapp-agent → apps → <repo root> (parents[3]) → supabase/
 _SEED_SQL = (
-    Path(__file__).resolve().parents[2]
+    Path(__file__).resolve().parents[3]
     / "supabase"
     / "migrations"
     / "20260721_000002_seed_whatsapp_agent_test_data.sql"

@@ -125,11 +125,28 @@ The service role key is documented as backend-only.
 
 ## 13. Supabase verification status
 
-**Pending credentials.** Only the project URL was provided; no `DATABASE_URL` /
-service-role key. Schema apply, live seed/reset, and live API calls are ready to
-run once `.env` is filled (see the test script). All artifacts were validated
-without a live connection (guards unit-tested, SQL reviewed, endpoints tested in
-sqlite mode).
+**Verified live (2026-07-21)** against the dev/test project
+`inutjbnmyvfjijvbudun` (region **ap-southeast-2**, PostgreSQL 17.6) via the
+**Session pooler** (`aws-0-ap-southeast-2.pooler.supabase.com:5432`, user
+`postgres.<ref>`) — the direct `db.<ref>.supabase.co` host is IPv6-only and does
+not resolve on IPv4, so the pooler is required. End-to-end confirmed:
+
+- `verify_supabase_connection.py` → connected, all 10 tables present.
+- `seed_supabase_test_data.py` → 54 rows (6 customers, 6 conversations, 18
+  messages, 5 orders, 5 flags, 2 takeovers, 3 tickets, 2 approvals, 3 order
+  events, 4 logs); **idempotent** (2nd run added 0).
+- API (backend in supabase mode): `/health/db` connected; `/api/conversations`
+  → 6 with **masked phones**; `/api/orders/active` → 4; `/api/flags?status=open`
+  → 4 with correct team routing.
+- Write path: human-takeover → human-message (stored, `is_test_data=false`) →
+  return-to-bot → flag resolve — all 200.
+- `reset_supabase_test_data.py` → deleted exactly the 54 seeded rows (runtime
+  rows cascade-cleaned via FK); non-test rows untouched. Re-seed restored state.
+
+Two bugs were found and fixed during the live run (commits `85b07ec`,
+`<seed-path-fix>`): the ORM engine crashed on a bare `postgresql://` URL
+(psycopg2 not installed) → now mapped to asyncpg; tests pinned to sqlite; and the
+seed script's SQL path was off by one directory level.
 
 ## 14. Security / privacy
 
@@ -141,7 +158,7 @@ sqlite mode).
 
 ## 15. Known limitations
 
-- Live Supabase not yet verified (no creds).
+- Live Supabase now **verified** (see §13). Requires the Session pooler on IPv4.
 - The agent's live chat write-path still targets the SQLite ORM; the inbox
   reads/writes Supabase. Unifying them is a follow-up.
 - The dashboard inbox still renders seeded frontend data with badges; switching
