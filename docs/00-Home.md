@@ -36,7 +36,27 @@ Windows `next build` quirk), and the next recommended build steps. No code chang
 
 ## Latest Build Report
 
-[[2026-07-21-global-filters-all-sections]] —
+[[2026-07-21-supabase-dev-test-setup]] —
+`build-reports/2026-07-21-supabase-dev-test-setup.md` — sets up the **separate
+dev/test Supabase project** as the WhatsApp Agent database (Dashboard → FastAPI →
+Supabase; NOT production). Adds `supabase/migrations/*` (10 tables — customers,
+conversations, messages, orders, order_events, agent_flags, human_takeovers,
+approval_queue, tickets, agent_logs — UUID PKs, indexes, `updated_at` triggers,
+RLS enabled, and 7 test-data marker columns) + an idempotent fake/demo **seed**
+(6 customers, 6 conversations, 18 messages, 5 orders `LK-AE-1024/25/26/27/2031`,
+5 flags, 2 takeovers, 3 tickets…). Adds **37 scenario fixtures**
+(`apps/whatsapp-agent/test-data/scenarios/`), env-gated **seed/reset/verify**
+scripts (refuse outside dev/test; reset deletes only
+`is_test_data & created_by_seed`, never truncates), a **`db/` repository layer**
+(asyncpg; `DATABASE_MODE=supabase`) with graceful SQLite fallback, new FastAPI
+endpoints (`/health/db`, `/api/conversations/*`, `/api/flags/*`, order
+mode-branch), and prepared dashboard client methods + **Test Data / Demo
+Conversation** badges. `pytest` **155 passed**, ruff clean, `tsc` 0. **Live
+Supabase verification is pending credentials.** No live WhatsApp/Stripe/LLM; no
+secrets committed. See [[supabase-dev-database]], [[test-data-strategy]],
+[[supabase-whatsapp-agent-test-script]].
+
+Previous: [[2026-07-21-global-filters-all-sections]] —
 `build-reports/2026-07-21-global-filters-all-sections.md` — makes the dashboard's
 **global filters truly global** across every section, subsection and tab. Closes the
 coverage gaps where tables/KPIs/charts rendered raw data behind a visible filter bar:

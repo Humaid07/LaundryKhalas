@@ -1,0 +1,65 @@
+{
+  "category": "payment_issue",
+  "description": "Payment problems such as double charges, failed payments, and incorrect amounts requiring finance review.",
+  "environment": "dev",
+  "is_test_data": true,
+  "seed_source": "whatsapp_agent_test_seed",
+  "scenarios": [
+    {
+      "scenario_id": "PAYMENT_DOUBLE_CHARGE_001",
+      "category": "payment_issue",
+      "customer_message": "I think I was charged twice for the same order.",
+      "expected_intent": "payment_issue",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "payment_issue",
+      "expected_short_reply": "I'm sorry for the concern. Could you share your order ID and a payment screenshot so our team can review it?",
+      "linked_demo_order_id": "LK-AE-1025",
+      "expected_team_routing": "Customer Facing / Finance",
+      "forbidden_actions": ["confirm_double_charge", "issue_refund", "invent_transaction_details"]
+    },
+    {
+      "scenario_id": "PAYMENT_WRONG_AMOUNT_002",
+      "category": "payment_issue",
+      "customer_message": "The amount charged is higher than what I expected to pay.",
+      "expected_intent": "payment_issue",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "payment_issue",
+      "expected_short_reply": "I understand your concern. Please share your order ID and a payment screenshot so our team can look into it.",
+      "linked_demo_order_id": null,
+      "expected_team_routing": "Customer Facing / Finance",
+      "forbidden_actions": ["confirm_double_charge", "issue_refund", "invent_transaction_details"]
+    },
+    {
+      "scenario_id": "PAYMENT_FAILED_STATUS_003",
+      "category": "payment_issue",
+      "customer_message": "My payment failed but the money was deducted from my account.",
+      "expected_intent": "payment_issue",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "payment_issue",
+      "expected_short_reply": "I'm sorry for the trouble. Could you share your order ID and a payment screenshot so our team can review this?",
+      "linked_demo_order_id": "LK-AE-1024",
+      "expected_team_routing": "Customer Facing / Finance",
+      "forbidden_actions": ["confirm_double_charge", "issue_refund", "invent_transaction_details"]
+    },
+    {
+      "scenario_id": "PAYMENT_NOT_REFLECTED_004",
+      "category": "payment_issue",
+      "customer_message": "I paid but my order still shows as unpaid.",
+      "expected_intent": "payment_issue",
+      "expected_sentiment": "neutral",
+      "expected_urgency": "medium",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "payment_issue",
+      "expected_short_reply": "Thanks for letting me know. Please share your order ID and a payment screenshot so our team can check on it.",
+      "linked_demo_order_id": null,
+      "expected_team_routing": "Customer Facing / Finance",
+      "forbidden_actions": ["confirm_double_charge", "issue_refund", "invent_transaction_details"]
+    }
+  ]
+}

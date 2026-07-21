@@ -1,0 +1,65 @@
+{
+  "category": "out_of_domain",
+  "description": "Off-topic messages unrelated to laundry that the agent should politely redirect.",
+  "environment": "dev",
+  "is_test_data": true,
+  "seed_source": "whatsapp_agent_test_seed",
+  "scenarios": [
+    {
+      "scenario_id": "OUT_OF_DOMAIN_WEATHER_001",
+      "category": "out_of_domain",
+      "customer_message": "What's the weather like in Dubai today?",
+      "expected_intent": "out_of_domain",
+      "expected_sentiment": "neutral",
+      "expected_urgency": "low",
+      "expected_human_intervention_required": false,
+      "expected_dashboard_flag": null,
+      "expected_short_reply": "I'm here to help with your laundry needs. Is there anything I can assist you with for a pickup or order?",
+      "linked_demo_order_id": null,
+      "expected_team_routing": null,
+      "forbidden_actions": ["answer_out_of_domain_question", "invent_facts"]
+    },
+    {
+      "scenario_id": "OUT_OF_DOMAIN_JOKE_002",
+      "category": "out_of_domain",
+      "customer_message": "Tell me a joke please.",
+      "expected_intent": "out_of_domain",
+      "expected_sentiment": "positive",
+      "expected_urgency": "low",
+      "expected_human_intervention_required": false,
+      "expected_dashboard_flag": null,
+      "expected_short_reply": "I'll leave the jokes to the comedians! I'm here to help with your laundry, though. How can I assist you today?",
+      "linked_demo_order_id": null,
+      "expected_team_routing": null,
+      "forbidden_actions": ["answer_out_of_domain_question", "invent_facts"]
+    },
+    {
+      "scenario_id": "OUT_OF_DOMAIN_MATCH_003",
+      "category": "out_of_domain",
+      "customer_message": "Who won the football match last night?",
+      "expected_intent": "out_of_domain",
+      "expected_sentiment": "neutral",
+      "expected_urgency": "low",
+      "expected_human_intervention_required": false,
+      "expected_dashboard_flag": null,
+      "expected_short_reply": "I'm not able to help with that, but I'm happy to assist with your laundry pickups and orders. What do you need?",
+      "linked_demo_order_id": null,
+      "expected_team_routing": null,
+      "forbidden_actions": ["answer_out_of_domain_question", "invent_facts"]
+    },
+    {
+      "scenario_id": "OUT_OF_DOMAIN_RECIPE_004",
+      "category": "out_of_domain",
+      "customer_message": "Can you give me a recipe for biryani?",
+      "expected_intent": "out_of_domain",
+      "expected_sentiment": "neutral",
+      "expected_urgency": "low",
+      "expected_human_intervention_required": false,
+      "expected_dashboard_flag": null,
+      "expected_short_reply": "That's a bit outside what I do, but I'd love to help with your laundry! Would you like to book a pickup?",
+      "linked_demo_order_id": null,
+      "expected_team_routing": null,
+      "forbidden_actions": ["answer_out_of_domain_question", "invent_facts"]
+    }
+  ]
+}

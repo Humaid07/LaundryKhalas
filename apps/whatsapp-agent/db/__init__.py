@@ -1,5 +1,10 @@
-"""Async SQLAlchemy engine/session setup. SQLite by default (standalone MVP),
-PostgreSQL if DATABASE_URL is set to one - same models either way.
+"""Async SQLAlchemy engine/session setup (SQLite local mode).
+
+This package keeps the original `from db import Base, get_db, init_db,
+AsyncSessionLocal` surface working exactly as before — SQLite by default for
+the standalone MVP and its test suite. The Supabase/Postgres access layer used
+when DATABASE_MODE=supabase lives alongside it in `db.database` +
+`db.repositories.*` and does NOT change this local path.
 """
 from collections.abc import AsyncGenerator
 

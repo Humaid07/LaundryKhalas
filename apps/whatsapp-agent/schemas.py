@@ -88,6 +88,26 @@ class OrderStatusUpdate(BaseModel):
     status: str
 
 
+class HumanTakeoverRequest(BaseModel):
+    operator_name: str | None = None
+
+
+class HumanMessageRequest(BaseModel):
+    text: str
+    operator_name: str | None = None
+
+
+class DbHealth(BaseModel):
+    status: str
+    mode: str
+    backend: str | None = None
+    connected: bool | None = None
+    app_env: str | None = None
+    database_env: str | None = None
+    supabase_project_type: str | None = None
+    error: str | None = None
+
+
 class OrderMetrics(BaseModel):
     active_orders: int
     completed_orders: int

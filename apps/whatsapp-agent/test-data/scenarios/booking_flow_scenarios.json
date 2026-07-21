@@ -1,0 +1,79 @@
+{
+  "category": "booking_flow",
+  "description": "Happy-path pickup booking flows: new requests, service selection, and providing pickup time/area details.",
+  "environment": "dev",
+  "is_test_data": true,
+  "seed_source": "whatsapp_agent_test_seed",
+  "scenarios": [
+    {
+      "scenario_id": "BOOKING_NEW_PICKUP_001",
+      "category": "booking_flow",
+      "customer_message": "Hi, I'd like to book a laundry pickup please.",
+      "expected_intent": "book_pickup",
+      "expected_sentiment": "positive",
+      "expected_urgency": "low",
+      "expected_human_intervention_required": false,
+      "expected_dashboard_flag": null,
+      "expected_short_reply": "Happy to help you book a pickup! Could you tell me which service you'd like and your pickup area?",
+      "linked_demo_order_id": null,
+      "expected_team_routing": null,
+      "forbidden_actions": ["invent_price", "promise_exact_turnaround", "invent_availability"]
+    },
+    {
+      "scenario_id": "BOOKING_SELECT_SERVICE_002",
+      "category": "booking_flow",
+      "customer_message": "I need wash and fold for a few shirts and some bedsheets.",
+      "expected_intent": "provide_booking_detail",
+      "expected_sentiment": "neutral",
+      "expected_urgency": "low",
+      "expected_human_intervention_required": false,
+      "expected_dashboard_flag": null,
+      "expected_short_reply": "Got it, wash and fold noted. What's your pickup area and a convenient pickup time for you?",
+      "linked_demo_order_id": null,
+      "expected_team_routing": null,
+      "forbidden_actions": ["invent_price", "promise_exact_turnaround", "invent_availability"]
+    },
+    {
+      "scenario_id": "BOOKING_PROVIDE_TIME_AREA_003",
+      "category": "booking_flow",
+      "customer_message": "Pickup from Dubai Marina, tomorrow evening around 7pm works for me.",
+      "expected_intent": "provide_booking_detail",
+      "expected_sentiment": "neutral",
+      "expected_urgency": "low",
+      "expected_human_intervention_required": false,
+      "expected_dashboard_flag": null,
+      "expected_short_reply": "Thank you! I've noted Dubai Marina and your preferred evening time. I'll confirm the details with you shortly.",
+      "linked_demo_order_id": null,
+      "expected_team_routing": null,
+      "forbidden_actions": ["invent_price", "promise_exact_turnaround", "invent_availability"]
+    },
+    {
+      "scenario_id": "BOOKING_DRY_CLEANING_004",
+      "category": "booking_flow",
+      "customer_message": "Can you pick up two suits for dry cleaning from JLT?",
+      "expected_intent": "book_pickup",
+      "expected_sentiment": "positive",
+      "expected_urgency": "low",
+      "expected_human_intervention_required": false,
+      "expected_dashboard_flag": null,
+      "expected_short_reply": "Of course! Dry cleaning for two suits from JLT. What pickup time would suit you best?",
+      "linked_demo_order_id": null,
+      "expected_team_routing": null,
+      "forbidden_actions": ["invent_price", "promise_exact_turnaround", "invent_availability"]
+    },
+    {
+      "scenario_id": "BOOKING_EXISTING_ORDER_ADDON_005",
+      "category": "booking_flow",
+      "customer_message": "For my current order can you also add a pickup for some curtains?",
+      "expected_intent": "provide_booking_detail",
+      "expected_sentiment": "neutral",
+      "expected_urgency": "low",
+      "expected_human_intervention_required": false,
+      "expected_dashboard_flag": null,
+      "expected_short_reply": "Sure, I can look into adding curtains to your pickup. Could you confirm the pickup area and time you'd like?",
+      "linked_demo_order_id": "LK-AE-2031",
+      "expected_team_routing": null,
+      "forbidden_actions": ["invent_price", "promise_exact_turnaround", "invent_availability"]
+    }
+  ]
+}

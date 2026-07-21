@@ -78,6 +78,14 @@ export interface InboxConversation {
   flag: InboxFlag | null;
   notes: string[];
   messages: InboxMessage[];
+  /**
+   * Provenance markers mirrored from the Supabase row (is_test_data / is_demo).
+   * Seeded/demo conversations render "Test Data" / "Demo Conversation" badges so
+   * operators always know a thread is not a real customer. Optional here so a
+   * future live-webhook conversation can leave them unset/false.
+   */
+  isTestData?: boolean;
+  isDemo?: boolean;
 }
 
 /* ------------------------------- status meta ------------------------------- */

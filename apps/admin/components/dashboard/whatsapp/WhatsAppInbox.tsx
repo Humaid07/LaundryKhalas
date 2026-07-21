@@ -25,7 +25,14 @@ import { WhatsAppConversationPane, ConversationContextPanel } from "./WhatsAppCo
  */
 export function WhatsAppInbox() {
   const [conversations, setConversations] = useState<InboxConversation[]>(() =>
-    seedConversations.map((c) => ({ ...c, messages: [...c.messages], notes: [...c.notes] })),
+    seedConversations.map((c) => ({
+      ...c,
+      messages: [...c.messages],
+      notes: [...c.notes],
+      // Seeded rows are demo/test data (mirrors Supabase is_test_data/is_demo).
+      isTestData: c.isTestData ?? true,
+      isDemo: c.isDemo ?? true,
+    })),
   );
   const [selectedId, setSelectedId] = useState<string | null>(seedConversations[0]?.id ?? null);
   const [query, setQuery] = useState("");

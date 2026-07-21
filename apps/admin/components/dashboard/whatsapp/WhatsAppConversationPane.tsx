@@ -234,6 +234,12 @@ export function ConversationContextPanel({
               {conversation.priority}
             </StatusBadge>
           )}
+          {conversation.isTestData && (
+            <StatusBadge tone="neutral" dot={false}>Test Data</StatusBadge>
+          )}
+          {conversation.isDemo && (
+            <StatusBadge tone="plum" dot={false}>Demo Conversation</StatusBadge>
+          )}
         </div>
         <p className="mt-2 text-xs text-ink-muted">
           {maskPhone(conversation.phone)} · {conversation.area}, {conversation.city}

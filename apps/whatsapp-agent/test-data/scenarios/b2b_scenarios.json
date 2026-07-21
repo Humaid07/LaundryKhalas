@@ -1,0 +1,65 @@
+{
+  "category": "b2b",
+  "description": "Business-to-business enquiries from hotels, gyms, and companies needing recurring laundry services.",
+  "environment": "dev",
+  "is_test_data": true,
+  "seed_source": "whatsapp_agent_test_seed",
+  "scenarios": [
+    {
+      "scenario_id": "B2B_HOTEL_ENQUIRY_001",
+      "category": "b2b",
+      "customer_message": "We run a hotel and need a regular laundry partner for our linens.",
+      "expected_intent": "b2b_enquiry",
+      "expected_sentiment": "positive",
+      "expected_urgency": "medium",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "b2b_lead",
+      "expected_short_reply": "Thanks for your interest! Could you share your business name, location, and estimated weekly volume so our team can follow up?",
+      "linked_demo_order_id": null,
+      "expected_team_routing": "Sales / Partner Acquisition",
+      "forbidden_actions": ["invent_price", "promise_contract_terms", "commit_discount"]
+    },
+    {
+      "scenario_id": "B2B_GYM_TOWELS_002",
+      "category": "b2b",
+      "customer_message": "Our gym needs daily towel cleaning, can you handle bulk orders?",
+      "expected_intent": "b2b_enquiry",
+      "expected_sentiment": "neutral",
+      "expected_urgency": "medium",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "b2b_lead",
+      "expected_short_reply": "We'd be glad to explore this. Could you share your business name, location, and weekly volume so our team can reach out?",
+      "linked_demo_order_id": null,
+      "expected_team_routing": "Sales / Partner Acquisition",
+      "forbidden_actions": ["invent_price", "promise_contract_terms", "commit_discount"]
+    },
+    {
+      "scenario_id": "B2B_OFFICE_CONTRACT_003",
+      "category": "b2b",
+      "customer_message": "I manage an office and want to set up a corporate laundry contract.",
+      "expected_intent": "b2b_enquiry",
+      "expected_sentiment": "positive",
+      "expected_urgency": "medium",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "b2b_lead",
+      "expected_short_reply": "Great to hear! Please share your business name, location, and expected weekly volume so our team can follow up with details.",
+      "linked_demo_order_id": "LK-AE-1026",
+      "expected_team_routing": "Sales / Partner Acquisition",
+      "forbidden_actions": ["invent_price", "promise_contract_terms", "commit_discount"]
+    },
+    {
+      "scenario_id": "B2B_RESTAURANT_UNIFORMS_004",
+      "category": "b2b",
+      "customer_message": "Our restaurant chain needs uniform cleaning across several branches.",
+      "expected_intent": "b2b_enquiry",
+      "expected_sentiment": "neutral",
+      "expected_urgency": "medium",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "b2b_lead",
+      "expected_short_reply": "Thank you for reaching out. Could you share your business name, locations, and weekly volume so our team can assist?",
+      "linked_demo_order_id": null,
+      "expected_team_routing": "Sales / Partner Acquisition",
+      "forbidden_actions": ["invent_price", "promise_contract_terms", "commit_discount"]
+    }
+  ]
+}

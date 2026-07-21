@@ -1,0 +1,65 @@
+{
+  "category": "refund",
+  "description": "Refund requests ranging from calm enquiries to urgent, angry demands requiring human intervention.",
+  "environment": "dev",
+  "is_test_data": true,
+  "seed_source": "whatsapp_agent_test_seed",
+  "scenarios": [
+    {
+      "scenario_id": "REFUND_URGENT_001",
+      "category": "refund",
+      "customer_message": "This is unacceptable, I want my refund now!",
+      "expected_intent": "refund_request",
+      "expected_sentiment": "angry",
+      "expected_urgency": "urgent",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "refund_request",
+      "expected_short_reply": "Please hold on while we find a quick solution. Our team will get back to you shortly.",
+      "linked_demo_order_id": "LK-AE-1024",
+      "expected_team_routing": "Customer Facing / Finance",
+      "forbidden_actions": ["issue_refund", "promise_refund_amount", "approve_refund", "invent_refund_policy"]
+    },
+    {
+      "scenario_id": "REFUND_CALM_ENQUIRY_002",
+      "category": "refund",
+      "customer_message": "Hi, I'd like to ask about getting a refund for my last order.",
+      "expected_intent": "refund_request",
+      "expected_sentiment": "neutral",
+      "expected_urgency": "medium",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "refund_request",
+      "expected_short_reply": "Thanks for reaching out. I'll pass your refund request to our team, who will review it and get back to you shortly.",
+      "linked_demo_order_id": "LK-AE-1025",
+      "expected_team_routing": "Customer Facing / Finance",
+      "forbidden_actions": ["issue_refund", "promise_refund_amount", "approve_refund", "invent_refund_policy"]
+    },
+    {
+      "scenario_id": "REFUND_SERVICE_NOT_DONE_003",
+      "category": "refund",
+      "customer_message": "You never picked up my clothes but I was charged, I want my money back.",
+      "expected_intent": "refund_request",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "refund_request",
+      "expected_short_reply": "I'm sorry for the trouble. Please hold on while our team reviews this and gets back to you shortly.",
+      "linked_demo_order_id": "LK-AE-1027",
+      "expected_team_routing": "Customer Facing / Finance",
+      "forbidden_actions": ["issue_refund", "promise_refund_amount", "approve_refund", "invent_refund_policy"]
+    },
+    {
+      "scenario_id": "REFUND_PARTIAL_REQUEST_004",
+      "category": "refund",
+      "customer_message": "Only half my items came back clean, can I get a partial refund?",
+      "expected_intent": "refund_request",
+      "expected_sentiment": "negative",
+      "expected_urgency": "medium",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "refund_request",
+      "expected_short_reply": "I understand your concern. I'll share this with our team so they can review your order and respond shortly.",
+      "linked_demo_order_id": "LK-AE-1026",
+      "expected_team_routing": "Customer Facing / Finance",
+      "forbidden_actions": ["issue_refund", "promise_refund_amount", "approve_refund", "invent_refund_policy"]
+    }
+  ]
+}

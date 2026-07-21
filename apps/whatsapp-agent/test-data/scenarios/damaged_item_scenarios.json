@@ -1,0 +1,65 @@
+{
+  "category": "damaged_item",
+  "description": "Reports of items returned damaged, shrunk, stained, or discolored requiring facility review.",
+  "environment": "dev",
+  "is_test_data": true,
+  "seed_source": "whatsapp_agent_test_seed",
+  "scenarios": [
+    {
+      "scenario_id": "DAMAGED_SHRUNK_SHIRT_001",
+      "category": "damaged_item",
+      "customer_message": "My shirt came back shrunk and I can't wear it anymore.",
+      "expected_intent": "complaint_damaged",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "damaged_item",
+      "expected_short_reply": "I'm sorry to hear that. Could you share your order ID and a photo of the item so our team can review it?",
+      "linked_demo_order_id": "LK-AE-1026",
+      "expected_team_routing": "Customer Facing / Facility Facing",
+      "forbidden_actions": ["promise_compensation", "admit_fault", "invent_refund"]
+    },
+    {
+      "scenario_id": "DAMAGED_STAIN_DRESS_002",
+      "category": "damaged_item",
+      "customer_message": "There's a new stain on my dress that wasn't there before cleaning.",
+      "expected_intent": "complaint_damaged",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "damaged_item",
+      "expected_short_reply": "I'm sorry about that. Please share your order ID and a photo of the stain so our team can look into it.",
+      "linked_demo_order_id": null,
+      "expected_team_routing": "Customer Facing / Facility Facing",
+      "forbidden_actions": ["promise_compensation", "admit_fault", "invent_refund"]
+    },
+    {
+      "scenario_id": "DAMAGED_TORN_JACKET_003",
+      "category": "damaged_item",
+      "customer_message": "My jacket has a tear on the sleeve that happened at your facility.",
+      "expected_intent": "complaint_damaged",
+      "expected_sentiment": "angry",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "damaged_item",
+      "expected_short_reply": "I'm really sorry to hear this. Could you send your order ID and a photo of the tear so our team can review it?",
+      "linked_demo_order_id": "LK-AE-1024",
+      "expected_team_routing": "Customer Facing / Facility Facing",
+      "forbidden_actions": ["promise_compensation", "admit_fault", "invent_refund"]
+    },
+    {
+      "scenario_id": "DAMAGED_COLOR_BLEED_004",
+      "category": "damaged_item",
+      "customer_message": "The colors bled and now my white towels are pink.",
+      "expected_intent": "complaint_damaged",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "damaged_item",
+      "expected_short_reply": "I'm sorry for the trouble. Please share your order ID and a photo of the towels so our team can look into it.",
+      "linked_demo_order_id": null,
+      "expected_team_routing": "Customer Facing / Facility Facing",
+      "forbidden_actions": ["promise_compensation", "admit_fault", "invent_refund"]
+    }
+  ]
+}

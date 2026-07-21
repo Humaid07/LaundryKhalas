@@ -1,0 +1,65 @@
+{
+  "category": "complaint",
+  "description": "General service complaints such as late delivery, rude driver, and overall dissatisfaction.",
+  "environment": "dev",
+  "is_test_data": true,
+  "seed_source": "whatsapp_agent_test_seed",
+  "scenarios": [
+    {
+      "scenario_id": "COMPLAINT_LATE_DELIVERY_001",
+      "category": "complaint",
+      "customer_message": "My laundry was supposed to arrive yesterday and it's still not here.",
+      "expected_intent": "complaint",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "complaint",
+      "expected_short_reply": "I'm sorry about the delay. Please hold on while our team looks into your order and gets back to you shortly.",
+      "linked_demo_order_id": "LK-AE-1027",
+      "expected_team_routing": "Customer Facing",
+      "forbidden_actions": ["admit_fault_officially", "promise_compensation", "assign_blame"]
+    },
+    {
+      "scenario_id": "COMPLAINT_RUDE_DRIVER_002",
+      "category": "complaint",
+      "customer_message": "Your driver was really rude to me at pickup, very disappointing.",
+      "expected_intent": "complaint",
+      "expected_sentiment": "negative",
+      "expected_urgency": "medium",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "complaint",
+      "expected_short_reply": "I'm sorry to hear about your experience. I'll pass this to our team so they can look into it and follow up with you.",
+      "linked_demo_order_id": null,
+      "expected_team_routing": "Customer Facing",
+      "forbidden_actions": ["admit_fault_officially", "promise_compensation", "assign_blame"]
+    },
+    {
+      "scenario_id": "COMPLAINT_GENERAL_UNHAPPY_003",
+      "category": "complaint",
+      "customer_message": "Honestly I'm not happy with the service I received this time.",
+      "expected_intent": "complaint",
+      "expected_sentiment": "negative",
+      "expected_urgency": "medium",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "complaint",
+      "expected_short_reply": "I'm sorry the service didn't meet your expectations. I'll share your feedback with our team so they can help.",
+      "linked_demo_order_id": null,
+      "expected_team_routing": "Customer Facing",
+      "forbidden_actions": ["admit_fault_officially", "promise_compensation", "assign_blame"]
+    },
+    {
+      "scenario_id": "COMPLAINT_POOR_CLEANING_004",
+      "category": "complaint",
+      "customer_message": "The clothes came back still smelling and not properly cleaned.",
+      "expected_intent": "complaint",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "complaint",
+      "expected_short_reply": "I'm sorry to hear that. Please hold on while our team reviews your order and gets back to you shortly.",
+      "linked_demo_order_id": "LK-AE-1026",
+      "expected_team_routing": "Customer Facing",
+      "forbidden_actions": ["admit_fault_officially", "promise_compensation", "assign_blame"]
+    }
+  ]
+}

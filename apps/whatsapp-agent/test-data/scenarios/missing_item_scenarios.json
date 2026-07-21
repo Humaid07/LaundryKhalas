@@ -1,0 +1,65 @@
+{
+  "category": "missing_item",
+  "description": "Reports of items missing from a returned laundry order requiring facility review.",
+  "environment": "dev",
+  "is_test_data": true,
+  "seed_source": "whatsapp_agent_test_seed",
+  "scenarios": [
+    {
+      "scenario_id": "MISSING_SOCKS_PAIR_001",
+      "category": "missing_item",
+      "customer_message": "I'm missing a pair of socks from my last laundry order.",
+      "expected_intent": "complaint_missing",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "missing_item",
+      "expected_short_reply": "I'm sorry about that. Could you share your order ID and details of the missing item so our team can look into it?",
+      "linked_demo_order_id": "LK-AE-1025",
+      "expected_team_routing": "Customer Facing / Facility Facing",
+      "forbidden_actions": ["promise_replacement_value", "admit_fault", "invent_refund"]
+    },
+    {
+      "scenario_id": "MISSING_SHIRT_002",
+      "category": "missing_item",
+      "customer_message": "One of my formal shirts didn't come back with the delivery.",
+      "expected_intent": "complaint_missing",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "missing_item",
+      "expected_short_reply": "I'm sorry to hear that. Please share your order ID and a description of the shirt so our team can investigate.",
+      "linked_demo_order_id": null,
+      "expected_team_routing": "Customer Facing / Facility Facing",
+      "forbidden_actions": ["promise_replacement_value", "admit_fault", "invent_refund"]
+    },
+    {
+      "scenario_id": "MISSING_COUNT_MISMATCH_003",
+      "category": "missing_item",
+      "customer_message": "I sent 12 items but only received 10 back.",
+      "expected_intent": "complaint_missing",
+      "expected_sentiment": "negative",
+      "expected_urgency": "high",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "missing_item",
+      "expected_short_reply": "I'm sorry for the discrepancy. Could you share your order ID and the missing item details so our team can review it?",
+      "linked_demo_order_id": "LK-AE-1027",
+      "expected_team_routing": "Customer Facing / Facility Facing",
+      "forbidden_actions": ["promise_replacement_value", "admit_fault", "invent_refund"]
+    },
+    {
+      "scenario_id": "MISSING_BEDSHEET_004",
+      "category": "missing_item",
+      "customer_message": "My bedsheet set is incomplete, one pillowcase is missing.",
+      "expected_intent": "complaint_missing",
+      "expected_sentiment": "negative",
+      "expected_urgency": "medium",
+      "expected_human_intervention_required": true,
+      "expected_dashboard_flag": "missing_item",
+      "expected_short_reply": "I'm sorry about that. Please share your order ID and details of the missing pillowcase so our team can help.",
+      "linked_demo_order_id": null,
+      "expected_team_routing": "Customer Facing / Facility Facing",
+      "forbidden_actions": ["promise_replacement_value", "admit_fault", "invent_refund"]
+    }
+  ]
+}

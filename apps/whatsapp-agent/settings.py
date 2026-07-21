@@ -15,6 +15,21 @@ class Settings(BaseSettings):
     app_name: str = "LaundryKhalas WhatsApp Agent"
     agent_mode: str = "standalone"
 
+    # --- Database mode / environment (dev/test Supabase project) ---
+    # database_mode: "sqlite" (default local) | "supabase" (dev/test Postgres).
+    # These gate the Supabase access layer and the seed/reset safety checks.
+    database_env: str = "test"          # test | production
+    database_mode: str = "sqlite"       # sqlite | supabase
+    supabase_project_type: str = "test"  # test | production
+    allow_test_seed: bool = False
+    allow_test_reset: bool = False
+
+    # Supabase connection. DATABASE_URL (below) is the backend-only Postgres DSN.
+    # The service role key is BACKEND-ONLY and must never reach the frontend.
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_service_role_key: str = ""
+
     llm_provider: str = "mock"  # mock | anthropic | openai
     anthropic_api_key: str = ""
     openai_api_key: str = ""
