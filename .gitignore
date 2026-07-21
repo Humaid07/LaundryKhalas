@@ -46,6 +46,8 @@ htmlcov/
 # --- Logs ---
 logs/
 *.log
+# Source directory that happens to be named "logs" (not log output)
+!apps/admin/components/logs/
 
 # --- OS / editor ---
 .DS_Store
