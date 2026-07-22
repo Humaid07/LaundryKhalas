@@ -34,7 +34,37 @@ config/rules layer, functional global filters, mock/live status, known limitatio
 (no git repo, approvals not persisted server-side, no conversation inbox endpoint,
 Windows `next build` quirk), and the next recommended build steps. No code changed.
 
+## SEO Agents (Phase 1)
+
+[[2026-07-22-seo-agent-dashboard-foundation]] —
+`build-reports/2026-07-22-seo-agent-dashboard-foundation.md` — **SEO Agent foundation**:
+16-agent catalog + runs/findings/recommendations/approval-tasks/change-log/reports in
+`apps/whatsapp-agent/seo_agents/` (in-memory, mock-first, approval-gated, no live
+sources), FastAPI `/api/seo/*`, typed dashboard client `seo-agent-api.ts`, and a live
+Agent Fleet. Architecture: [[seo-agent-system]] · dashboard contract:
+[[seo-agent-dashboard-contract]] · test script: [[seo-agent-test-script]].
+
 ## Latest Build Report
+
+[[2026-07-22-whatsapp-supabase-order-capture]] —
+`build-reports/2026-07-22-whatsapp-supabase-order-capture.md` — **WhatsApp → Supabase
+order capture**: an extraction/order-state layer turns approved Evolution test chats
+into structured data. Backfills customer profile (name/city/area/address, address
+backend-only), creates/updates a per-conversation **draft order** that accumulates
+across turns and is confirmed → `pickup_scheduled` (IDs `LC-TEST-####`), writes
+`order_events` (created/service/items/address/pickup/payment/confirmed), and raises a
+**flag + ticket** on escalations (never auto-resolved). Adds live dashboard panels on
+`/operations/customer-orders` and `/operations/customer-facing` behind
+`NEXT_PUBLIC_USE_LIVE_WHATSAPP_INBOX` (Dashboard → FastAPI → Supabase). **208 tests**,
+tsc/eslint/ruff clean, live-Supabase integration verified (auto-cleaned). Builds on
+[[2026-07-22-evolution-sender-allowlist]].
+
+[[2026-07-22-evolution-sender-allowlist]] —
+`build-reports/2026-07-22-evolution-sender-allowlist.md` — **safety fix**: the
+Evolution auto-reply now only replies to numbers on `EVOLUTION_ALLOWED_TEST_NUMBERS`
+(normalized E.164), and only for safe, laundry-related messages. Non-allowed
+senders are dropped (no store, no agent, no send, `200 OK`); escalations stay
+human-gated. Builds on [[2026-07-22-auto-reply-decision-layer]]. 195 tests pass.
 
 [[2026-07-21-evolution-whatsapp-adapter]] —
 `build-reports/2026-07-21-evolution-whatsapp-adapter.md` — builds the **Evolution

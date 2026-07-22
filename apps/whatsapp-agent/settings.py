@@ -75,7 +75,18 @@ class Settings(BaseSettings):
     # When true, the agent's happy-path draft reply is auto-sent via Evolution on
     # inbound. Default false = replies are held for human approval (MVP rule);
     # escalations are always held regardless.
+    #
+    # SAFETY: auto-reply is ALSO gated by evolution_allowed_test_numbers below.
+    # EVOLUTION_AUTO_REPLY=true now means "auto-reply ONLY for allowed test
+    # numbers AND only when the message is safe and laundry-related" — never a
+    # blanket reply to every WhatsApp number.
     evolution_auto_reply: bool = False
+
+    # Comma-separated E.164 allow-list of senders the agent may auto-reply to
+    # while testing. Empty = no one is auto-replied to (fail safe). Any inbound
+    # from a number not on this list is stored/logged but never gets an
+    # autonomous reply. Example: EVOLUTION_ALLOWED_TEST_NUMBERS=+971502485658
+    evolution_allowed_test_numbers: str = ""
 
     # Meta WhatsApp Cloud API — FUTURE provider. Placeholders; required only when
     # whatsapp_mode=meta. Never required for mock or evolution.
@@ -96,6 +107,20 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
+    @property
+    def allowed_auto_reply_numbers(self) -> frozenset[str]:
+        """Normalized E.164 set of senders the agent may auto-reply to. Parsed
+        from EVOLUTION_ALLOWED_TEST_NUMBERS (comma-separated). Normalization is
+        the SAME function the webhook uses on the inbound sender, so comparison
+        is format-independent (JID / whatsapp: / +country / bare digits)."""
+        from services.privacy import normalize_e164
+
+        return frozenset(
+            n
+            for n in (normalize_e164(p) for p in self.evolution_allowed_test_numbers.split(","))
+            if n
+        )
 
     @property
     def live_llm_ready(self) -> bool:

@@ -1,7 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Sparkles, AlertTriangle, TrendingUp, TrendingDown, Minus, FileText, SearchX } from "lucide-react";
 import { SectionTitle } from "@/components/dashboard/shell/PageHeader";
+import { seoAgentApi, type SeoAgentHealthDTO } from "@/lib/dashboard/seo-agent-api";
+import { formatRelativeTime } from "@/lib/dashboard/formatters";
+import type { SeoAgent, AgentStatus } from "@/lib/dashboard/types";
 import { useFilters } from "@/components/dashboard/shell/FiltersProvider";
 import { StatGrid } from "@/components/dashboard/ui/StatCard";
 import { ChartCard } from "@/components/dashboard/ui/ChartCard";
@@ -125,14 +129,67 @@ function OverviewSection() {
 
 /* ------------------------------- Agent fleet -------------------------------- */
 
+// Map a live backend agent-health row to the UI's SeoAgent card shape. Falls
+// back to the static seoAgents list when the backend is unreachable.
+const SECTION_CATEGORY: Record<string, SeoAgent["category"]> = {
+  "technical-seo": "Technical",
+  indexing: "Technical",
+  "gsc-performance": "Technical",
+  "content-pipeline": "Content",
+  "hyperlocal-pages": "Content",
+  competitors: "Intelligence",
+  "ai-search": "Intelligence",
+  reports: "Intelligence",
+};
+
+function healthStatusToCard(h: SeoAgentHealthDTO): AgentStatus {
+  if (h.human_approval_required && h.approval_tasks > 0) return "Awaiting Approval";
+  if (h.status === "Live") return "Active";
+  if (h.status === "Paused") return "Paused";
+  return "Scheduled";
+}
+
+function toCardAgent(h: SeoAgentHealthDTO): SeoAgent {
+  return {
+    name: h.name,
+    status: healthStatusToCard(h),
+    lastRun: h.last_run ? formatRelativeTime(h.last_run) : "—",
+    nextRun: h.next_run,
+    outputs: h.findings,
+    openIssues: h.issues,
+    approvalRequired: h.human_approval_required,
+    category: SECTION_CATEGORY[h.dashboard_sections[0]] ?? "Intelligence",
+  };
+}
+
 function AgentFleetSection() {
-  const needAttention = seoAgents.filter((a) => a.approvalRequired || a.status === "Needs Review").length;
+  // Live agent fleet from the SEO backend (all 16 agents), with a graceful
+  // fallback to the static list so the page always renders.
+  const [agents, setAgents] = useState<SeoAgent[]>(seoAgents);
+  useEffect(() => {
+    let active = true;
+    seoAgentApi
+      .listSeoAgentHealth()
+      .then((rows) => {
+        if (active && rows.length) setAgents(rows.map(toCardAgent));
+      })
+      .catch(() => {
+        /* keep static fallback */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const needAttention = agents.filter(
+    (a) => a.approvalRequired || a.status === "Needs Review" || a.status === "Awaiting Approval",
+  ).length;
   return (
     <div className="space-y-6">
       <SnapshotRow label="Agent fleet" />
-      <SectionTitle title="Agent fleet" description={`${seoAgents.length} agents · ${needAttention} need attention`} />
+      <SectionTitle title="Agent fleet" description={`${agents.length} agents · ${needAttention} need attention`} />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {seoAgents.map((a) => <AgentStatusCard key={a.name} agent={a} />)}
+        {agents.map((a) => <AgentStatusCard key={a.name} agent={a} />)}
       </div>
       <Panel padded={false}>
         <div className="flex items-center justify-between p-4">

@@ -44,3 +44,38 @@ async def get_or_create_by_phone(
         mask_phone(phone_e164),
         channel,
     )
+
+
+# Fields the WhatsApp capture flow may learn about a customer over the
+# conversation. ``name`` maps to display_name; ``language`` to preferred_language.
+# ``address`` is BACKEND-ONLY — never returned by the read APIs / broad tables.
+_CUSTOMER_FIELD_COLUMNS = {
+    "name": "display_name",
+    "language": "preferred_language",
+    "city": "city",
+    "area": "area",
+    "address": "address",
+}
+
+
+async def update_customer_details(customer_id: str, fields: dict) -> dict | None:
+    """Backfill customer-profile fields extracted from the conversation.
+
+    Only non-empty values are written, and a value is only overwritten when the
+    incoming value is genuinely new (so re-processing the same history is a
+    no-op). ``fields`` uses the OrderDetails key names (name/language/city/area/
+    address)."""
+    sets: list[str] = []
+    values: list = []
+    for key, column in _CUSTOMER_FIELD_COLUMNS.items():
+        value = fields.get(key)
+        if value:
+            values.append(value)
+            sets.append(f"{column} = ${len(values)}")
+    if not sets:
+        return None
+    values.append(customer_id)
+    return await database.fetchrow(
+        f"update customers set {', '.join(sets)} where id = ${len(values)} returning *",
+        *values,
+    )

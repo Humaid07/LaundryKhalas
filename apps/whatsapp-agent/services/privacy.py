@@ -45,6 +45,28 @@ def mask_phone(phone: str | None) -> str:
     return f"{digits[:5]} •••• {digits[-2:]}"
 
 
+def normalize_e164(phone: str | None) -> str:
+    """Best-effort E.164 normalization for COMPARING WhatsApp senders across the
+    several shapes Evolution/Baileys emits, so we never string-compare raw values:
+
+        '971502485658@s.whatsapp.net' -> '+971502485658'
+        'whatsapp:+971502485658'      -> '+971502485658'
+        '+971 50 248 5658'            -> '+971502485658'
+        '971502485658'                -> '+971502485658'
+
+    Returns '+<digits>' or '' when there are no digits. This is a comparison key,
+    not a validator — it does not check country codes or length.
+    """
+    if not phone:
+        return ""
+    raw = phone.strip()
+    if raw.lower().startswith("whatsapp:"):
+        raw = raw.split(":", 1)[1]
+    raw = raw.split("@", 1)[0]  # drop a JID domain (@s.whatsapp.net / @g.us)
+    digits = re.sub(r"[^\d]", "", raw)
+    return f"+{digits}" if digits else ""
+
+
 def hash_phone(phone: str | None) -> str:
     """Stable, non-reversible hash of the phone digits — used to look up / dedupe
     a customer without scattering extra copies of the raw number."""

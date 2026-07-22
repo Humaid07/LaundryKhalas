@@ -10,7 +10,9 @@ from api import (
     flags,
     health,
     orders,
+    seo_agents,
     settings_route,
+    tickets,
     webhooks,
 )
 from db import AsyncSessionLocal, database, init_db
@@ -56,9 +58,11 @@ app.include_router(chat.router)
 app.include_router(orders.router)
 app.include_router(conversations.router)
 app.include_router(flags.router)
+app.include_router(tickets.router)
 app.include_router(settings_route.router)
 app.include_router(webhooks.router)
 app.include_router(evolution_webhooks.router)
+app.include_router(seo_agents.router)
 app.include_router(health.router)
 
 

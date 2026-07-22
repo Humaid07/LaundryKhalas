@@ -164,6 +164,16 @@ async def set_flagged(conversation_id: str, *, reason: str, priority: str, team:
     )
 
 
+async def link_order(conversation_id: str, business_order_id: str) -> None:
+    """Attach a business order id (e.g. LC-TEST-1001) to the conversation so the
+    inbox/dashboard can cross-reference the WhatsApp-created order."""
+    await database.execute(
+        "update conversations set linked_order_id = $2 where id = $1",
+        conversation_id,
+        business_order_id,
+    )
+
+
 async def get_customer_phone(conversation_id: str) -> str | None:
     """Backend-only: the real phone (phone_e164) needed to send an outbound
     reply. Never returned by the read APIs (those expose masked_phone only)."""
