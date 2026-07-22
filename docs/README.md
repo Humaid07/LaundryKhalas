@@ -12,7 +12,7 @@
 - `checklists/admin-dashboard-mvp.md` - what the backend exposes today for
   a future admin dashboard frontend, and what's still missing.
 - `audits/fresh-project-start-report.md` - the review of the existing
-  `LaundryKhalaasPrototype` project performed before starting this build,
+  `LaundryKhalasPrototype` project performed before starting this build,
   and what was/wasn't reused from it.
 
 See the top-level `README.md` for how to actually run the project.

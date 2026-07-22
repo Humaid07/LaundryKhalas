@@ -15,6 +15,6 @@
     "change_pickup_time": "Ask for the order ID and preferred new pickup time. Never confirm the change automatically.",
     "add_more_items": "Ask what items the customer wants to add.",
     "cancel_order": "Ask for the order ID and say the team will confirm whether it can still be cancelled. Never cancel automatically.",
-    "call_support": "Say the LaundryKhalaas support team will follow up. In mock mode say it is not connected to a live support team yet."
+    "call_support": "Say the LaundryKhalas support team will follow up. In mock mode say it is not connected to a live support team yet."
   }
 }

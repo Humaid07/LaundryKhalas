@@ -52,7 +52,7 @@ function OrderCard({ order, onOpen }: { order: OrderDTO; onOpen: (o: OrderDTO) =
         <div className="min-w-0">
           <span className="font-mono text-xs font-semibold text-ink">{order.order_id}</span>
           <p className="mt-0.5 truncate text-sm font-semibold text-ink">
-            {order.customer_name ?? "Unknown customer"}
+            {order.customer_name ?? "Name pending"}
           </p>
         </div>
         <StatusBadge tone={meta.tone}>{order.status_label || meta.label}</StatusBadge>
@@ -147,7 +147,7 @@ function OrderDetailPanel({ order, onClose, onChanged }: {
         <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-surface p-4">
           <div className="min-w-0">
             <span className="font-mono text-xs font-semibold text-ink">{full.order_id}</span>
-            <p className="truncate text-sm font-semibold text-ink">{full.customer_name ?? "Unknown customer"}</p>
+            <p className="truncate text-sm font-semibold text-ink">{full.customer_name ?? "Name pending"}</p>
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge tone={meta.tone}>{full.status_label || meta.label}</StatusBadge>
@@ -186,7 +186,7 @@ function OrderDetailPanel({ order, onClose, onChanged }: {
 
           <Panel padded className="!rounded-xl">
             <PanelHeader title="Customer" />
-            <DetailRow label="Name" value={full.customer_name} />
+            <DetailRow label="Name" value={full.customer_name ?? "Name pending"} />
             <DetailRow label="WhatsApp" value={full.customer_phone} />
           </Panel>
 

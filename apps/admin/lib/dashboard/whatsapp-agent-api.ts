@@ -4,6 +4,8 @@
  * no live third-party calls. Used by the Operations → WhatsApp Agent tab.
  */
 
+import { clearSession, getToken } from "./auth-token";
+
 const BASE_URL = process.env.NEXT_PUBLIC_WHATSAPP_AGENT_API_URL ?? "http://localhost:8101";
 
 export type DomainStatus = "in_domain" | "out_of_domain" | "uncertain";
@@ -204,13 +206,27 @@ export class AgentApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  const token = getToken();
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
     });
   } catch {
     throw new AgentApiError(0, "Could not reach the WhatsApp agent backend (:8101). Is it running?");
+  }
+  if (res.status === 401) {
+    // Token missing/expired — drop it and bounce to the login screen so the
+    // session can be re-established.
+    clearSession();
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+    }
+    throw new AgentApiError(401, "Your session has expired. Please sign in again.");
   }
   if (!res.ok) {
     let detail = res.statusText;

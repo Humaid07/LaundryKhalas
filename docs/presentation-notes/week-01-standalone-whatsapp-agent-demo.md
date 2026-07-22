@@ -6,7 +6,7 @@ Written for a founder/team presentation, not a technical audience.
 ## 1. Why this exists
 
 A separate, focused build from the main system: one WhatsApp agent whose
-entire job is to talk about LaundryKhalaas laundry and cleaning services -
+entire job is to talk about LaundryKhalas laundry and cleaning services -
 and refuse absolutely everything else, politely, every time. It comes with
 its own WhatsApp-Web-look-alike chat screen so anyone can test it without
 touching a terminal.
@@ -33,7 +33,7 @@ touching a terminal.
 ## 4. What it refuses, every time
 
 Coding questions, politics, religion, finance, medical questions, jokes,
-general trivia - anything not about LaundryKhalaas/laundry/cleaning. It
+general trivia - anything not about LaundryKhalas/laundry/cleaning. It
 also refuses attempts to trick it ("ignore your instructions", "tell me
 your API key") - tested explicitly, four different phrasings, all
 correctly refused with no leak of its instructions or any key.
@@ -99,7 +99,7 @@ cannot wander into topics that would embarrass or expose the business.
 
 ## 9. Before vs after
 
-Before: no way to see how a domain-restricted LaundryKhalaas assistant
+Before: no way to see how a domain-restricted LaundryKhalas assistant
 would actually behave, other than reading a spec. After: a running,
 clickable chat screen anyone can test with real conversations, including
 deliberately trying to break it.

@@ -56,7 +56,7 @@ def test_service_selection_stores_id_and_snapshot():
     sid = _a_service_id()
     b = Booking(conversation_state=bf.WAITING_FOR_SERVICE)
     reply = advance(b, Inbound(selection_id=f"service:{sid}", text="Premium Wash & Fold"))
-    assert reply.state == bf.WAITING_FOR_PICKUP_DATE
+    assert reply.state == bf.WAITING_FOR_NAME          # no name yet -> ask for it next
     assert reply.updates["service_id"] == sid
     assert reply.updates["service_name_snapshot"]
     assert reply.updates.get("_touch_service_selected_at") is True
@@ -149,23 +149,26 @@ def test_no_confirmation_without_explicit_confirm():
     assert reply.state == bf.WAITING_FOR_CONFIRMATION
 
 
-# Test 8 — changing the service before confirmation reuses the same draft ------
-def test_change_details_service_returns_to_service_step():
+# Test 8 — "Change details" -> a targeted edit menu on the SAME draft ----------
+def test_change_details_shows_field_menu_then_targeted_edit():
     b = Booking(conversation_state=bf.WAITING_FOR_CONFIRMATION, service_id=_a_service_id())
     menu = advance(b, Inbound(selection_id="change_details"))
     assert menu.state == bf.WAITING_FOR_CHANGE_FIELD
+    # picking "service" enters the TARGETED edit state, not linear collection
     b2 = Booking(conversation_state=bf.WAITING_FOR_CHANGE_FIELD, service_id=_a_service_id())
     reply = advance(b2, Inbound(selection_id="change:service"))
-    assert reply.state == bf.WAITING_FOR_SERVICE       # re-select on the SAME booking
+    assert reply.state == bf.EDITING_SERVICE           # asks ONLY for the service
     assert reply.confirm_now is False
 
 
-def test_change_date_revalidates_slot():
+def test_change_date_enters_edit_state_without_touching_slot_yet():
+    # Picking "date" only asks for the date; the slot is revalidated when the new
+    # date arrives (see the targeted-edit tests below), not on menu selection.
     b = Booking(conversation_state=bf.WAITING_FOR_CHANGE_FIELD, service_id=_a_service_id(),
                 pickup_slot_id="evening_17_20")
     reply = advance(b, Inbound(selection_id="change:date"))
-    assert reply.state == bf.WAITING_FOR_PICKUP_DATE
-    assert reply.updates["pickup_slot_id"] is None      # dependent slot cleared
+    assert reply.state == bf.EDITING_DATE
+    assert "pickup_slot_id" not in reply.updates        # nothing cleared prematurely
 
 
 # Test 9 — cancellation ends the booking without an operational order ----------
@@ -196,14 +199,14 @@ def test_numbered_fallback_maps_back_to_service_id():
     reply = advance(b, Inbound(text="2"))
     from rules import active_service_catalog
     assert reply.updates["service_id"] == active_service_catalog()[1]["service_id"]
-    assert reply.state == bf.WAITING_FOR_PICKUP_DATE
+    assert reply.state == bf.WAITING_FOR_NAME
 
 
 # Test 12 — free-text "Wash and fold" resolves only on a unique match ----------
 def test_free_text_service_unique_match():
     b = Booking(conversation_state=bf.WAITING_FOR_SERVICE)
     reply = advance(b, Inbound(text="wash and fold please"))
-    assert reply.state == bf.WAITING_FOR_PICKUP_DATE
+    assert reply.state == bf.WAITING_FOR_NAME
     svc = reply.updates["service_id"]
     from rules import service_by_id
     assert "wash" in (service_by_id(svc)["display_name"].lower())
@@ -219,3 +222,225 @@ def test_free_text_service_ambiguous_asks_to_pick():
     else:
         # if the catalogue makes it unique, that's fine too — but it must be valid
         assert reply.updates.get("service_id")
+
+
+# ===========================================================================
+# Targeted single-field EDIT flow (spec: "Fix the WhatsApp order-editing flow")
+# A completed draft at the summary; changing ONE field must ask only for that
+# field, preserve everything else, and return straight to the review.
+# ===========================================================================
+def _svc(i=0):
+    from rules import active_service_catalog
+    return active_service_catalog()[i]["service_id"]
+
+
+def _svc_label(sid):
+    from rules import service_by_id
+    return service_by_id(sid)["display_name"]
+
+
+def _full_booking(state=bf.WAITING_FOR_CONFIRMATION, **overrides):
+    """A fully-collected draft sitting at the summary."""
+    sid = _svc(0)
+    base = dict(
+        conversation_state=state,
+        service_id=sid, service_name_snapshot=_svc_label(sid),
+        pickup_date=TODAY + _dt.timedelta(days=2),
+        pickup_slot_id="evening_17_20", pickup_slot_label="5:00 PM – 8:00 PM",
+        pickup_address="Marina Heights, Dubai Marina", pickup_area="dubai marina",
+        pickup_instruction_code="pickup_from_reception",
+        pickup_instruction_text="Pick up from reception",
+    )
+    base.update(overrides)
+    return Booking(**base)
+
+
+# 1/2/3 — change pickup time preserves address, service and date ---------------
+def test_edit_slot_preserves_address_service_date():
+    b = _full_booking(state=bf.EDITING_SLOT)
+    reply = advance(b, Inbound(selection_id="slot:morning_08_11"))
+    assert reply.state == bf.WAITING_FOR_CONFIRMATION            # back to review
+    # only the slot columns are in the PATCH — everything else is untouched
+    assert reply.updates["pickup_slot_id"] == "morning_08_11"
+    assert "pickup_address" not in reply.updates
+    assert "service_id" not in reply.updates
+    assert "pickup_date" not in reply.updates
+    # the revised summary still shows the preserved values
+    assert "Marina Heights, Dubai Marina" in reply.text
+    assert _svc_label(_svc(0)) in reply.text
+    assert "8:00 AM – 11:00 AM" in reply.text                    # new time reflected
+
+
+# 4 — change address preserves date and time ----------------------------------
+def test_edit_address_preserves_date_and_time():
+    b = _full_booking(state=bf.EDITING_ADDRESS)
+    reply = advance(b, Inbound(text="Villa 9, Al Barsha South"))
+    assert reply.state == bf.WAITING_FOR_CONFIRMATION
+    assert reply.updates["pickup_address"] == "Villa 9, Al Barsha South"
+    assert "pickup_slot_id" not in reply.updates
+    assert "pickup_date" not in reply.updates
+    assert "5:00 PM – 8:00 PM" in reply.text                     # time preserved
+    assert "Villa 9, Al Barsha South" in reply.text
+
+
+# 5 — change instructions preserves all other fields --------------------------
+def test_edit_instructions_preserves_everything_else():
+    b = _full_booking(state=bf.EDITING_INSTRUCTIONS)
+    reply = advance(b, Inbound(selection_id="instruction:dont_ring_bell"))
+    assert reply.state == bf.WAITING_FOR_CONFIRMATION
+    assert reply.updates["pickup_instruction_code"] == "dont_ring_bell"
+    assert "pickup_address" not in reply.updates
+    assert "service_id" not in reply.updates
+    assert "pickup_slot_id" not in reply.updates
+    assert "Marina Heights, Dubai Marina" in reply.text
+    assert "5:00 PM – 8:00 PM" in reply.text
+
+
+# 6 — change service preserves address (and other pickup details) -------------
+def test_edit_service_preserves_address_and_pickup():
+    b = _full_booking(state=bf.EDITING_SERVICE)
+    new_sid = _svc(1)
+    reply = advance(b, Inbound(selection_id=f"service:{new_sid}"))
+    assert reply.state == bf.WAITING_FOR_CONFIRMATION
+    assert reply.updates["service_id"] == new_sid
+    assert "pickup_address" not in reply.updates
+    assert "Marina Heights, Dubai Marina" in reply.text
+    assert _svc_label(new_sid) in reply.text
+
+
+# 7 — changing one field returns directly to review ---------------------------
+def test_edit_returns_directly_to_review():
+    for state, inbound in [
+        (bf.EDITING_SLOT, Inbound(selection_id="slot:morning_08_11")),
+        (bf.EDITING_ADDRESS, Inbound(text="Villa 9, Al Barsha South")),
+        (bf.EDITING_INSTRUCTIONS, Inbound(selection_id="instruction:none")),
+    ]:
+        reply = advance(_full_booking(state=state), inbound)
+        assert reply.state == bf.WAITING_FOR_CONFIRMATION
+        assert "Here are your updated pickup details:" in reply.text
+
+
+# 8 — previously completed fields are not re-asked ----------------------------
+def test_edit_does_not_reask_downstream_fields():
+    # editing the ADDRESS (mid-linear-flow field) must NOT then ask for instructions
+    b = _full_booking(state=bf.EDITING_ADDRESS)
+    reply = advance(b, Inbound(text="Villa 9, Al Barsha South"))
+    assert reply.state != bf.WAITING_FOR_PICKUP_INSTRUCTIONS
+    assert reply.state == bf.WAITING_FOR_CONFIRMATION
+    assert "instructions for our driver" not in reply.text.lower()
+
+
+# 9 — the full draft (rehydrated, e.g. after restart) survives an edit --------
+def test_edit_after_rehydration_preserves_full_draft():
+    # simulate a backend restart mid-edit: the FSM is handed a fresh Booking built
+    # from the persisted row (the webhook reloads it every message).
+    rehydrated = _full_booking(state=bf.EDITING_SLOT)
+    reply = advance(rehydrated, Inbound(selection_id="slot:morning_08_11"))
+    for preserved in ("Marina Heights, Dubai Marina", _svc_label(_svc(0)),
+                      "Pick up from reception"):
+        assert preserved in reply.text
+
+
+# 10 — an edit never confirms/cancels (no second order) -----------------------
+def test_edit_does_not_create_order_or_confirm():
+    b = _full_booking(state=bf.EDITING_SLOT)
+    reply = advance(b, Inbound(selection_id="slot:morning_08_11"))
+    assert reply.confirm_now is False
+    assert reply.cancel_now is False
+
+
+# 11 — confirmation is reset after an edit (must re-confirm) -------------------
+def test_edit_resets_confirmation():
+    b = _full_booking(state=bf.EDITING_ADDRESS)
+    reply = advance(b, Inbound(text="Villa 9, Al Barsha South"))
+    assert reply.state == bf.WAITING_FOR_CONFIRMATION
+    assert reply.confirm_now is False
+
+
+# 12 — the revised summary confirms the SAME draft ----------------------------
+def test_revised_summary_confirms_same_draft():
+    edited = advance(_full_booking(state=bf.EDITING_SLOT),
+                     Inbound(selection_id="slot:morning_08_11"))
+    assert edited.state == bf.WAITING_FOR_CONFIRMATION
+    # now confirm from the revised summary -> confirms once, same draft
+    confirm = advance(_full_booking(state=bf.WAITING_FOR_CONFIRMATION,
+                                    pickup_slot_id="morning_08_11"),
+                      Inbound(selection_id="confirm_booking"))
+    assert confirm.state == bf.BOOKING_CONFIRMED
+    assert confirm.confirm_now is True
+
+
+# 13 — a partial edit never nulls unrelated stored fields ---------------------
+def test_edit_patch_does_not_touch_unrelated_fields():
+    b = _full_booking(state=bf.EDITING_SLOT)
+    reply = advance(b, Inbound(selection_id="slot:morning_08_11"))
+    # the PATCH contains ONLY slot columns — nothing that would erase other fields
+    for untouched in ("pickup_address", "service_id", "pickup_date",
+                      "pickup_instruction_code"):
+        assert untouched not in reply.updates
+
+
+# 14 — two numbers keep separate edit states (state lives on the draft) -------
+def test_two_bookings_keep_separate_edit_states():
+    a = _full_booking(state=bf.EDITING_SLOT, pickup_address="A-Tower, Marina")
+    b = _full_booking(state=bf.EDITING_ADDRESS, pickup_address="B-Villa, Barsha",
+                      pickup_slot_id="evening_17_20")
+    ra = advance(a, Inbound(selection_id="slot:morning_08_11"))
+    rb = advance(b, Inbound(text="B-Villa 22, Al Barsha"))
+    # A only changed its slot; B only changed its address — no cross-contamination
+    assert ra.updates.get("pickup_slot_id") == "morning_08_11"
+    assert "pickup_address" not in ra.updates
+    assert rb.updates.get("pickup_address") == "B-Villa 22, Al Barsha"
+    assert "pickup_slot_id" not in rb.updates
+    assert "A-Tower, Marina" in ra.text and "B-Villa 22, Al Barsha" in rb.text
+
+
+# 15 — changing the date to one where the slot is gone asks only for a slot ----
+def test_edit_date_unavailable_slot_asks_only_for_new_slot():
+    # current slot is night_20_22, which slots_fake never returns -> unavailable
+    b = _full_booking(state=bf.EDITING_DATE, pickup_slot_id="night_20_22",
+                      pickup_slot_label="8:00 PM – 10:00 PM")
+    reply = advance(b, Inbound(selection_id="date:tomorrow"))
+    assert reply.state == bf.EDITING_SLOT                    # asks ONLY for a new slot
+    assert reply.updates["pickup_date"] == TODAY + _dt.timedelta(days=1)
+    assert reply.updates["pickup_slot_id"] is None          # stale slot cleared
+    assert reply.interactive and reply.interactive.kind == "list"
+
+
+def test_edit_date_keeps_available_slot_and_returns_to_review():
+    # current slot IS available on the new date -> keep it, back to review
+    b = _full_booking(state=bf.EDITING_DATE, pickup_slot_id="evening_17_20")
+    reply = advance(b, Inbound(selection_id="date:tomorrow"))
+    assert reply.state == bf.WAITING_FOR_CONFIRMATION
+    assert reply.updates["pickup_date"] == TODAY + _dt.timedelta(days=1)
+    # times recomputed for the new date, slot preserved
+    assert reply.updates["pickup_start_time"].date() == TODAY + _dt.timedelta(days=1)
+    assert "5:00 PM – 8:00 PM" in reply.text
+
+
+# 16 — "Change details" with no field picked asks which field to change -------
+def test_change_details_without_field_asks_which():
+    b = Booking(conversation_state=bf.WAITING_FOR_CONFIRMATION, service_id=_svc(0))
+    menu = advance(b, Inbound(selection_id="change_details"))
+    assert menu.state == bf.WAITING_FOR_CHANGE_FIELD
+    assert menu.interactive and len(menu.interactive.options) == 6   # incl. Customer name
+    # an unrecognized field at the menu re-shows the menu
+    again = advance(Booking(conversation_state=bf.WAITING_FOR_CHANGE_FIELD, service_id=_svc(0)),
+                    Inbound(text="something random"))
+    assert again.state == bf.WAITING_FOR_CHANGE_FIELD
+
+
+# 17 — invalid replacement input keeps the same targeted edit state -----------
+def test_invalid_edit_input_stays_in_edit_state():
+    # invalid slot
+    r1 = advance(_full_booking(state=bf.EDITING_SLOT), Inbound(text="not a slot"))
+    assert r1.state == bf.EDITING_SLOT
+    assert "pickup_slot_id" not in r1.updates
+    # invalid date
+    r2 = advance(_full_booking(state=bf.EDITING_DATE), Inbound(text="the 32nd of Juvember"))
+    assert r2.state == bf.EDITING_DATE
+    assert "pickup_date" not in r2.updates
+    # too-short address
+    r3 = advance(_full_booking(state=bf.EDITING_ADDRESS), Inbound(text="x"))
+    assert r3.state == bf.EDITING_ADDRESS
+    assert "pickup_address" not in r3.updates

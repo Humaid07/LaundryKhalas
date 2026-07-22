@@ -23,13 +23,13 @@ logger = structlog.get_logger()
 # Customer-facing status -> message template. Statuses NOT listed here (draft,
 # active, support_required, …) are internal and send no customer notification.
 _TEMPLATES: dict[str, str] = {
-    "pickup_scheduled": "Your Laundry Khalaas order {oid} pickup is scheduled{when}. Our team will be there soon.",
-    "picked_up": "Your Laundry Khalaas order {oid} has been picked up and is on its way to our facility.",
-    "in_cleaning": "Your Laundry Khalaas order {oid} is now being cleaned with care.",
-    "ready_for_delivery": "Good news! Your Laundry Khalaas order {oid} is ready and will be out for delivery soon.",
-    "out_for_delivery": "Your Laundry Khalaas order {oid} is out for delivery.",
-    "completed": "Your Laundry Khalaas order {oid} is complete. Thank you for choosing Laundry Khalaas!",
-    "cancelled": "Your Laundry Khalaas order {oid} has been cancelled. Please contact us if you have any questions.",
+    "pickup_scheduled": "Your Laundry Khalas order {oid} pickup is scheduled{when}. Our team will be there soon.",
+    "picked_up": "Your Laundry Khalas order {oid} has been picked up and is on its way to our facility.",
+    "in_cleaning": "Your Laundry Khalas order {oid} is now being cleaned with care.",
+    "ready_for_delivery": "Good news! Your Laundry Khalas order {oid} is ready and will be out for delivery soon.",
+    "out_for_delivery": "Your Laundry Khalas order {oid} is out for delivery.",
+    "completed": "Your Laundry Khalas order {oid} is complete. Thank you for choosing Laundry Khalas!",
+    "cancelled": "Your Laundry Khalas order {oid} has been cancelled. Please contact us if you have any questions.",
 }
 
 

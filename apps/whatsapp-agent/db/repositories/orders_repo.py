@@ -6,6 +6,7 @@ endpoints serve either SQLite (local) or Supabase (dev/test) data unchanged.
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 
 from db import database
 from db.repositories import conversations_repo, order_events_repo
@@ -251,10 +252,11 @@ async def set_status(
 # --------------------------------------------------------------------------
 # WhatsApp order capture — draft create/update from a live conversation
 # --------------------------------------------------------------------------
-# Test-mode business ids for WhatsApp-captured orders. Kept distinct from the
-# seeded demo ids (LK-AE-102x) so they are obviously the live-capture orders.
-_TEST_ORDER_PREFIX = "LC-TEST-"
-_TEST_ORDER_BASE = 1000
+# Public order-number format for WhatsApp-captured orders: LK-YYYY-######
+# (spec §14.6, e.g. LK-2026-000123). The sequence is per calendar year, zero
+# padded to 6 digits. Replaces the earlier "LC-TEST-####" scheme (the "LC-"
+# prefix was a legacy "Laundry Coloss" leftover; the brand is Laundry Khalas).
+_ORDER_NUMBER_PREFIX = "LK"
 
 # orders column -> order_events event_type, emitted the first time a field is set.
 _FIELD_EVENTS = {
@@ -267,15 +269,23 @@ _FIELD_EVENTS = {
 
 
 async def next_test_order_id() -> str:
+    """Next public order number in LK-YYYY-###### format (spec §14.6).
+
+    Sequence is per calendar year, derived from the current max suffix so it
+    survives restarts and stays unique (the confirm path is idempotent per
+    conversation). Zero-padded to 6 digits, e.g. ``LK-2026-000123``.
+    """
+    year = datetime.now(timezone.utc).year
+    prefix = f"{_ORDER_NUMBER_PREFIX}-{year}-"
     rows = await database.fetch(
-        "select order_id from orders where order_id like $1", _TEST_ORDER_PREFIX + "%"
+        "select order_id from orders where order_id like $1", prefix + "%"
     )
-    highest = _TEST_ORDER_BASE
+    highest = 0
     for r in rows:
         m = re.search(r"(\d+)\s*$", r.get("order_id") or "")
         if m:
             highest = max(highest, int(m.group(1)))
-    return f"{_TEST_ORDER_PREFIX}{highest + 1}"
+    return f"{prefix}{highest + 1:06d}"
 
 
 async def get_open_for_conversation(conversation_id: str) -> dict | None:
@@ -458,6 +468,7 @@ async def create_or_update_draft_from_conversation(
 # timestamps are handled explicitly below; everything else is ignored (the LLM
 # can never write an arbitrary column).
 _BOOKING_COLS = frozenset({
+    "customer_name",
     "service_id", "service", "service_display_name", "service_name_snapshot",
     "unit_type", "requires_manual_quote", "pickup_date", "pickup_slot_id",
     "pickup_slot", "pickup_start_time", "pickup_end_time", "pickup_address",
@@ -473,9 +484,48 @@ async def get_active_booking(conversation_id: str) -> dict | None:
     return await get_open_for_conversation(conversation_id)
 
 
+async def get_active_draft(conversation_id: str) -> dict | None:
+    """The IN-PROGRESS draft for a conversation (status='draft' only). Unlike
+    get_open_for_conversation, this excludes confirmed/scheduled orders, so a
+    completed order never looks like an in-progress workflow (spec §state-model:
+    a completed workflow must not block a new one)."""
+    return await database.fetchrow(
+        _SELECT + " where conversation_id = $1 and status = $2 "
+        "order by created_at desc limit 1",
+        conversation_id, order_store.DRAFT,
+    )
+
+
+async def get_latest_for_conversation(conversation_id: str) -> dict | None:
+    """Most recent order for a conversation, ANY status (for a status check)."""
+    return await database.fetchrow(
+        _SELECT + " where conversation_id = $1 order by created_at desc limit 1",
+        conversation_id,
+    )
+
+
+async def set_conversation_state(order_uuid: str, state: str) -> dict | None:
+    """Set only the conversation_state on an order (e.g. mark a confirmed order
+    POST_ORDER so the conversation can offer next actions)."""
+    return await database.fetchrow(
+        "update orders set conversation_state = $2 where id = $1 returning *",
+        order_uuid, state,
+    )
+
+
 async def start_booking(conversation_id: str, customer: dict | None) -> dict:
     """Create ONE draft booking in state waiting_for_service with every booking
-    field left null — no service/date/address/etc. is assumed."""
+    field left null — no service/date/address/etc. is assumed.
+
+    Idempotent: if a fresh, empty draft already exists for this conversation
+    (waiting_for_service with no service picked yet), it is REUSED rather than
+    duplicated — so repeated "place another order" taps never create multiple
+    drafts (spec §idempotency)."""
+    existing = await get_active_draft(conversation_id)
+    if existing and existing.get("conversation_state") in (
+        None, "waiting_for_service"
+    ) and not existing.get("service_id"):
+        return existing
     order_id = await next_test_order_id()
     row = await database.fetchrow(
         """
@@ -491,7 +541,10 @@ async def start_booking(conversation_id: str, customer: dict | None) -> dict:
         order_id,
         conversation_id,
         (customer or {}).get("id"),
-        (customer or {}).get("display_name"),
+        # customer_name starts NULL: the confirmed booking name is collected in the
+        # flow. The WhatsApp profile name (customers.display_name) is NEVER copied
+        # here automatically — it is only offered for the customer to confirm.
+        None,
         order_store.DRAFT,
     )
     await conversations_repo.link_order(conversation_id, order_id)
@@ -500,6 +553,21 @@ async def start_booking(conversation_id: str, customer: dict | None) -> dict:
         notes=f"Booking draft {order_id} started from WhatsApp.",
     )
     return row
+
+
+async def get_confirmed_customer_name(customer_id) -> str | None:
+    """The most recent CONFIRMED booking name for a customer (from a prior real
+    order — not a draft/cancelled/abandoned one). Used to offer name reuse on a
+    later order. Returns None when the customer has never confirmed a name."""
+    if not customer_id:
+        return None
+    row = await database.fetchrow(
+        "select customer_name from orders where customer_id = $1 "
+        "and customer_name is not null and status <> all($2::text[]) "
+        "order by created_at desc limit 1",
+        customer_id, [order_store.DRAFT, order_store.CANCELLED, order_store.ABANDONED],
+    )
+    return row["customer_name"] if row else None
 
 
 async def apply_booking_updates(order_uuid: str, updates: dict, state: str) -> dict | None:

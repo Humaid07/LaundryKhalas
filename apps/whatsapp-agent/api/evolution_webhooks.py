@@ -39,7 +39,7 @@ from db.repositories import (
     slots_repo,
     tickets_repo,
 )
-from services import booking_flow
+from services import booking_flow, order_store
 from services.auto_reply import SENDER_NOT_ALLOWED, should_auto_reply
 from services.escalation import detect_escalation
 from services.privacy import mask_phone, normalize_e164
@@ -80,9 +80,11 @@ def _is_booking_selection(selection_id: str | None) -> bool:
     )
 
 
-def _booking_from_row(row: dict) -> booking_flow.Booking:
+def _booking_from_row(row: dict, *, profile_name: str | None = None,
+                      verified_name: str | None = None) -> booking_flow.Booking:
     return booking_flow.Booking(
         conversation_state=row.get("conversation_state"),
+        customer_name=row.get("customer_name"),
         service_id=row.get("service_id"),
         service_name_snapshot=row.get("service_name_snapshot") or row.get("service"),
         pickup_date=row.get("pickup_date"),
@@ -92,6 +94,10 @@ def _booking_from_row(row: dict) -> booking_flow.Booking:
         pickup_area=row.get("pickup_area") or row.get("area"),
         pickup_instruction_code=row.get("pickup_instruction_code"),
         pickup_instruction_text=row.get("pickup_instruction_text"),
+        # transient context: an unverified profile name (offered, never auto-saved)
+        # and a previously confirmed name for this customer (offered for reuse).
+        whatsapp_profile_name=profile_name,
+        verified_name=verified_name,
     )
 
 
@@ -112,13 +118,27 @@ def _final_confirmation_text(row: dict) -> str:
 
 
 async def _send_reply(channel, phone: str, reply) -> str:
-    """Send a booking reply. Interactive list/buttons are attempted via Evolution;
-    on any failure we fall back to a numbered-text message (still mapped to real
-    ids by the FSM). Returns the text stored as the agent message."""
+    """Send a booking reply. Interactive list/buttons are attempted via Evolution
+    only when EVOLUTION_USE_INTERACTIVE=true; otherwise (the default, because this
+    Evolution/WhatsApp build does not render them) we send a plain numbered-text
+    version of the prompt. On any interactive send failure we also fall back to
+    numbered text. Either way a numeric reply ("2") is mapped back to the real
+    option id by the FSM. Returns the text stored as the agent message."""
     interactive = reply.interactive
     if interactive is None:
         await channel.send_text(to_phone=phone, text=reply.text)
         return reply.text
+    settings = get_settings()
+    # Lists and buttons are gated independently: native lists render reliably on
+    # this Evolution build, native buttons do not (see settings). A disabled kind
+    # is sent as numbered text, which the FSM resolves back to the real option id.
+    use_native = (settings.evolution_use_interactive if interactive.kind == "list"
+                  else settings.evolution_use_buttons)
+    if not use_native:
+        numbered = booking_flow.numbered_fallback(interactive)
+        await channel.send_text(to_phone=phone, text=numbered)
+        logger.info("evolution_numbered_sent", kind=interactive.kind)
+        return numbered
     try:
         if interactive.kind == "list":
             await channel.send_list(
@@ -144,6 +164,39 @@ async def _send_reply(channel, phone: str, reply) -> str:
         await channel.send_text(to_phone=phone, text=fallback)
         logger.info("evolution_fallback_sent", kind=interactive.kind)
         return fallback
+
+
+async def _deliver(channel, phone: str, convo_id: str, reply) -> None:
+    """Send a BookingReply and store it as an agent message. Never raises — a
+    provider send error is logged but must not fail the webhook."""
+    try:
+        sent = await _send_reply(channel, phone, reply)
+        await messages_repo.add_message(convo_id, "agent", sent, status="sent",
+                                        metadata={"booking_state": reply.state})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("evolution_send_failed", error=str(exc))
+
+
+def _order_status_text(order: dict | None) -> str:
+    if not order:
+        return ("I couldn't find a recent order for you. Reply 'new order' to book "
+                "a pickup.")
+    label = order_store.status_label(order.get("status") or "")
+    return f"Your most recent order {order.get('order_id')} is currently: {label}."
+
+
+async def _raise_support(conversation_id: str, order_uuid) -> None:
+    """Route the conversation to a human (customer asked for support)."""
+    flag_type, priority, team = _DEFAULT_FLAG
+    await conversations_repo.set_flagged(
+        conversation_id, reason="customer requested support", priority=priority, team=team)
+    await flags_repo.create(
+        conversation_id=conversation_id, flag_type=flag_type, priority=priority,
+        assigned_team=team, reason="Customer asked to talk to support", order_id=order_uuid)
+    await tickets_repo.create_or_update(
+        conversation_id=conversation_id, ticket_type=flag_type, priority=priority,
+        assigned_team=team, title="Support requested — WhatsApp",
+        description="Customer asked to talk to support from WhatsApp.", order_uuid=order_uuid)
 
 
 @router.post("/evolution")
@@ -250,35 +303,116 @@ async def receive_evolution_webhook(request: Request):
             processed += 1
             continue
 
-        # --- BOOKING routing ---------------------------------------------------
-        active = await orders_repo.get_active_booking(convo["id"])
-        state = active.get("conversation_state") if active else None
+        # --- BOOKING routing (multi-order aware) --------------------------------
+        # Route by whether there is an IN-PROGRESS DRAFT (status='draft'). A
+        # confirmed/scheduled order is NOT an active workflow, so it never blocks a
+        # NEW order — a single conversation can hold many workflows/orders
+        # (spec §state-model).
+        active_draft = await orders_repo.get_active_draft(convo["id"])
+        draft_state = active_draft.get("conversation_state") if active_draft else None
+        sel = inbound_obj.selection_id
+        channel = EvolutionWhatsAppChannel.from_settings()
         booking_row = None
         reply = None
+        # Name context for the FSM: the UNVERIFIED WhatsApp profile name (offered
+        # for confirmation only) and any previously CONFIRMED name for this
+        # customer (offered for reuse). Neither is ever saved without confirmation.
+        profile_name = booking_flow.validate_name(customer.get("display_name") or msg.get("name"))
+        verified_name = await orders_repo.get_confirmed_customer_name(customer["id"])
 
-        if state in booking_flow.ACTIVE_STATES:
-            booking_row = active
-            reply = await booking_flow.advance(_booking_from_row(active), inbound_obj,
-                                               today=_today(), available_slots=slots_repo.available_slots)
-        elif booking_flow.is_book_pickup_intent(text) or _is_booking_selection(inbound_obj.selection_id):
-            booking_row = await orders_repo.start_booking(convo["id"], customer)
-            logger.info("booking_intent_detected", sender=masked, order=booking_row["order_id"])
-            if _is_booking_selection(inbound_obj.selection_id) or text.strip().isdigit():
-                reply = await booking_flow.advance(_booking_from_row(booking_row), inbound_obj,
-                                                   today=_today(), available_slots=slots_repo.available_slots)
+        def _booking(row):
+            return _booking_from_row(row, profile_name=profile_name, verified_name=verified_name)
+
+        if draft_state in booking_flow.ACTIVE_STATES:
+            booking_row = active_draft
+            # An explicit new-order intent DURING a draft with progress asks the
+            # customer to continue or start over (active-draft protection).
+            if (draft_state != booking_flow.RESUME_OR_NEW
+                    and booking_flow.is_new_order_intent(text)
+                    and booking_flow.has_progress(_booking(active_draft))):
+                reply = booking_flow.resume_or_new_prompt()
             else:
-                reply = booking_flow.begin()
+                reply = await booking_flow.advance(_booking(active_draft), inbound_obj,
+                                                   today=_today(), available_slots=slots_repo.available_slots)
+        else:
+            # No in-progress draft — free to start a new order or handle next-actions.
+            latest = await orders_repo.get_latest_for_conversation(convo["id"])
+            in_post_order = bool(latest and latest.get("conversation_state") == booking_flow.POST_ORDER)
+            action = booking_flow.resolve_post_order_action(inbound_obj, numbered=in_post_order)
+
+            if (action == booking_flow.NEW_ORDER
+                    or booking_flow.is_book_pickup_intent(text)
+                    or _is_booking_selection(sel)):
+                booking_row = await orders_repo.start_booking(convo["id"], customer)  # idempotent
+                # Capture a name volunteered in the OPENING message ("My name is
+                # Sara. I need dry cleaning.") — persisted before the service list.
+                opening_name = booking_flow.extract_name(text)
+                if opening_name and not booking_row.get("customer_name"):
+                    updated = await orders_repo.apply_booking_updates(
+                        booking_row["id"], {"customer_name": opening_name},
+                        booking_row.get("conversation_state") or "waiting_for_service")
+                    if updated:
+                        booking_row = updated
+                    logger.info("customer_name_saved", sender=masked, source="provided")
+                logger.info("booking_intent_detected", sender=masked, order=booking_row["order_id"])
+                if _is_booking_selection(sel) or text.strip().isdigit():
+                    reply = await booking_flow.advance(_booking(booking_row), inbound_obj,
+                                                       today=_today(), available_slots=slots_repo.available_slots)
+                else:
+                    reply = booking_flow.begin_new_order() if latest else booking_flow.begin()
+            elif action == booking_flow.CHECK_ORDER_STATUS:
+                if live:
+                    await _deliver(channel, msg["phone"], convo["id"], booking_flow.BookingReply(
+                        text=_order_status_text(latest), state=booking_flow.POST_ORDER))
+                logger.info("order_status_requested", sender=masked)
+                processed += 1
+                continue
+            elif action == booking_flow.HUMAN_SUPPORT:
+                await _raise_support(convo["id"], latest["id"] if latest else None)
+                if inbound_msg:
+                    await messages_repo.set_status(inbound_msg["id"], "human_needed")
+                if live:
+                    await _deliver(channel, msg["phone"], convo["id"], booking_flow.BookingReply(
+                        text="Sure — I'll connect you with our team. They'll follow up "
+                             "with you shortly.", state=booking_flow.POST_ORDER))
+                logger.info("evolution_inbound_escalation", sender=masked, flag_type="handoff")
+                processed += 1
+                continue
+            elif in_post_order:
+                # Post-order context, message not understood -> re-show the actions.
+                if live:
+                    await _deliver(channel, msg["phone"], convo["id"], booking_flow.post_order_actions())
+                processed += 1
+                continue
 
         if reply is not None:
             order_uuid = booking_row["id"]
+            if reply.start_new_order:
+                # Abandon the current draft, spin up a fresh workflow, show services.
+                await orders_repo.cancel_booking(order_uuid)
+                new_row = await orders_repo.start_booking(convo["id"], customer)
+                to_send = booking_flow.begin_new_order()
+                await orders_repo.apply_booking_updates(new_row["id"], to_send.updates, to_send.state)
+                logger.info("booking_restarted", sender=masked,
+                            old=booking_row["order_id"], new=new_row["order_id"])
+                if live:
+                    await _deliver(channel, msg["phone"], convo["id"], to_send)
+                processed += 1
+                continue
             if reply.confirm_now:
                 row, created_now = await orders_repo.confirm_booking(order_uuid)
-                to_send = booking_flow.BookingReply(
-                    text=_final_confirmation_text(row) if row else "Your booking is confirmed.",
-                    state=booking_flow.BOOKING_CONFIRMED,
-                )
+                if row:
+                    await orders_repo.set_conversation_state(row["id"], booking_flow.POST_ORDER)
                 logger.info("booking_confirmed", sender=masked,
                             order=row["order_id"] if row else None, created_now=created_now)
+                if live:
+                    await _deliver(channel, msg["phone"], convo["id"], booking_flow.BookingReply(
+                        text=_final_confirmation_text(row) if row else "Your booking is confirmed.",
+                        state=booking_flow.POST_ORDER))
+                    # Offer next actions (place another order / status / support).
+                    await _deliver(channel, msg["phone"], convo["id"], booking_flow.post_order_actions())
+                processed += 1
+                continue
             elif reply.cancel_now:
                 await orders_repo.cancel_booking(order_uuid)
                 to_send = reply
@@ -291,13 +425,7 @@ async def receive_evolution_webhook(request: Request):
                                 booking_event=reply.log_event, state=reply.state)
 
             if live:
-                channel = EvolutionWhatsAppChannel.from_settings()
-                try:
-                    sent = await _send_reply(channel, msg["phone"], to_send)
-                    await messages_repo.add_message(convo["id"], "agent", sent, status="sent",
-                                                    metadata={"booking_state": to_send.state})
-                except Exception as exc:  # noqa: BLE001 - never fail webhook on send error
-                    logger.warning("evolution_send_failed", sender=masked, error=str(exc))
+                await _deliver(channel, msg["phone"], convo["id"], to_send)
             processed += 1
             continue
 

@@ -29,7 +29,7 @@ app/agents/classifier/
 
 Adapted from the old prototype's Section D.4 classifier spec
 (`Classifier-D4.md` / `00-master-build-spec.md` in
-`LaundryKhalaasPrototype`), which `docs/audits/prototype-md-review.md`
+`LaundryKhalasPrototype`), which `docs/audits/prototype-md-review.md`
 flagged as "a strong concrete starting point for this repo's
 build-priority-#3 Classifier Agent". Reviewed and adapted, not copied
 verbatim - see "Deviations from the prototype spec" below.

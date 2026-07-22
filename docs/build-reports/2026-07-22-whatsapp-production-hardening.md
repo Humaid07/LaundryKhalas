@@ -4,7 +4,7 @@
 **Related:** [[2026-07-22-whatsapp-booking-state-machine]] · [[2026-07-22-orders-vertical-slice]]
 
 ## Audit result
-Most of the production spec was already delivered (booking FSM, idempotency, TEST allowlist, phone normalization, message persistence, Orders section + cards + detail + timeline, **Open Chat in Operations** deep-link, order-events, demo-guarding, order APIs, 268 tests). **"Laundry Coloss"** — grep found **zero** matches; the repo already uses "LaundryKhalaas", nothing to rename. Genuine gaps: no TEST/LIVE/PAUSED mode with a safe default, no human-takeover gating on the reply path, no status-change customer notification, no draft-expiry, no transition validation, no RBAC.
+Most of the production spec was already delivered (booking FSM, idempotency, TEST allowlist, phone normalization, message persistence, Orders section + cards + detail + timeline, **Open Chat in Operations** deep-link, order-events, demo-guarding, order APIs, 268 tests). **"Laundry Coloss"** — grep found **zero** matches; the repo already uses "LaundryKhalas", nothing to rename. Genuine gaps: no TEST/LIVE/PAUSED mode with a safe default, no human-takeover gating on the reply path, no status-change customer notification, no draft-expiry, no transition validation, no RBAC.
 
 ## What this turn added
 1. **Operating modes `WHATSAPP_AGENT_MODE` = test | live | paused** (`settings.agent_operating_mode`, **safe default `paused`**; unknown → paused). `test` replies only to `EVOLUTION_ALLOWED_TEST_NUMBERS`, `live` to all valid numbers, `paused` stores messages and sends nothing. Wired into `api/evolution_webhooks.py`: LIVE skips the allowlist gate; PAUSED stores-only.

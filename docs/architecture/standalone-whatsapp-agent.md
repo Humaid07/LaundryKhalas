@@ -39,7 +39,7 @@ apps/whatsapp-agent/        Backend (FastAPI, Python 3.11+)
     prompts.py                 System prompt + knowledge-base loader
     tools.py                   Deterministic slot/intent extraction
   config/
-    laundrykhalaas_knowledge.json   Editable brand/service/pricing facts
+    laundrykhalas_knowledge.json   Editable brand/service/pricing facts
   api/
     chat.py, webhooks.py, settings_route.py
   tests/                      pytest suite (28 tests)
@@ -138,7 +138,7 @@ before/after and the two bugs found fixing it.
 - **`agents/whatsapp_agent/actions.py`** is the single source of truth for
   every interactive button: `Action(id, label, type)`, `MAIN_MENU_ACTIONS`
   (6 quick actions), `SERVICE_ACTIONS` (7 service options, kept in sync
-  with `config/laundrykhalaas_knowledge.json`'s `service_catalog`), and
+  with `config/laundrykhalas_knowledge.json`'s `service_catalog`), and
   `resolve_intent_override(action_id)`. There is no longer a
   frontend-side copy of this catalog (the old `lib/constants.ts` was
   deleted) - the frontend renders whatever `actions` array the backend
@@ -164,7 +164,7 @@ before/after and the two bugs found fixing it.
   work via free text).
 - **Welcome-menu gating.** A vague opener ("Hi", "I need laundry", "I
   need help", "What services do you offer?") gets the fixed welcome text
-  ("Hi 👋 Welcome to LaundryKhalaas. How can we help you today?") with
+  ("Hi 👋 Welcome to LaundryKhalas. How can we help you today?") with
   `MAIN_MENU_ACTIONS` attached, rather than jumping straight into slot
   collection. `agent.py`'s `_BOOKING_ENTRY_INTENTS` set plus a
   `booking_in_progress` check (true once any slot is already known from

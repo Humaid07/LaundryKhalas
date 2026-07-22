@@ -33,7 +33,7 @@ export function Sidebar({
   return (
     <aside className="flex h-full w-full max-w-xs shrink-0 flex-col border-r border-wa-border bg-wa-sidebar">
       <div className="flex items-center justify-between border-b border-wa-border bg-wa-panel px-4 py-3">
-        <span className="text-sm font-semibold text-wa-text">LaundryKhalaas Chats</span>
+        <span className="text-sm font-semibold text-wa-text">LaundryKhalas Chats</span>
         <div className="flex items-center gap-1">
           <button
             onClick={onNewChat}

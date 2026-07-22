@@ -1,7 +1,7 @@
 # Prototype Markdown Review
 
 Review of all Markdown documentation in the old prototype at
-`D:\LaundryKhalas\LaundryKhalaasPrototype`, performed to extract useful
+`D:\LaundryKhalas\LaundryKhalasPrototype`, performed to extract useful
 product/technical context before continuing new work in this repository.
 Per `CLAUDE.md` §3, the prototype is reference material only — this
 review does not change the new project's source of truth, and nothing
@@ -16,7 +16,7 @@ sections) and compared against this repo's `CLAUDE.md`.
 
 ## 1. Markdown files found
 
-92 Markdown files, all under `D:\LaundryKhalas\LaundryKhalaasPrototype`
+92 Markdown files, all under `D:\LaundryKhalas\LaundryKhalasPrototype`
 (excluding `node_modules`, `.next`, `.git`, and the pytest cache stub).
 
 **Root**

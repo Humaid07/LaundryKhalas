@@ -196,7 +196,7 @@ export default function ChatPage() {
               </div>
             ) : messages.length === 0 ? (
               <EmptyState
-                title="Say hello to LaundryKhalaas"
+                title="Say hello to LaundryKhalas"
                 description='Try: "Hi" or "I need laundry pickup tomorrow"'
               />
             ) : (

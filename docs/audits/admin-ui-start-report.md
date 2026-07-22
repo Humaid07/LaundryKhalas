@@ -93,7 +93,7 @@ filtering rather than new backend surface - see the data-volume caveat in
 
 ## 4. Prototype UI observations
 
-Reviewed `D:\LaundryKhalas\LaundryKhalaasPrototype` (Next.js 14 App Router,
+Reviewed `D:\LaundryKhalas\LaundryKhalasPrototype` (Next.js 14 App Router,
 Tailwind + shadcn/ui, `components.json` style "default"/"slate"). Concretely:
 
 - **Sidebar** (`components/admin/AdminLayout.tsx`): fixed dark (`bg-gray-900`)

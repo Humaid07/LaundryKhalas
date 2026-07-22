@@ -1,4 +1,4 @@
-# Build Report: Standalone LaundryKhalaas WhatsApp Agent
+# Build Report: Standalone LaundryKhalas WhatsApp Agent
 
 ## 1. Build title
 
@@ -13,7 +13,7 @@ a WhatsApp-Web-style local test UI.
 
 Per an explicit founder/team redirection (see `docs/decisions/
 ADR-standalone-whatsapp-agent-first.md`), build one focused, standalone
-WhatsApp Agent that only answers laundry/cleaning/LaundryKhalaas questions,
+WhatsApp Agent that only answers laundry/cleaning/LaundryKhalas questions,
 refuses everything else, with its own chat UI - independent of the main
 system, the admin dashboard, and the not-yet-built classifier agent, all
 of which were explicitly out of scope for this task.
@@ -52,7 +52,7 @@ initial build.
   intent/slot extraction → LLM call → logging), `prompts.py` (system
   prompt + knowledge-base loader), `tools.py` (deterministic intent
   detection, service/area/time-hint extraction, price lookup).
-- `config/laundrykhalaas_knowledge.json` — editable brand/services/
+- `config/laundrykhalas_knowledge.json` — editable brand/services/
   markets/pricing facts, exactly as specified in the task.
 - `models.py`/`db.py` — `Conversation`, `Message`, `AgentLog` (SQLite by
   default, Postgres-compatible via `DATABASE_URL`).
@@ -139,7 +139,7 @@ implementation.
 ## 10. How UI compares to old prototype
 
 Per the task's reference-only instruction,
-`D:\LaundryKhalas\LaundryKhalaasPrototype\app\user\agent\page.tsx` (the
+`D:\LaundryKhalas\LaundryKhalasPrototype\app\user\agent\page.tsx` (the
 prototype's customer-facing chat) and
 `app\admin\whatsapp\page.tsx`/`app\admin\conversations\[id]\page.tsx`
 (prototype's admin-side WhatsApp views) were reviewed for layout ideas
@@ -355,7 +355,7 @@ click-through, 17 steps.
 whole-message regex match (not a substring keyword), feeding new
 `detect_intent()` values: `greeting`, `smalltalk_thanks`,
 `smalltalk_farewell`, `confirmation_yes`, `confirmation_no`,
-`unanswerable_question`. "Hi" now gets "Hello! Welcome to LaundryKhalaas.
+`unanswerable_question`. "Hi" now gets "Hello! Welcome to LaundryKhalas.
 How can we assist you today?" instead of jumping straight to a booking
 question; "yes"/"no" after all booking slots are known get a proper
 close-out or decline instead of repeating the summary; a genuine in-domain
@@ -367,7 +367,7 @@ collection. 23 new tests cover this (`test_tools.py`, additions to
 ## 27. Follow-up: full UAE-wide area coverage with typo tolerance
 
 Moved the area gazetteer out of Python and into `config/
-laundrykhalaas_knowledge.json`'s new `service_areas` section - ~150 real
+laundrykhalas_knowledge.json`'s new `service_areas` section - ~150 real
 areas across all 7 emirates plus Qatar (was 12 areas, Dubai/Abu Dhabi/
 Doha only), plus a colloquial-alias map (`"marina"` → Dubai Marina,
 `"downtown"` → Downtown Dubai, `"DIFC"`, `"MBZ"`, short forms like JVC/
@@ -393,7 +393,7 @@ Per an explicit follow-up task with its own acceptance criteria:
 - **Service catalog** expanded from 4 to 7 options (Wash & Fold, Dry
   Cleaning, Ironing / Pressing, Blankets / Duvets, Curtains / Upholstery,
   Business Laundry, Other Cleaning Request), defined once in `config/
-  laundrykhalaas_knowledge.json`'s new `service_catalog` and mirrored by
+  laundrykhalas_knowledge.json`'s new `service_catalog` and mirrored by
   hand in `apps/whatsapp-chat/lib/constants.ts` (`SERVICE_OPTIONS`) - the
   backend recognizes the exact label text a chip/dropdown click sends via
   a new `_SERVICE_LABEL_TO_KEY` exact-match table, checked before the

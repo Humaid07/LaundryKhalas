@@ -48,7 +48,7 @@ WELCOME_TEXT = welcome_message()
 _SMALLTALK_REPLIES = {
     "greeting": WELCOME_TEXT,
     "smalltalk_thanks": "You're welcome! Let us know if you need anything else.",
-    "smalltalk_farewell": "Thanks for reaching out to LaundryKhalaas — have a great day!",
+    "smalltalk_farewell": "Thanks for reaching out to LaundryKhalas — have a great day!",
 }
 
 _MOCK_TAGS = mock_tags()
@@ -81,7 +81,7 @@ class MockProvider(LLMProvider):
 
         if intent == "call_support_request":
             return LLMResult(
-                text="Connecting you with our LaundryKhalaas support team. They'll follow up "
+                text="Connecting you with our LaundryKhalas support team. They'll follow up "
                 "shortly." + _DEMO_SUPPORT_TAG,
                 provider=self.name,
                 model="mock-1",
@@ -107,12 +107,12 @@ class MockProvider(LLMProvider):
                     f"Thanks — checking Order {order_id} for you.{_DEMO_ORDER_TAG} Our team "
                     "will confirm the actual status."
                     if order_id
-                    else "Sure. Please share your LaundryKhalaas order ID so I can help you "
+                    else "Sure. Please share your LaundryKhalas order ID so I can help you "
                     "check the status." + _DEMO_ORDER_TAG
                 )
             elif action == "cancel_order_request":
                 text = (
-                    f"Got it — Order {order_id} noted. Our LaundryKhalaas team will confirm "
+                    f"Got it — Order {order_id} noted. Our LaundryKhalas team will confirm "
                     "whether it can still be cancelled." + _DEMO_ORDER_TAG
                     if order_id
                     else "Sure. Please share your order ID. Our team will confirm whether the "

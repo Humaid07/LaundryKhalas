@@ -5,7 +5,7 @@ LaundryKhalas WhatsApp Operations Agent. It supersedes any older/prototype
 decisions where they conflict.
 
 - **Fresh project.** This codebase is a clean start, not a continuation of
-  `D:\LaundryKhalas\LaundryKhalaasPrototype`. See
+  `D:\LaundryKhalas\LaundryKhalasPrototype`. See
   `docs/audits/fresh-project-start-report.md` for what was reviewed and why.
 - **WhatsApp operations agent is the first business module.** No other
   agent (classifier, SEO, marketing) is built in this task.

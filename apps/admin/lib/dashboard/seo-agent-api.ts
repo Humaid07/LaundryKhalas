@@ -19,6 +19,7 @@ import type {
   AiSearchRow,
 } from "./seo-data";
 import type { SeoTask, KpiStat } from "./types";
+import { getToken } from "./auth-token";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_SEO_AGENT_API_URL ??
@@ -181,10 +182,15 @@ export interface SeoOverviewDTO {
 // --- fetch helper -----------------------------------------------------------
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  const token = getToken();
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
       cache: "no-store",
     });
   } catch {

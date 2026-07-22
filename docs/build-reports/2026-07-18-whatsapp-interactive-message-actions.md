@@ -81,7 +81,7 @@ Previously, a vague opener like "I need laundry" or "I need help" was
 treated as an implicit booking request and jumped straight to "which
 service do you need?". Per explicit instruction, these (plus "Hi",
 "Hello", "What services do you offer?") now show the fixed welcome
-message ("Hi 👋 Welcome to LaundryKhalaas. How can we help you today?")
+message ("Hi 👋 Welcome to LaundryKhalas. How can we help you today?")
 with the 6 main-menu buttons attached, and the booking flow only starts
 once the customer picks "Book Pickup" (or types something with a clear
 booking signal, e.g. "book a pickup", "how much for dry cleaning"). A new
@@ -91,7 +91,7 @@ an ambiguous reply mid-booking doesn't derail back to the welcome screen;
 only a genuinely fresh/unclear message does.
 
 The out-of-domain refusal was also updated to match: "Sorry, I can only
-help with LaundryKhalaas laundry and cleaning services. How can we help
+help with LaundryKhalas laundry and cleaning services. How can we help
 you today?" with the main menu re-attached, so a rejected off-topic
 question always leaves the customer with a clear way forward instead of a
 dead end.

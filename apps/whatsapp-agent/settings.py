@@ -94,6 +94,21 @@ class Settings(BaseSettings):
     # autonomous reply. Example: EVOLUTION_ALLOWED_TEST_NUMBERS=+971502485658
     evolution_allowed_test_numbers: str = ""
 
+    # Native WhatsApp interactive LIST messages via Evolution (/message/sendList).
+    # Verified working on Evolution 2.3.7 + Baileys once every row carries a
+    # non-empty description (empty rows 400 with "description cannot be empty").
+    # Default true → service/slot/instruction selection is sent as a real
+    # tappable list; on ANY send failure it still falls back to numbered text.
+    evolution_use_interactive: bool = True
+
+    # Native WhatsApp reply BUTTONS via Evolution (/message/sendButtons). The
+    # payload is accepted, but button RENDERING on Baileys is inconsistent across
+    # WhatsApp client versions, and a 200-but-not-rendered send cannot trigger the
+    # fallback. Default false → button prompts (date / confirm / next-actions) are
+    # sent as numbered text, which is reliably answerable. Flip to true to trial
+    # native buttons on a build/number where they render.
+    evolution_use_buttons: bool = False
+
     # Agent operating mode: test | live | paused. SAFE DEFAULT = paused (the
     # agent NEVER auto-replies live by accident — a missing/invalid value also
     # resolves to paused).

@@ -8,7 +8,7 @@
 
 ## 1. Task objective
 
-Introduce a **rules/config layer** for the standalone LaundryKhalaas WhatsApp
+Introduce a **rules/config layer** for the standalone LaundryKhalas WhatsApp
 agent so its business and safety rules (domain scope, welcome/refusal wording,
 service menu, escalation/handoff, mock-mode honesty, privacy, tone, logging)
 are read from config files instead of being hardcoded in prompts and code —
@@ -51,7 +51,7 @@ dashboard, or connecting any live API.**
 - `llm/providers/mock.py` — welcome text, demo tags, service labels from config; booking honesty ack
 - `services/domain_guard.py` — refusal message from config
 - `api/chat.py`, `api/webhooks.py` — enriched + PII-masked logging
-- `config/laundrykhalaas_knowledge.json` — services/pricing **removed** (moved to `laundry_services.json`); keeps area gazetteer + notes
+- `config/laundrykhalas_knowledge.json` — services/pricing **removed** (moved to `laundry_services.json`); keeps area gazetteer + notes
 
 ## 5. API / DB / agent behaviour changes
 
@@ -93,7 +93,7 @@ cd apps/whatsapp-agent && .venv/Scripts/python.exe -m pytest -q
 ## 8. Bugs / issues found
 
 - None introduced. Found and resolved a **dual-source-of-truth** risk: service
-  pricing existed in both `laundrykhalaas_knowledge.json` and would now be in
+  pricing existed in both `laundrykhalas_knowledge.json` and would now be in
   `laundry_services.json` — removed it from the knowledge file so pricing has
   exactly one home.
 

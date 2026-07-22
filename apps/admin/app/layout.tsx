@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bricolage_Grotesque, Plus_Jakarta_Sans, Space_Grotesk } from "next/font/google";
 import { QueryProvider } from "@/lib/query-client";
 import { ThemeProvider } from "@/lib/dashboard/theme-provider";
+import { AuthProvider } from "@/lib/dashboard/auth-context";
 import "./globals.css";
 
 // Deliberate type trio — display / body / numeric. No Inter, Roboto or Arial.
@@ -37,7 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="bg-canvas font-sans text-ink antialiased">
         <ThemeProvider>
-          <QueryProvider>{children}</QueryProvider>
+          <QueryProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

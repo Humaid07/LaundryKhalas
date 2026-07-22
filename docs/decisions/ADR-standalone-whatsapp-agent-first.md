@@ -13,7 +13,7 @@ and Admin UI were built and verified (see `docs/build-reports/
 2026-07-18-admin-ui-build.md`).
 
 The founder/team then explicitly redirected: build a **focused, standalone
-WhatsApp Agent** - domain-guarded to laundry/cleaning/LaundryKhalaas only,
+WhatsApp Agent** - domain-guarded to laundry/cleaning/LaundryKhalas only,
 with its own WhatsApp-Web-style chat UI - as a separate, simpler
 deliverable, ahead of the classifier agent and any further admin-dashboard
 work. Explicit instructions: do not build the classifier, do not touch the

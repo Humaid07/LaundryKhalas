@@ -1,24 +1,24 @@
 {
-  "_note": "Master business & safety rule config for the standalone LaundryKhalaas WhatsApp agent. Human-readable rules plus the exact strings the agent uses at runtime. Companion files: laundry_services.json (service catalog + pricing), quick_actions.json (interactive buttons), escalation_rules.json (human handoff), mock_mode_rules.json (demo-mode honesty), agent_tone_rules.json (tone/system-prompt). Loaded via rules.py and cached — restart the service after editing.",
-  "brand_name": "LaundryKhalaas",
+  "_note": "Master business & safety rule config for the standalone LaundryKhalas WhatsApp agent. Human-readable rules plus the exact strings the agent uses at runtime. Companion files: laundry_services.json (service catalog + pricing), quick_actions.json (interactive buttons), escalation_rules.json (human handoff), mock_mode_rules.json (demo-mode honesty), agent_tone_rules.json (tone/system-prompt). Loaded via rules.py and cached — restart the service after editing.",
+  "brand_name": "LaundryKhalas",
   "domain": {
-    "description": "The agent only helps with laundry, dry cleaning, ironing / pressing, cleaning services, pickup & delivery, LaundryKhalaas orders and support, LaundryKhalaas pricing/policies where configured, and commercial / B2B laundry. Anything else is out of domain.",
+    "description": "The agent only helps with laundry, dry cleaning, ironing / pressing, cleaning services, pickup & delivery, LaundryKhalas orders and support, LaundryKhalas pricing/policies where configured, and commercial / B2B laundry. Anything else is out of domain.",
     "allowed_topics": [
       "laundry",
       "dry cleaning",
       "ironing / pressing",
       "cleaning services",
       "pickup and delivery",
-      "LaundryKhalaas services",
-      "LaundryKhalaas order support",
-      "LaundryKhalaas pricing/policies (if configured)",
+      "LaundryKhalas services",
+      "LaundryKhalas order support",
+      "LaundryKhalas pricing/policies (if configured)",
       "commercial / B2B laundry"
     ],
-    "refusal_message": "Sorry, I can only help with LaundryKhalaas laundry and cleaning services. You can ask me about booking a pickup, tracking an order, dry cleaning, ironing, or cleaning services.",
+    "refusal_message": "Sorry, I can only help with LaundryKhalas laundry and cleaning services. You can ask me about booking a pickup, tracking an order, dry cleaning, ironing, or cleaning services.",
     "skip_llm_when_out_of_domain": true
   },
   "welcome": {
-    "message": "Hi 👋 Welcome to LaundryKhalaas. How can we help you today?",
+    "message": "Hi 👋 Welcome to LaundryKhalas. How can we help you today?",
     "triggers": ["greeting", "help", "start", "hi", "hello", "menu"],
     "quick_actions_source": "quick_actions.json:main_menu"
   },

@@ -35,7 +35,7 @@ the first build report and demo notes for the Admin UI specifically.
 **Later the same week**, the founder/team redirected priorities: a second,
 fully independent Standalone WhatsApp Agent (`apps/whatsapp-agent/` +
 `apps/whatsapp-chat/`) was built, domain-guarded to laundry/cleaning/
-LaundryKhalaas topics only, with its own WhatsApp-Web-style chat UI —
+LaundryKhalas topics only, with its own WhatsApp-Web-style chat UI —
 ahead of the classifier agent, per `docs/decisions/
 ADR-standalone-whatsapp-agent-first.md`. 28 backend tests pass, both
 frontends typecheck/lint/build cleanly, and the full required demo flow

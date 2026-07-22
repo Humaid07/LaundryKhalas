@@ -32,6 +32,8 @@ from services.order_extraction import area_to_city
 
 # --- States -----------------------------------------------------------------
 WAITING_FOR_SERVICE = "waiting_for_service"
+WAITING_FOR_NAME = "waiting_for_customer_name"          # free-text name entry
+WAITING_FOR_NAME_CONFIRM = "waiting_for_name_confirm"   # confirm a profile/verified name
 WAITING_FOR_PICKUP_DATE = "waiting_for_pickup_date"
 WAITING_FOR_PICKUP_SLOT = "waiting_for_pickup_slot"
 WAITING_FOR_ADDRESS = "waiting_for_address"
@@ -39,14 +41,47 @@ WAITING_FOR_PICKUP_INSTRUCTIONS = "waiting_for_pickup_instructions"
 WAITING_FOR_INSTRUCTION_TEXT = "waiting_for_instruction_text"
 WAITING_FOR_CONFIRMATION = "waiting_for_confirmation"
 WAITING_FOR_CHANGE_FIELD = "waiting_for_change_field"
+# --- Targeted single-field edit states (spec: ORDER_EDIT_VALUE) --------------
+# Reached from WAITING_FOR_CHANGE_FIELD after the customer picks ONE field. Each
+# asks only for that field and returns straight to WAITING_FOR_CONFIRMATION with
+# a PATCH of just that field — it never resumes linear collection. The specific
+# EDITING_* state IS the persisted "editing_field", so it survives restarts and
+# stays isolated per conversation (per phone number).
+EDITING_NAME = "editing_name"
+EDITING_SERVICE = "editing_service"
+EDITING_DATE = "editing_date"
+EDITING_SLOT = "editing_slot"
+EDITING_ADDRESS = "editing_address"
+EDITING_INSTRUCTIONS = "editing_instructions"
+EDITING_INSTRUCTION_TEXT = "editing_instruction_text"
+# Active-draft protection: the customer sent a new-order intent while a draft is
+# in progress; we ask continue / start-new / cancel.
+RESUME_OR_NEW = "resume_or_new"
 BOOKING_CONFIRMED = "booking_confirmed"
 BOOKING_CANCELLED = "booking_cancelled"
+# Set on a CONFIRMED order after its confirmation message, so the conversation
+# can offer next actions (place another order / check status / support). It is a
+# conversation-level marker, NOT an active draft — a completed workflow never
+# blocks a new one (spec §"state-model changes").
+POST_ORDER = "post_order"
+
+# Stable next-action ids shown after an order is confirmed (spec §"required
+# behaviour after order confirmation").
+NEW_ORDER = "NEW_ORDER"
+CHECK_ORDER_STATUS = "CHECK_ORDER_STATUS"
+HUMAN_SUPPORT = "HUMAN_SUPPORT"
+
+_EDITING_STATES = frozenset({
+    EDITING_NAME, EDITING_SERVICE, EDITING_DATE, EDITING_SLOT, EDITING_ADDRESS,
+    EDITING_INSTRUCTIONS, EDITING_INSTRUCTION_TEXT,
+})
 
 ACTIVE_STATES = frozenset({
-    WAITING_FOR_SERVICE, WAITING_FOR_PICKUP_DATE, WAITING_FOR_PICKUP_SLOT,
+    WAITING_FOR_SERVICE, WAITING_FOR_NAME, WAITING_FOR_NAME_CONFIRM,
+    WAITING_FOR_PICKUP_DATE, WAITING_FOR_PICKUP_SLOT,
     WAITING_FOR_ADDRESS, WAITING_FOR_PICKUP_INSTRUCTIONS, WAITING_FOR_INSTRUCTION_TEXT,
-    WAITING_FOR_CONFIRMATION, WAITING_FOR_CHANGE_FIELD,
-})
+    WAITING_FOR_CONFIRMATION, WAITING_FOR_CHANGE_FIELD, RESUME_OR_NEW,
+}) | _EDITING_STATES
 TERMINAL_STATES = frozenset({BOOKING_CONFIRMED, BOOKING_CANCELLED})
 
 # Dubai has no DST — a fixed +04:00 keeps pickup_start/end_time correct without a
@@ -80,6 +115,7 @@ class BookingReply:
     interactive: Interactive | None = None
     confirm_now: bool = False     # flip the draft to a confirmed operational order (once)
     cancel_now: bool = False      # mark the draft cancelled
+    start_new_order: bool = False # abandon this draft + start a fresh workflow (webhook acts)
     log_event: str | None = None  # structured-log hint for the webhook
 
 
@@ -87,6 +123,7 @@ class BookingReply:
 class Booking:
     """The subset of the open draft-order row the FSM reasons over."""
     conversation_state: str | None = None
+    customer_name: str | None = None        # CONFIRMED booking name (persisted snapshot)
     service_id: str | None = None
     service_name_snapshot: str | None = None
     pickup_date: _dt.date | None = None
@@ -96,6 +133,13 @@ class Booking:
     pickup_area: str | None = None
     pickup_instruction_code: str | None = None
     pickup_instruction_text: str | None = None
+    # --- transient context (NOT persisted; supplied by the webhook per message) --
+    # The unverified WhatsApp push/profile name — only ever offered for the
+    # customer to confirm, never saved as the booking name automatically.
+    whatsapp_profile_name: str | None = None
+    # A previously CONFIRMED name for this customer (from an earlier order), which
+    # may be reused after the customer agrees.
+    verified_name: str | None = None
 
 
 @dataclass
@@ -120,11 +164,89 @@ _BOOK_INTENT = re.compile(
 )
 _CANCEL_WORDS = re.compile(r"\b(cancel|stop|nevermind|never mind|forget it)\b", re.IGNORECASE)
 
+# A NEW/second order (vs. continuing the current one). Covers "another order",
+# "new order", "place another", "book another", "one more", "also need X", and
+# explicit restarts ("start over", "restart").
+_NEW_ORDER_INTENT = re.compile(
+    r"\b(another|new|second|one\s?more|also)\b[\w\s]*?"
+    r"\b(order|pick\s?up|pick-?up|booking|laundry|service|clean(?:ing)?|wash)\b"
+    r"|\bplace\s+another\b|\bbook\s+another\b|\bstart\s+over\b|\brestart\b",
+    re.IGNORECASE,
+)
+_STATUS_INTENT = re.compile(
+    r"\b(order\s+status|status\s+of|track\s+my|where('?s|\s+is)\s+my\s+order|my\s+order\s+status)\b",
+    re.IGNORECASE,
+)
+
 
 def is_book_pickup_intent(text: str) -> bool:
     """True when a free-text message expresses intent to book a pickup. Used only
     to START a booking — it never selects a service (that is a separate step)."""
     return bool(_BOOK_INTENT.search(text or ""))
+
+
+def is_new_order_intent(text: str) -> bool:
+    """True when the customer clearly wants ANOTHER/new order (not to continue the
+    current step). Used to allow a second order after one is confirmed, and to
+    trigger continue/start-new protection when a draft is still in progress."""
+    return bool(_NEW_ORDER_INTENT.search(text or ""))
+
+
+def is_status_intent(text: str) -> bool:
+    return bool(_STATUS_INTENT.search(text or ""))
+
+
+def has_progress(b: "Booking") -> bool:
+    """True if the draft already has at least one collected field — used to decide
+    whether a mid-draft new-order intent needs the continue/start-new prompt."""
+    return any([b.customer_name, b.service_id, b.pickup_date, b.pickup_slot_id,
+                b.pickup_address, b.pickup_instruction_code])
+
+
+# --- Customer name -----------------------------------------------------------
+# Explicit self-introductions we trust to extract a name FROM A LONGER MESSAGE
+# (e.g. "I need dry cleaning tomorrow. I'm Fatima and pickup is from JVC.").
+_NAME_INTRO = re.compile(
+    r"(?:my\s+name\s+is|i\s*'?\s*am|i'?m|this\s+is|it'?s|name\s*[:\-]|"
+    r"book\s+it\s+under|book\s+under|under\s+the\s+name|under)\s+"
+    r"([A-Za-z][A-Za-z .'\-]{0,38}?)"
+    r"(?=[.,;!?]|\s+and\b|\s+pickup\b|\s+i\s+need\b|\s+for\b|$)",
+    re.IGNORECASE,
+)
+# A bare name typed on its own at the name step (letters, spaces, ' and -).
+_NAME_TOKEN = re.compile(r"^[A-Za-z][A-Za-z .'\-]{0,38}$")
+_NAME_STOPWORDS = {
+    "yes", "no", "ok", "okay", "hi", "hello", "hey", "thanks", "thank you",
+    "confirm", "cancel", "change", "today", "tomorrow", "none", "new", "continue",
+}
+
+
+def validate_name(raw: str | None) -> str | None:
+    """Return a cleaned, valid customer name or None. Accepts common international
+    names (Sara, Amaan Patel, Mary Jane, Abdul-Rahman, O'Connor); rejects blanks,
+    pure numbers/punctuation, obvious command words, and absurdly long strings.
+    Does NOT force first+last or Western formatting."""
+    if not raw:
+        return None
+    name = re.sub(r"\s+", " ", raw).strip(" .,-")
+    if not name or len(name) > 40:
+        return None
+    if name.lower() in _NAME_STOPWORDS:
+        return None
+    if not re.search(r"[A-Za-z]", name):        # must contain a letter
+        return None
+    if re.fullmatch(r"[\d\W_]+", name):          # only digits/punctuation
+        return None
+    return name
+
+
+def extract_name(text: str | None) -> str | None:
+    """Pull a name out of an explicit self-introduction, else None. Never guesses
+    from a bare word (that is handled only when we are explicitly asking)."""
+    if not text:
+        return None
+    m = _NAME_INTRO.search(text)
+    return validate_name(m.group(1)) if m else None
 
 
 # --- Service catalogue helpers ----------------------------------------------
@@ -348,25 +470,28 @@ def _format_date(d: _dt.date | None) -> str:
     return d.strftime("%A, %d %B") if d else "—"
 
 
-def _summary_text(b: Booking) -> str:
+def _summary_text(b: Booking, *, header: str = "Please confirm your pickup details:") -> str:
     instr = b.pickup_instruction_text or "No additional instructions"
     return (
-        "Please confirm your pickup details:\n\n"
+        f"{header}\n\n"
+        f"Name: {b.customer_name or 'Name pending'}\n"
         f"Service: {b.service_name_snapshot or '—'}\n"
         f"Pickup date: {_format_date(b.pickup_date)}\n"
         f"Pickup time: {b.pickup_slot_label or '—'}\n"
         f"Address: {b.pickup_address or '—'}\n"
-        f"Instructions: {instr}"
+        f"Instructions: {instr}\n\n"
+        "Would you like to confirm this order?"
     )
 
 
-def _confirmation_prompt(b: Booking) -> BookingReply:
+def _confirmation_prompt(b: Booking, *, header: str = "Please confirm your pickup details:") -> BookingReply:
+    body = _summary_text(b, header=header)
     return BookingReply(
-        text=_summary_text(b),
+        text=body,
         state=WAITING_FOR_CONFIRMATION,
         interactive=Interactive(
             kind="buttons",
-            body=_summary_text(b),
+            body=body,
             options=[
                 Option(id="confirm_booking", title="Confirm booking"),
                 Option(id="change_details", title="Change details"),
@@ -387,6 +512,7 @@ def _change_menu() -> BookingReply:
             button_text="Choose",
             section_title="Change",
             options=[
+                Option(id="change:name", title="Customer name"),
                 Option(id="change:service", title="Service"),
                 Option(id="change:date", title="Pickup date"),
                 Option(id="change:slot", title="Pickup time"),
@@ -402,6 +528,187 @@ def begin() -> BookingReply:
     """Start a fresh booking: go straight to service selection. No service, date,
     address, or anything else is assumed."""
     return _service_prompt()
+
+
+def begin_new_order() -> BookingReply:
+    """Start an ADDITIONAL order (the customer already has a confirmed one). Same
+    service-selection step, but a wording that acknowledges it's another order."""
+    r = _service_prompt()
+    r.text = "Certainly. Let's create another order. Which service would you like?"
+    r.interactive.body = r.text
+    r.log_event = "new_order_started"
+    return r
+
+
+async def next_prompt_for(booking: Booking, available_slots) -> BookingReply:
+    """Re-issue the prompt for the draft's current step, derived from which fields
+    are already filled. Used to resume a draft after the continue/start-new choice
+    without needing to stash the pre-interruption state."""
+    if not booking.service_id:
+        return _service_prompt()
+    if not booking.customer_name:
+        return _name_prompt(booking)
+    if not booking.pickup_date:
+        return _date_prompt(booking.service_name_snapshot or "your service")
+    if not booking.pickup_slot_id:
+        slots = await available_slots(booking.pickup_date, booking.pickup_area, booking.service_id)
+        return _slot_prompt(slots, _format_date(booking.pickup_date))
+    if not booking.pickup_address:
+        return _address_prompt()
+    if not booking.pickup_instruction_code:
+        return _instructions_prompt()
+    return _confirmation_prompt(booking)
+
+
+# --- Customer name collection -----------------------------------------------
+def _offered_name(booking: Booking) -> str | None:
+    """A name we can offer the customer to confirm: a previously verified name,
+    else the (unverified) WhatsApp profile name. Never used without confirmation."""
+    return validate_name(booking.verified_name) or validate_name(booking.whatsapp_profile_name)
+
+
+def _name_prompt(booking: Booking) -> BookingReply:
+    """Ask for the booking name. A previously VERIFIED name is offered for reuse;
+    otherwise the unverified WhatsApp profile name is offered for confirmation;
+    otherwise we ask outright. The profile name is NEVER saved automatically."""
+    verified = validate_name(booking.verified_name)
+    if verified:
+        body = f"Welcome back! Would you like to use the name {verified} for this booking?"
+        return BookingReply(
+            text=body, state=WAITING_FOR_NAME_CONFIRM,
+            interactive=Interactive(kind="buttons", body=body, options=[
+                Option(id="name_use", title="Use same name"),
+                Option(id="name_change", title="Change name")]),
+            log_event="name_confirm_verified")
+    profile = validate_name(booking.whatsapp_profile_name)
+    if profile:
+        body = f"May I confirm your name for the booking? Is it {profile}?"
+        return BookingReply(
+            text=body, state=WAITING_FOR_NAME_CONFIRM,
+            interactive=Interactive(kind="buttons", body=body, options=[
+                Option(id="name_use", title="Yes, use this name"),
+                Option(id="name_change", title="Enter another name")]),
+            log_event="name_confirm_profile")
+    return BookingReply(
+        text="May I have your name for the booking?", state=WAITING_FOR_NAME,
+        log_event="name_requested")
+
+
+async def _finish_name(booking: Booking, name: str, available_slots) -> BookingReply:
+    """Save the confirmed name (PATCH) and move to the next missing field."""
+    updated = _with(booking, customer_name=name)
+    reply = await next_prompt_for(updated, available_slots)
+    reply.updates = {**reply.updates, "customer_name": name}
+    reply.log_event = "customer_name_saved"
+    return reply
+
+
+async def _on_name(booking: Booking, inbound: Inbound, available_slots) -> BookingReply:
+    name = validate_name(extract_name(inbound.text) or inbound.text)
+    if not name:
+        return BookingReply(
+            text="Sorry, I didn't catch a valid name. Please type the name for the "
+                 "booking (for example Sara or Amaan Patel).",
+            state=WAITING_FOR_NAME, log_event="name_invalid")
+    return await _finish_name(booking, name, available_slots)
+
+
+async def _on_name_confirm(booking: Booking, inbound: Inbound, available_slots) -> BookingReply:
+    sel = inbound.selection_id or ""
+    text = (inbound.text or "").strip()
+    low = text.lower()
+    if sel == "name_use" or low in ("yes", "1", "use", "use same name", "confirm", "correct"):
+        name = _offered_name(booking)
+        if name:
+            return await _finish_name(booking, name, available_slots)
+        return BookingReply(text="May I have your name for the booking?",
+                            state=WAITING_FOR_NAME)
+    if sel == "name_change" or low in ("change", "2", "no", "another", "different",
+                                       "change name", "enter another name"):
+        return BookingReply(text="Sure — please type the name for the booking.",
+                            state=WAITING_FOR_NAME, log_event="name_change_requested")
+    # Anything else at this step is treated as the name itself.
+    name = validate_name(extract_name(text) or text)
+    if name:
+        return await _finish_name(booking, name, available_slots)
+    return _name_prompt(booking)
+
+
+# --- Post-confirmation next actions + active-draft protection ----------------
+_POST_ORDER_ACTIONS = [
+    (NEW_ORDER, "Place another order"),
+    (CHECK_ORDER_STATUS, "Check order status"),
+    (HUMAN_SUPPORT, "Talk to support"),
+]
+
+
+def post_order_actions() -> BookingReply:
+    """Shown right after an order is confirmed: what would you like to do next?"""
+    return BookingReply(
+        text="What would you like to do next?",
+        state=POST_ORDER,
+        interactive=Interactive(
+            kind="list", body="What would you like to do next?",
+            button_text="Choose", section_title="Next steps",
+            options=[Option(id=a, title=t) for a, t in _POST_ORDER_ACTIONS],
+        ),
+        log_event="post_order_actions_shown",
+    )
+
+
+def resolve_post_order_action(inbound: Inbound, *, numbered: bool = False) -> str | None:
+    """Map an inbound to a post-order action id. ``numbered`` allows the 1/2/3
+    numbered-fallback mapping (only enabled when we know we're in the post-order
+    context, so a bare '1' elsewhere is never misread as 'place another order')."""
+    sel = inbound.selection_id or ""
+    ids = {a for a, _ in _POST_ORDER_ACTIONS}
+    if sel in ids:
+        return sel
+    text = (inbound.text or "").strip().lower()
+    if numbered and text in {"1": NEW_ORDER, "2": CHECK_ORDER_STATUS, "3": HUMAN_SUPPORT}:
+        return {"1": NEW_ORDER, "2": CHECK_ORDER_STATUS, "3": HUMAN_SUPPORT}[text]
+    if is_new_order_intent(text):
+        return NEW_ORDER
+    if is_status_intent(text):
+        return CHECK_ORDER_STATUS
+    if any(w in text for w in ("talk to support", "human", "agent", "speak to")):
+        return HUMAN_SUPPORT
+    return None
+
+
+def resume_or_new_prompt() -> BookingReply:
+    return BookingReply(
+        text="You already have an unfinished order. Would you like to continue it "
+             "or start a new one?",
+        state=RESUME_OR_NEW,
+        interactive=Interactive(
+            kind="buttons",
+            body="You already have an unfinished order. Continue it or start a new one?",
+            options=[
+                Option(id="resume_continue", title="Continue current order"),
+                Option(id="resume_new", title="Start a new order"),
+                Option(id="resume_cancel", title="Cancel current order"),
+            ],
+        ),
+        log_event="resume_or_new_asked",
+    )
+
+
+async def _on_resume_or_new(booking: Booking, inbound: Inbound, available_slots) -> BookingReply:
+    sel = inbound.selection_id or ""
+    text = (inbound.text or "").strip().lower()
+    if sel == "resume_continue" or text in ("continue", "1", "keep", "current"):
+        # restore the draft to its current step (state derived from filled fields)
+        return await next_prompt_for(booking, available_slots)
+    if sel == "resume_new" or text in ("new", "start new", "2", "start a new order"):
+        return BookingReply(
+            text="Sure — let's start a new order.", state=WAITING_FOR_SERVICE,
+            start_new_order=True, log_event="resume_start_new")
+    if sel == "resume_cancel" or text in ("cancel", "3"):
+        return BookingReply(
+            text="No problem — I've cancelled that order.", state=BOOKING_CANCELLED,
+            cancel_now=True, log_event="booking_cancelled")
+    return resume_or_new_prompt()
 
 
 async def advance(booking: Booking, inbound: Inbound, *, today: _dt.date, available_slots) -> BookingReply:
@@ -421,8 +728,31 @@ async def advance(booking: Booking, inbound: Inbound, *, today: _dt.date, availa
             log_event="booking_cancelled",
         )
 
+    # Opportunistic name capture: an explicit self-introduction ("I'm Ahmed",
+    # "book it under Sara") is picked up at ANY step except the name steps
+    # themselves (which parse the whole message as the name). The captured name is
+    # merged into whatever the current step persists — never a full-object replace.
+    name_updates: dict = {}
+    if (not booking.customer_name
+            and state not in (WAITING_FOR_NAME, WAITING_FOR_NAME_CONFIRM, EDITING_NAME)):
+        nm = extract_name(inbound.text)
+        if nm:
+            booking = _with(booking, customer_name=nm)
+            name_updates = {"customer_name": nm}
+
+    reply = await _dispatch(state, booking, inbound, today, available_slots)
+    if name_updates:
+        reply.updates = {**name_updates, **reply.updates}
+    return reply
+
+
+async def _dispatch(state, booking, inbound, today, available_slots) -> BookingReply:
     if state == WAITING_FOR_SERVICE:
-        return _on_service(inbound)
+        return _on_service(booking, inbound)
+    if state == WAITING_FOR_NAME:
+        return await _on_name(booking, inbound, available_slots)
+    if state == WAITING_FOR_NAME_CONFIRM:
+        return await _on_name_confirm(booking, inbound, available_slots)
     if state == WAITING_FOR_PICKUP_DATE:
         return await _on_date(booking, inbound, today, available_slots)
     if state == WAITING_FOR_PICKUP_SLOT:
@@ -437,12 +767,29 @@ async def advance(booking: Booking, inbound: Inbound, *, today: _dt.date, availa
         return _on_confirmation(booking, inbound)
     if state == WAITING_FOR_CHANGE_FIELD:
         return await _on_change_field(booking, inbound, available_slots)
+    if state == RESUME_OR_NEW:
+        return await _on_resume_or_new(booking, inbound, available_slots)
+    # --- Targeted single-field edit (spec §"explicit edit state") -----------
+    if state == EDITING_NAME:
+        return _on_edit_name(booking, inbound)
+    if state == EDITING_SERVICE:
+        return await _on_edit_service(booking, inbound, available_slots)
+    if state == EDITING_DATE:
+        return await _on_edit_date(booking, inbound, today, available_slots)
+    if state == EDITING_SLOT:
+        return await _on_edit_slot(booking, inbound, available_slots)
+    if state == EDITING_ADDRESS:
+        return _on_edit_address(booking, inbound)
+    if state == EDITING_INSTRUCTIONS:
+        return _on_edit_instructions(booking, inbound)
+    if state == EDITING_INSTRUCTION_TEXT:
+        return _on_edit_instruction_text(booking, inbound)
     # Unknown/terminal — restart cleanly at service selection.
     return _service_prompt()
 
 
 # --- Per-state handlers -----------------------------------------------------
-def _on_service(inbound: Inbound) -> BookingReply:
+def _on_service(booking: Booking, inbound: Inbound) -> BookingReply:
     service_id, reason = resolve_service(inbound)
     if reason == "ambiguous":
         r = _service_prompt()
@@ -459,7 +806,9 @@ def _on_service(inbound: Inbound) -> BookingReply:
         return r
     svc = service_by_id(service_id) or {}
     label = svc.get("display_name") or svc.get("label") or service_id
-    reply = _date_prompt(label)
+    # Ask for the name next unless it is already known (provided in this or an
+    # earlier message). Only THEN move on to the pickup date.
+    reply = _date_prompt(label) if booking.customer_name else _name_prompt(booking)
     reply.updates = {
         "service_id": service_id,
         "service": label,                       # back-compat label mirror
@@ -622,27 +971,300 @@ def _on_confirmation(booking, inbound) -> BookingReply:
 
 
 async def _on_change_field(booking, inbound, available_slots) -> BookingReply:
+    """ORDER_EDIT_SELECTION: the customer picked ONE field to change. Route to the
+    matching targeted-edit prompt (an EDITING_* state) that asks ONLY for that
+    field. It does NOT re-enter linear collection, so nothing else is re-asked."""
     sel = inbound.selection_id or ""
     field_name = sel.split(":", 1)[1] if sel.startswith("change:") else (inbound.text or "").strip().lower()
     # numbered-fallback mapping (same order as _change_menu options)
-    _NUMBERED = {"1": "service", "2": "date", "3": "slot", "4": "address", "5": "instructions"}
+    _NUMBERED = {"1": "name", "2": "service", "3": "date", "4": "slot",
+                 "5": "address", "6": "instructions"}
     field_name = _NUMBERED.get(field_name, field_name)
+    if field_name in ("name", "customer name"):
+        return _edit_name_prompt()
     if field_name in ("service",):
-        return _service_prompt()
+        return _edit_service_prompt()
     if field_name in ("date", "pickup date"):
-        # revalidate the slot after a date change: clear it so it is re-picked
-        r = _date_prompt(booking.service_name_snapshot or "your service")
-        r.updates = {"pickup_slot_id": None, "pickup_slot": None,
-                     "pickup_start_time": None, "pickup_end_time": None}
-        return r
+        return _edit_date_prompt()
     if field_name in ("slot", "pickup time", "time"):
         slots = await available_slots(booking.pickup_date, booking.pickup_area, booking.service_id)
-        return _slot_prompt(slots, _format_date(booking.pickup_date))
+        return _edit_slot_prompt(slots, _format_date(booking.pickup_date))
     if field_name in ("address",):
-        return _address_prompt()
+        return _edit_address_prompt()
     if field_name in ("instructions", "pickup instructions"):
-        return _instructions_prompt()
+        return _edit_instructions_prompt()
+    # No/unrecognized field -> re-show the change menu (spec test 16).
     return _change_menu()
+
+
+# --- Targeted single-field edit: prompts (ask ONLY the chosen field) --------
+def _edit_name_prompt() -> BookingReply:
+    return BookingReply(
+        text="What name should we use for this order?",
+        state=EDITING_NAME,
+        log_event="edit_field_name",
+    )
+
+
+def _edit_service_prompt() -> BookingReply:
+    return BookingReply(
+        text="Which service would you like instead?",
+        state=EDITING_SERVICE,
+        interactive=Interactive(
+            kind="list", body="Which service would you like instead?",
+            button_text="Choose a service", section_title="Our services",
+            options=_service_options(),
+        ),
+        log_event="edit_field_service",
+    )
+
+
+def _edit_date_prompt() -> BookingReply:
+    return BookingReply(
+        text="What pickup date would you prefer?",
+        state=EDITING_DATE,
+        interactive=Interactive(
+            kind="buttons", body="What pickup date would you prefer?",
+            options=[
+                Option(id="date:today", title="Today"),
+                Option(id="date:tomorrow", title="Tomorrow"),
+                Option(id="date:other", title="Choose another date"),
+            ],
+        ),
+        log_event="edit_field_date",
+    )
+
+
+def _edit_slot_prompt(slots: list[dict], date_label: str, *, note: str | None = None) -> BookingReply:
+    if not slots:
+        return BookingReply(
+            text=(f"Sorry, we have no pickup slots for {date_label}. "
+                  "Please choose another day."),
+            state=EDITING_DATE,
+            interactive=Interactive(
+                kind="buttons", body=f"No slots for {date_label}. Pick another day?",
+                options=[
+                    Option(id="date:today", title="Today"),
+                    Option(id="date:tomorrow", title="Tomorrow"),
+                    Option(id="date:other", title="Choose another date"),
+                ],
+            ),
+            log_event="edit_no_slots_available",
+        )
+    body = note or "What pickup time would you prefer?"
+    return BookingReply(
+        text=body,
+        state=EDITING_SLOT,
+        interactive=Interactive(
+            kind="list", body=body, button_text="Choose a time",
+            section_title="Available pickup times", options=_slot_options(slots),
+        ),
+        log_event="edit_field_slot",
+    )
+
+
+def _edit_address_prompt() -> BookingReply:
+    return BookingReply(
+        text="What is the new pickup address? You can also share your WhatsApp location.",
+        state=EDITING_ADDRESS,
+        log_event="edit_field_address",
+    )
+
+
+def _edit_instructions_prompt() -> BookingReply:
+    return BookingReply(
+        text="What pickup instructions would you like instead?",
+        state=EDITING_INSTRUCTIONS,
+        interactive=Interactive(
+            kind="list", body="What pickup instructions would you like instead?",
+            button_text="Choose", section_title="Pickup instructions",
+            options=_instruction_options(),
+        ),
+        log_event="edit_field_instructions",
+    )
+
+
+def _back_to_review(updated: Booking, updates: dict, *, log: str) -> BookingReply:
+    """Return straight to the order summary after a successful edit, carrying a
+    PATCH of ONLY the changed columns. Staying at WAITING_FOR_CONFIRMATION means
+    the edit is not confirmed until the customer re-confirms the revised summary
+    (spec: customer_confirmed reset)."""
+    reply = _confirmation_prompt(updated, header="Here are your updated pickup details:")
+    reply.updates = updates
+    reply.log_event = log
+    return reply
+
+
+# --- Targeted single-field edit: value handlers -----------------------------
+# Each updates ONLY its field (PATCH), preserves everything else, and returns to
+# the summary. Invalid input keeps the customer in the SAME edit state.
+def _on_edit_name(booking, inbound) -> BookingReply:
+    name = validate_name(extract_name(inbound.text) or inbound.text)
+    if not name:
+        return BookingReply(
+            text="Please type a valid name for the order (for example Sara or "
+                 "Amaan Patel).",
+            state=EDITING_NAME, log_event="edit_name_invalid")
+    updated = _with(booking, customer_name=name)
+    return _back_to_review(updated, {"customer_name": name}, log="edit_name_saved")
+
+
+async def _on_edit_service(booking, inbound, available_slots) -> BookingReply:
+    service_id, reason = resolve_service(inbound)
+    if reason == "ambiguous":
+        r = _edit_service_prompt()
+        r.text = "More than one service matches that — please pick the exact one below."
+        r.interactive.body = r.text
+        r.log_event = "edit_service_ambiguous"
+        return r
+    if reason != "ok" or not service_id:
+        r = _edit_service_prompt()
+        r.text = "Sorry, I didn't catch a valid service. Please choose one below:"
+        r.interactive.body = r.text
+        r.log_event = "edit_service_invalid"
+        return r
+    svc = service_by_id(service_id) or {}
+    label = svc.get("display_name") or svc.get("label") or service_id
+    updates = {
+        "service_id": service_id, "service": label, "service_display_name": label,
+        "service_name_snapshot": label, "unit_type": svc.get("unit_type"),
+        "requires_manual_quote": bool(svc.get("requires_manual_quote")),
+        "_touch_service_selected_at": True,
+    }
+    updated = _with(booking, service_id=service_id, service_name_snapshot=label)
+    # Revalidate the slot only if the new service changes availability.
+    if booking.pickup_date and booking.pickup_slot_id:
+        slots = await available_slots(booking.pickup_date, booking.pickup_area, service_id)
+        if booking.pickup_slot_id not in {s["slot_id"] for s in slots}:
+            prompt = _edit_slot_prompt(
+                slots, _format_date(booking.pickup_date),
+                note="That service isn't available at your selected time. Please choose a new time:")
+            prompt.updates = {**updates, "pickup_slot_id": None, "pickup_slot": None,
+                              "pickup_start_time": None, "pickup_end_time": None}
+            prompt.log_event = "edit_service_slot_revalidate"
+            return prompt
+    return _back_to_review(updated, updates, log="edit_service_saved")
+
+
+async def _on_edit_date(booking, inbound, today, available_slots) -> BookingReply:
+    d, reason = parse_pickup_date(inbound, today)
+    if reason == "other":
+        return BookingReply(
+            text="Sure — please type the pickup date you'd like (e.g. 25/07 or 25 July).",
+            state=EDITING_DATE)
+    if reason == "past":
+        return BookingReply(
+            text="That date is in the past. Please choose today, tomorrow, or a future date.",
+            state=EDITING_DATE, log_event="edit_date_invalid_past")
+    if reason != "ok" or not d:
+        return BookingReply(
+            text="I couldn't read that date. Please type it as 25/07 or 25 July, or reply "
+                 "Today / Tomorrow.",
+            state=EDITING_DATE, log_event="edit_date_invalid")
+    slots = await available_slots(d, booking.pickup_area, booking.service_id)
+    by_id = {s["slot_id"]: s for s in slots}
+    if booking.pickup_slot_id and booking.pickup_slot_id in by_id:
+        # Existing slot still available on the new date — keep it, recompute the
+        # concrete start/end datetimes for the new date, return to review.
+        s = by_id[booking.pickup_slot_id]
+        start = _dt.datetime.combine(d, s["start_time"], tzinfo=_GST)
+        end = _dt.datetime.combine(d, s["end_time"], tzinfo=_GST)
+        updated = _with(booking, pickup_date=d)
+        return _back_to_review(
+            updated,
+            {"pickup_date": d, "pickup_start_time": start, "pickup_end_time": end},
+            log="edit_date_saved")
+    # Slot not available on the new date — save the date, clear the slot, and ask
+    # ONLY for a replacement slot (spec: explain + ask only for a new slot).
+    updated = _with(booking, pickup_date=d, pickup_slot_id=None, pickup_slot_label=None)
+    prompt = _edit_slot_prompt(
+        slots, _format_date(d),
+        note=f"Your previous pickup time isn't available on {_format_date(d)}. "
+             "Please choose a new time:")
+    prompt.updates = {"pickup_date": d, "pickup_slot_id": None, "pickup_slot": None,
+                      "pickup_start_time": None, "pickup_end_time": None}
+    prompt.log_event = "edit_date_slot_revalidate"
+    return prompt
+
+
+async def _on_edit_slot(booking, inbound, available_slots) -> BookingReply:
+    slots = await available_slots(booking.pickup_date, booking.pickup_area, booking.service_id)
+    slot, reason = resolve_slot(inbound, slots)
+    if reason != "ok" or not slot:
+        r = _edit_slot_prompt(slots, _format_date(booking.pickup_date))
+        if r.state == EDITING_SLOT:
+            r.text = "Please choose one of the available pickup times below:"
+            if r.interactive:
+                r.interactive.body = r.text
+            r.log_event = "edit_slot_invalid"
+        return r
+    start = _dt.datetime.combine(booking.pickup_date, slot["start_time"], tzinfo=_GST)
+    end = _dt.datetime.combine(booking.pickup_date, slot["end_time"], tzinfo=_GST)
+    updated = _with(booking, pickup_slot_id=slot["slot_id"], pickup_slot_label=slot["label"])
+    return _back_to_review(
+        updated,
+        {"pickup_slot_id": slot["slot_id"], "pickup_slot": slot["label"],
+         "pickup_start_time": start, "pickup_end_time": end},
+        log="edit_slot_saved")
+
+
+def _on_edit_address(booking, inbound) -> BookingReply:
+    if inbound.is_location:
+        addr = (inbound.text or "").strip() or "Shared WhatsApp location"
+        updated = _with(booking, pickup_address=addr)
+        return _back_to_review(
+            updated,
+            {"pickup_latitude": inbound.latitude, "pickup_longitude": inbound.longitude,
+             "pickup_address": addr, "address_source": "whatsapp_location"},
+            log="edit_address_saved")
+    text = (inbound.text or "").strip()
+    if len(text) < 5:
+        return BookingReply(
+            text="Please share a bit more detail for your pickup address, or send your "
+                 "WhatsApp location.",
+            state=EDITING_ADDRESS, log_event="edit_address_invalid")
+    area = tools.extract_area(text)
+    emirate = area_to_city(area) if area else None
+    updated = _with(booking, pickup_address=text, pickup_area=area)
+    return _back_to_review(
+        updated,
+        {"pickup_address": text, "pickup_area": area, "area": area,
+         "pickup_emirate": emirate, "address_source": "typed"},
+        log="edit_address_saved")
+
+
+def _on_edit_instructions(booking, inbound) -> BookingReply:
+    instr, reason = resolve_instruction(inbound)
+    if reason != "ok" or not instr:
+        r = _edit_instructions_prompt()
+        r.text = "Please choose one of the instruction options below:"
+        if r.interactive:
+            r.interactive.body = r.text
+        r.log_event = "edit_instruction_invalid"
+        return r
+    if instr["code"] == "other":
+        return BookingReply(
+            text="Sure — please type your pickup instructions for the driver.",
+            state=EDITING_INSTRUCTION_TEXT)
+    text_val = None if instr["code"] == "none" else instr["label"]
+    updated = _with(booking, pickup_instruction_code=instr["code"], pickup_instruction_text=text_val)
+    return _back_to_review(
+        updated,
+        {"pickup_instruction_code": instr["code"], "pickup_instruction_text": text_val},
+        log="edit_instructions_saved")
+
+
+def _on_edit_instruction_text(booking, inbound) -> BookingReply:
+    text = (inbound.text or "").strip()
+    if not text:
+        return BookingReply(
+            text="Please type your pickup instructions, or reply 'none' if there are none.",
+            state=EDITING_INSTRUCTION_TEXT)
+    updated = _with(booking, pickup_instruction_code="other", pickup_instruction_text=text)
+    return _back_to_review(
+        updated,
+        {"pickup_instruction_code": "other", "pickup_instruction_text": text},
+        log="edit_instructions_saved")
 
 
 def _with(b: Booking, **changes) -> Booking:

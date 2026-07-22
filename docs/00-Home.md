@@ -388,7 +388,7 @@ detour - see [[classifier-agent]] and
 Earlier: [[2026-07-18-standalone-whatsapp-agent]] —
 `build-reports/2026-07-18-standalone-whatsapp-agent.md` — a second,
 independent WhatsApp agent (`apps/whatsapp-agent/` + `apps/whatsapp-chat/`),
-domain-guarded to laundry/cleaning/LaundryKhalaas only, built per an
+domain-guarded to laundry/cleaning/LaundryKhalas only, built per an
 explicit founder/team redirection ahead of the classifier agent - see
 [[ADR-standalone-whatsapp-agent-first]].
 
@@ -461,7 +461,7 @@ Earlier: [[week-01-admin-ui-demo-notes]] —
 - [[fresh-project-start-report]] — `audits/fresh-project-start-report.md`
 - [[admin-ui-start-report]] — `audits/admin-ui-start-report.md`
 - [[prototype-md-review]] — `audits/prototype-md-review.md` — full review of
-  all 92 Markdown files in the old `LaundryKhalaasPrototype` repo, compared
+  all 92 Markdown files in the old `LaundryKhalasPrototype` repo, compared
   against this repo's `CLAUDE.md`; flags two open questions for the
   founder/team (market scope, reporting cadence day).
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { Bell, ChevronDown, Menu, Search } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Bell, Menu, Search } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { UserMenu } from "./UserMenu";
 
 export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
   return (
@@ -52,22 +52,8 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
           <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-rose ring-2 ring-surface" />
         </button>
 
-        {/* Profile */}
-        <button
-          type="button"
-          className={cn(
-            "flex items-center gap-2 rounded-lg border border-border bg-surface py-1 pl-1 pr-2 transition-colors hover:border-border-strong",
-          )}
-        >
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-rose/12 font-display text-xs font-bold text-rose">
-            NE
-          </span>
-          <span className="hidden text-left leading-tight md:block">
-            <span className="block text-xs font-semibold text-ink">Nada El-Amin</span>
-            <span className="block text-xxs text-ink-faint">Owner</span>
-          </span>
-          <ChevronDown className="hidden h-3.5 w-3.5 text-ink-faint md:block" />
-        </button>
+        {/* Profile + sign out */}
+        <UserMenu />
       </div>
     </header>
   );

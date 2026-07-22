@@ -170,7 +170,7 @@ on fresh DB (idempotent, on app startup). Architecture: `mock-order-lifecycle.md
 
 Config-driven, not hardcoded. `apps/whatsapp-agent/rules.py` is the single cached
 loader for 6 JSON config files (§5). Pricing de-duplicated to one source. The
-Laundry Class agent has its own file KB (`config/laundrykhalaas_knowledge.json` +
+Laundry Class agent has its own file KB (`config/laundrykhalas_knowledge.json` +
 `laundry_class/knowledge_base.py`) with official prices. The dashboard's copy/
 section labels live in `apps/admin/lib/dashboard/sections.ts`.
 

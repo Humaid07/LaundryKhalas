@@ -12,7 +12,7 @@ call inside `agent.py` that currently logs this dict through
 
 Taxonomy and routing rules are adapted from the old prototype's Section D.4
 classifier spec (`docs/agents/Classifier-D4.md`,
-`docs/specs/00-master-build-spec.md` in `LaundryKhalaasPrototype`), reviewed
+`docs/specs/00-master-build-spec.md` in `LaundryKhalasPrototype`), reviewed
 and referenced as a starting point in `docs/audits/prototype-md-review.md`.
 Not copied verbatim - the sentiment scale and routing thresholds are
 adapted here (see below).

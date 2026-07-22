@@ -4,7 +4,7 @@ This document records the review performed before starting the new
 LaundryKhalas WhatsApp Operations Agent backend, and the scaffolding
 decisions that followed from it.
 
-## Prototype Review — D:\LaundryKhalas\LaundryKhalaasPrototype
+## Prototype Review — D:\LaundryKhalas\LaundryKhalasPrototype
 
 **Stack summary:** Next.js 14 (App Router) frontend with fully in-memory/mock
 data, paired with a *real, already-functioning* FastAPI + PostgreSQL +
@@ -29,7 +29,7 @@ brief.
 ### 1. Folder structure
 
 ```
-LaundryKhalaasPrototype/
+LaundryKhalasPrototype/
 ├── app/                  Next.js App Router (admin/, user/) — no app/api/**
 ├── components/           ui/ (shadcn primitives), admin/AdminLayout.tsx, user/UserLayout.tsx, shared/StatusBadge.tsx
 ├── lib/                  mock-data.ts, agents/ (client-side mock agent framework), app-context.tsx, unified-chat-service.ts
@@ -157,7 +157,7 @@ read, per instructions not to read secrets).
 
 - **No authentication/authorization anywhere in the prototype FastAPI backend.** Every route in `admin.py`, `approvals.py`, `whatsapp.py`, `booking.py`, `proto_orders.py` is open — no route declares an auth dependency. Independently flagged as Critical Risk #1 in the prototype's own `docs/audits/week-1-gap-audit.md`. **Mitigation in this project:** every `/api/admin/**` route requires `X-Admin-Api-Key` via `app/core/security.py::require_admin` (placeholder-strength, but non-optional; a real RBAC system is required before live launch — see `docs/checklists/live-whatsapp-readiness.md`).
 - **CORS wildcard** (`allow_origins=["*"]`, `allow_credentials=False`) in the prototype backend. Not exploitable there only because nothing is protected and credentials are off; would become dangerous the moment auth is added without tightening CORS in lockstep. This project ships without a wildcard CORS default (see `app/main.py`).
-- **Hardcoded default DB credentials** in prototype source (`POSTGRES_PASSWORD: laundrykhalaas_dev` in both compose files and as a `Settings` default). Low real risk (dev-only) but a bad habit. This project uses an equally-fake but clearly-named `changeme_local_only` default and documents it as dev-only.
+- **Hardcoded default DB credentials** in prototype source (`POSTGRES_PASSWORD: laundrykhalas_dev` in both compose files and as a `Settings` default). Low real risk (dev-only) but a bad habit. This project uses an equally-fake but clearly-named `changeme_local_only` default and documents it as dev-only.
 - **No hardcoded API keys or live secrets found** in the prototype — a targeted review found no Anthropic/OpenAI/AWS key patterns or bearer-token literals. `ANTHROPIC_API_KEY` defaults empty; mock LLM is the default. Nothing was carried into this project regardless.
 - **`.env`/`.env.local` exist in prototype root and `backend/`** — contents were not read. Not copied into this project; this project ships only `.env.example` with names, no values.
 - **No live external API calls found** in the reviewed prototype code paths — consistent with a mock-first policy this project also follows.

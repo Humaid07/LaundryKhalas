@@ -1,7 +1,7 @@
 """Deterministic escalation / human-handoff detection (RULE 6 / CLAUDE.md §6).
 
 Keyword match against config/escalation_rules.json. On a match the agent
-hands the conversation to the human LaundryKhalaas team instead of trying
+hands the conversation to the human LaundryKhalas team instead of trying
 to resolve it, refund, compensate, or make any promise — see
 agents/whatsapp_agent/agent.py, which short-circuits (no LLM call) with the
 configured handoff message.

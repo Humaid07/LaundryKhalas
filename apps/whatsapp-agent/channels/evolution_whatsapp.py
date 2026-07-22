@@ -94,7 +94,11 @@ class EvolutionWhatsAppChannel(WhatsAppChannel):
             "sections": [{
                 "title": section_title,
                 "rows": [
-                    {"title": r["title"], "description": r.get("description") or "",
+                    # Evolution v2.3.x REJECTS a row with an empty description
+                    # (400 "The description cannot be empty"), so always send a
+                    # non-empty one — fall back to the title when none is given.
+                    {"title": r["title"],
+                     "description": (r.get("description") or "").strip() or r["title"],
                      "rowId": r["id"]}
                     for r in rows
                 ],

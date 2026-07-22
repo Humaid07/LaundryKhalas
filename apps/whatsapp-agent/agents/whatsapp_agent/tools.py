@@ -135,7 +135,7 @@ def extract_service_type(text: str) -> str | None:
 
 def _load_service_areas() -> tuple[list[str], dict[str, str]]:
     """Builds (matchable phrases, lowercase->canonical-display map) from
-    config/laundrykhalaas_knowledge.json's "service_areas" section - all 7
+    config/laundrykhalas_knowledge.json's "service_areas" section - all 7
     emirates plus Qatar, editable there with no code change. Read once at
     import time (rebuilding a ~150-phrase regex on every message would be
     wasteful given accumulate_slots calls this per history turn) - restart

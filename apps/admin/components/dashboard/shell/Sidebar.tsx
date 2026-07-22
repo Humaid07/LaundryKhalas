@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS, type NavChild, type NavItem } from "@/lib/dashboard/nav";
+import { useAuth } from "@/lib/dashboard/auth-context";
+import { isRouteAllowed } from "@/lib/dashboard/auth";
 import { BrandWordmark } from "./Brand";
 
 /** Is the current route inside this section (exact landing or any child route)? */
@@ -129,6 +131,12 @@ export function Sidebar({
   onToggleCollapse?: () => void;
   onNavigate?: () => void;
 }) {
+  const { role } = useAuth();
+  // Show only the sections this role may open. Uses the same access rule as the
+  // route guard (auth.isRouteAllowed) so the sidebar and the guard can never
+  // drift apart. Operations sees Operations + Orders; admin sees everything.
+  const items = role ? NAV_ITEMS.filter((item) => isRouteAllowed(role, item.href)) : NAV_ITEMS;
+
   return (
     <div className="flex h-full flex-col bg-surface">
       {/* Brand */}
@@ -141,7 +149,7 @@ export function Sidebar({
         {!collapsed && (
           <p className="px-2 pb-2 text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">Command Center</p>
         )}
-        {NAV_ITEMS.map((item) => (
+        {items.map((item) => (
           <ParentRow key={item.href} item={item} collapsed={collapsed} onNavigate={onNavigate} />
         ))}
       </nav>

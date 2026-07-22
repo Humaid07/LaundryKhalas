@@ -32,7 +32,7 @@ This maps directly to CLAUDE.md §5 ("config is the source of truth"), §7
 | `mock_mode_rules.json` | Demo-mode wording (order/support tags, booking ack, tracking-unavailable) | `mock.py` |
 | `agent_tone_rules.json` | Tone/style guidelines injected into the system prompt | `prompts.py` |
 
-`laundrykhalaas_knowledge.json` remains for the **area gazetteer** and market/
+`laundrykhalas_knowledge.json` remains for the **area gazetteer** and market/
 pickup notes only — the service catalog and pricing were **moved out of it** to
 `laundry_services.json` so there is exactly one source of truth for services.
 

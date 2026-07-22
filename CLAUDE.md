@@ -39,7 +39,7 @@ Do not jump ahead to future modules unless explicitly asked.
 
 There is an older prototype at:
 
-D:\\LaundryKhalas\\LaundryKhalaasPrototype
+D:\\LaundryKhalas\\LaundryKhalasPrototype
 
 Use it only as product and UI reference.
 

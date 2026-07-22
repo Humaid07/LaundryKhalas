@@ -21,7 +21,7 @@ async def test_send_test_message_out_of_domain_refusal(client):
     assert response.status_code == 200
     body = response.json()
     assert body["domain"] == "out_of_domain"
-    assert "LaundryKhalaas laundry and cleaning services" in body["agent_reply"]
+    assert "LaundryKhalas laundry and cleaning services" in body["agent_reply"]
     assert body["provider"] == "none"
 
 

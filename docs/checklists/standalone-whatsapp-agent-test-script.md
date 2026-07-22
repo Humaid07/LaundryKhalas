@@ -28,7 +28,7 @@ mock mode - no live WhatsApp, no live LLM, no external network calls.
 5. Click **+ New chat** (or just start typing - a new conversation is
    created on first send).
 6. Type **"Hi"** and send.
-7. Confirm the agent replies **"Hi 👋 Welcome to LaundryKhalaas. How can
+7. Confirm the agent replies **"Hi 👋 Welcome to LaundryKhalas. How can
    we help you today?"** and that 6 buttons appear **stacked directly
    below that agent message bubble** (not in a toolbar): Book Pickup,
    Track Order, Change Pickup Time, Add More Items, Cancel Order, Call
@@ -63,7 +63,7 @@ mock mode - no live WhatsApp, no live LLM, no external network calls.
 ## Out-of-domain refusal shows the menu again
 
 14. Send **"Can you write Python code?"**. Confirm the agent replies
-    **"Sorry, I can only help with LaundryKhalaas laundry and cleaning
+    **"Sorry, I can only help with LaundryKhalas laundry and cleaning
     services. How can we help you today?"** with the same 6 main-menu
     buttons attached - an off-topic question should never be a dead end.
 

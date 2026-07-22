@@ -122,7 +122,7 @@ async def _handle_track_cancel_change(db, effective: str, intent: str, text: str
     if not order_id:
         if effective == "track_order_request":
             msg = (
-                "Sure. Please share your LaundryKhalaas order ID so I can help "
+                "Sure. Please share your LaundryKhalas order ID so I can help "
                 "you check the status." + _ORDER_TAG
             )
         elif effective == "cancel_order_request":
@@ -225,7 +225,7 @@ async def _handle_cancel_confirm(
         await order_store.request_cancellation(db, order)
         await db.commit()
     msg = (
-        "Your cancellation request has been noted. The LaundryKhalaas team will "
+        "Your cancellation request has been noted. The LaundryKhalas team will "
         "confirm whether it can still be cancelled. Demo mode — no live "
         "cancellation has been made."
     )

@@ -35,7 +35,7 @@ place to live.
   session (layout density, card/chart rhythm, dashboard IA). No code was copied
   from either, and **no magic link / token / URL was saved into these docs** (per
   explicit instruction — the Lovable link is a private magic link).
-- **Old prototype** (`D:\LaundryKhalas\LaundryKhalaasPrototype`) referenced for
+- **Old prototype** (`D:\LaundryKhalas\LaundryKhalasPrototype`) referenced for
   product concepts only, not copied.
 - The `frontend-design` skill guided the deliberate, non-templated direction.
 

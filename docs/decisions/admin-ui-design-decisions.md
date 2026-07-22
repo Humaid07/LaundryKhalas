@@ -11,7 +11,7 @@
   `components/layout/AdminTopbar.tsx` and the explicit button copy
   ("Approve Mock Reply", "Send Manual Mock Reply", "Simulate Inbound
   Message") used throughout.
-- `D:\LaundryKhalas\LaundryKhalaasPrototype` was reviewed for layout/UX
+- `D:\LaundryKhalas\LaundryKhalasPrototype` was reviewed for layout/UX
   ideas only (see `docs/audits/admin-ui-start-report.md`). No prototype
   code, styling tokens, or components were copied - the new UI is a fresh
   implementation with its own neutral, meaning-driven color system

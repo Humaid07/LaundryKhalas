@@ -1,11 +1,11 @@
 {
   "_note": "Area gazetteer + market/pickup/handoff notes used by the system prompt and area detection. The SERVICE CATALOG and PRICING moved to config/laundry_services.json (single source of truth); this file no longer holds them.",
-  "brand_name": "LaundryKhalaas",
+  "brand_name": "LaundryKhalas",
   "markets": ["UAE", "Qatar"],
   "service_areas_note": "Service areas are configurable. If unsure, ask the customer for their area and tell them the team will confirm availability.",
   "pricing_note": "Prices must be confirmed from configured pricing. If exact price is unavailable, do not invent it.",
   "pickup_note": "Pickup time depends on area and availability.",
-  "handoff_note": "For complaints, refunds, cancellations, or unclear requests, tell the customer the LaundryKhalaas team will assist.",
+  "handoff_note": "For complaints, refunds, cancellations, or unclear requests, tell the customer the LaundryKhalas team will assist.",
   "service_areas": {
     "note": "Editable, config-driven area gazetteer for detecting a customer's pickup area from free text. Not exhaustive of every sub-community - covers all 7 emirates plus Qatar at the level a customer would actually type. Add new areas here, no code change needed - see agents/whatsapp_agent/tools.py.",
     "Dubai": [
