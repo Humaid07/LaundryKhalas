@@ -25,15 +25,18 @@ async def add_message(
     is_internal: bool = False,
     status: str = "sent",
     metadata: dict | None = None,
+    wa_message_id: str | None = None,
 ) -> dict | None:
     """Store a message. ``metadata`` (jsonb) carries derived signals like intent /
-    domain / auto_reply_decision on inbound + agent rows (never raw PII)."""
+    domain / auto_reply_decision on inbound + agent rows (never raw PII).
+    ``wa_message_id`` is the provider (Evolution/Meta) message id — stored for
+    webhook idempotency (a redelivered event is deduped, never re-inserted)."""
     row = await database.fetchrow(
         """
         insert into messages
             (conversation_id, sender_type, message_text, is_internal, status,
-             metadata, is_test_data, is_demo, environment, created_by_seed)
-        values ($1, $2, $3, $4, $5, $6::jsonb, false, false, 'dev', false)
+             metadata, wa_message_id, is_test_data, is_demo, environment, created_by_seed)
+        values ($1, $2, $3, $4, $5, $6::jsonb, $7, false, false, 'dev', false)
         returning id, conversation_id, sender_type, message_text, is_internal, status,
                   metadata, is_test_data, is_demo, environment, test_scenario_id, created_at
         """,
@@ -43,11 +46,22 @@ async def add_message(
         is_internal,
         status,
         metadata or {},
+        wa_message_id or None,
     )
     # Keep the conversation preview in sync for non-internal messages.
     if not is_internal:
         await conversations_repo.touch_last_message(conversation_id, message_text)
     return row
+
+
+async def wa_message_seen(wa_message_id: str | None) -> bool:
+    """True if an inbound with this provider message id was already stored —
+    the webhook's idempotency guard against redelivered Evolution events."""
+    if not wa_message_id:
+        return False
+    return bool(await database.fetchval(
+        "select 1 from messages where wa_message_id = $1 limit 1", wa_message_id
+    ))
 
 
 async def has_agent_reply(conversation_id: str) -> bool:

@@ -25,6 +25,9 @@ _SLOTS_FACT = re.compile(
 )
 _PRICE_FACT = re.compile(r"Known price for \w+: ([\d.]+ \w+ per \w+ \(minimum [\d.]+ \w+\))\.")
 _PRICE_UNAVAILABLE_FACT = re.compile(r"No configured price exists yet for")
+# Services priced only after inspection/measurement (bag spa, tailoring,
+# carpet/curtain) — defer to the team rather than quoting an exact figure.
+_PRICE_MANUAL_FACT = re.compile(r"priced after inspection/measurement")
 _ORDER_FLOW_FACT = re.compile(
     r"Order-flow action:\s*(\w+)\. Order ID provided this turn:\s*([^.]+)\."
     r"(?:\s*New pickup time provided this turn:\s*([^.]+)\.)?"
@@ -133,7 +136,7 @@ class MockProvider(LLMProvider):
             text = f"That's {price_match.group(1)}. Want to book a pickup?"
             return LLMResult(text=text, provider=self.name, model="mock-1")
 
-        if _PRICE_UNAVAILABLE_FACT.search(system_text):
+        if _PRICE_UNAVAILABLE_FACT.search(system_text) or _PRICE_MANUAL_FACT.search(system_text):
             return LLMResult(
                 text="Our team will confirm the exact price for that with you shortly.",
                 provider=self.name,

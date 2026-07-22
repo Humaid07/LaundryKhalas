@@ -3,14 +3,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi import Depends
+
 from api import (
+    auth,
     chat,
     conversations,
+    deps,
     evolution_webhooks,
     flags,
     health,
     orders,
     seo_agents,
+    service_taxonomy,
     settings_route,
     tickets,
     webhooks,
@@ -36,8 +41,12 @@ async def lifespan(app: FastAPI):
     # create_all/seed against Postgres (it would clash with the managed schema).
     if not database.is_supabase_mode():
         await init_db()
-        async with AsyncSessionLocal() as session:
-            await order_store.seed_demo_orders(session)
+        # Demo orders auto-seed ONLY when ENABLE_DEMO_DATA=true (local dev). In
+        # staging/production this is false, so no fake orders are recreated on
+        # startup (spec §2/§23). Supabase mode never auto-seeds either way.
+        if get_settings().enable_demo_data:
+            async with AsyncSessionLocal() as session:
+                await order_store.seed_demo_orders(session)
     yield
     await database.close_pool()
 
@@ -54,15 +63,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(chat.router)
-app.include_router(orders.router)
-app.include_router(conversations.router)
-app.include_router(flags.router)
-app.include_router(tickets.router)
-app.include_router(settings_route.router)
+# --- RBAC guards (gated by REQUIRE_AUTH; anonymous-as-admin in dev) ----------
+# Operations + Admin: orders, conversations, flags, tickets (the ops surface).
+# Admin only: chat test console, settings, SEO, service taxonomy.
+# Never guarded: provider webhooks, /health, /api/auth/* (login must be open).
+_OPS = [Depends(deps.require_ops)]
+_ADMIN = [Depends(deps.require_admin)]
+
+app.include_router(auth.router)
+app.include_router(chat.router, dependencies=_ADMIN)
+app.include_router(orders.router, dependencies=_OPS)
+app.include_router(conversations.router, dependencies=_OPS)
+app.include_router(flags.router, dependencies=_OPS)
+app.include_router(tickets.router, dependencies=_OPS)
+app.include_router(settings_route.router, dependencies=_ADMIN)
 app.include_router(webhooks.router)
 app.include_router(evolution_webhooks.router)
-app.include_router(seo_agents.router)
+app.include_router(seo_agents.router, dependencies=_ADMIN)
+app.include_router(service_taxonomy.router, dependencies=_ADMIN)
 app.include_router(health.router)
 
 

@@ -22,7 +22,7 @@ import re
 from dataclasses import dataclass, field
 
 from agents.whatsapp_agent import tools
-from rules import service_labels
+from rules import service_by_id, service_labels
 
 # --------------------------------------------------------------------------
 # Area -> city map (built from the same config the agent's gazetteer uses)
@@ -243,7 +243,15 @@ class OrderDetails:
     address: str | None = None
     service_key: str | None = None
     service_label: str | None = None
+    unit_type: str | None = None
+    requires_manual_quote: bool = False
     items: list[dict] = field(default_factory=list)
+
+    @property
+    def service_id(self) -> str | None:
+        """Canonical service id (same value as ``service_key`` — the JSON catalog
+        uses ``service_id``/``key`` interchangeably)."""
+        return self.service_key
     pickup_slot: str | None = None
     delivery_slot: str | None = None
     payment_method: str | None = None
@@ -292,6 +300,11 @@ def extract_customer_order_details(
     city = _detect_city(text) or area_to_city(area) or base.city
     service_key = tools.extract_service_type(text) or base.service_key
     service_label = service_labels().get(service_key) if service_key else base.service_label
+    service = service_by_id(service_key) if service_key else None
+    unit_type = service.get("unit_type") if service else base.unit_type
+    requires_manual_quote = (
+        bool(service.get("requires_manual_quote")) if service else base.requires_manual_quote
+    )
     address = extract_address(text, area=area) or base.address
     name = extract_name(text) or base.name
     language = detect_language(text) or base.language
@@ -308,6 +321,8 @@ def extract_customer_order_details(
         address=address,
         service_key=service_key,
         service_label=service_label,
+        unit_type=unit_type,
+        requires_manual_quote=requires_manual_quote,
         items=items,
         pickup_slot=pickup_slot,
         delivery_slot=delivery_slot,

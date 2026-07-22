@@ -13,8 +13,9 @@ MAIN_MENU_IDS = {
     "add_more_items", "cancel_order", "call_support",
 }
 SERVICE_ACTION_IDS = {
-    "wash_and_fold", "dry_cleaning", "ironing", "blankets_duvets",
-    "curtains_upholstery", "business_laundry", "other_cleaning",
+    "premium_wash_fold", "boutique_clean_press", "steam_pressing_only",
+    "luxe_bed_bath_care", "artisan_shoe_restoration", "luxury_bag_spa",
+    "tailoring_alterations", "deep_carpet_curtain_care",
 }
 
 
@@ -55,13 +56,14 @@ async def test_out_of_domain_refusal_shows_main_menu_again(client):
 @pytest.mark.parametrize(
     "label,expected_key",
     [
-        ("Wash & Fold", "wash_and_fold"),
-        ("Dry Cleaning", "dry_cleaning"),
-        ("Ironing / Pressing", "ironing"),
-        ("Blankets / Duvets", "blankets_duvets"),
-        ("Curtains / Upholstery", "curtains_upholstery"),
-        ("Business Laundry", "business_laundry"),
-        ("Other Cleaning Request", "other_cleaning"),
+        ("Premium Wash & Fold", "premium_wash_fold"),
+        ("Boutique Clean & Press", "boutique_clean_press"),
+        ("Steam Pressing Only", "steam_pressing_only"),
+        ("Luxe Bed & Bath Care", "luxe_bed_bath_care"),
+        ("Artisan Shoe Restoration", "artisan_shoe_restoration"),
+        ("Luxury Bag Spa", "luxury_bag_spa"),
+        ("Tailoring & Alterations", "tailoring_alterations"),
+        ("Deep Carpet & Curtain Care", "deep_carpet_curtain_care"),
     ],
 )
 async def test_service_chip_label_recognized_exactly(client, label, expected_key):
@@ -88,7 +90,7 @@ async def test_actions_empty_once_service_known(client):
     conversation_id = first.json()["conversation_id"]
     second = await client.post(
         "/api/test-chat/message",
-        json={"conversation_id": conversation_id, "message": "Wash & Fold"},
+        json={"conversation_id": conversation_id, "message": "Premium Wash & Fold"},
     )
     body = second.json()
     assert body["actions"] == []
@@ -119,8 +121,8 @@ async def test_service_action_id_routes_into_booking_flow(client):
         "/api/test-chat/message",
         json={
             "conversation_id": conversation_id,
-            "message": "Dry Cleaning",
-            "action_id": "dry_cleaning",
+            "message": "Boutique Clean & Press",
+            "action_id": "boutique_clean_press",
         },
     )
     body = second.json()

@@ -1,25 +1,29 @@
 """Evolution API inbound webhook — real WhatsApp messages → Supabase.
 
 Point your Evolution instance's webhook at POST {backend}/webhooks/evolution
-(event: messages.upsert). For each inbound customer message (from an APPROVED
-test number only) we:
-  1. upsert the customer + conversation in Supabase (dashboard inbox),
-  2. EXTRACT structured customer/order details from the whole conversation so far
-     and backfill the customer profile (name/city/area/address/language),
-  3. store the customer message (with derived intent/domain/decision metadata),
-  4. on a booking: create/update the conversation's DRAFT order + write
-     order_events; promote it to pickup_scheduled/active only once the customer
-     confirms and enough detail exists,
-  5. on an escalation/handoff (refund/complaint/damage/…): raise a flag + ticket,
-     mark the conversation Human Needed, and NEVER auto-resolve or auto-send,
-  6. auto-reply live via Evolution only when EVOLUTION_AUTO_REPLY=true AND the
-     decision layer approved it AND the sender is approved.
+(event: messages.upsert). For each inbound message from an APPROVED test number:
 
-Safety: a non-approved sender is dropped before anything is stored (no store, no
-agent, no send). In local SQLite mode the webhook acknowledges but stores nothing
-(the rich model lives in Supabase) — it never fails webhook delivery. No raw
-phone / address is ever logged.
+  1. IDEMPOTENCY — a redelivered event (same wa_message_id) is dropped: no
+     duplicate message, no double state advance, no double confirm.
+  2. Store the inbound message (text or the interactive selection's display text).
+  3. ESCALATION (refund/complaint/damage/…) — raise a flag + ticket, mark Human
+     Needed, never auto-resolve. Interrupts a booking too.
+  4. BOOKING — routed through the deterministic state machine
+     (services/booking_flow.py). The DB (orders.conversation_state) is the source
+     of truth for the step; the LLM never decides a transition, invents a service/
+     slot/date/price, or confirms a booking. A draft order is created only when a
+     booking actually starts (state waiting_for_service, all fields null) and is
+     flipped to a confirmed operational order EXACTLY once, on explicit confirm.
+     Interactive lists/buttons are sent via Evolution with a numbered-text
+     fallback if the interactive send fails.
+  5. Everything else (greetings / general questions) keeps the existing
+     domain/auto-reply behaviour.
+
+Safety: non-approved senders are dropped before anything is stored. SQLite mode
+acknowledges but stores nothing. No raw phone/address is ever logged.
 """
+import datetime as _dt
+
 import structlog
 from fastapi import APIRouter, Request
 
@@ -31,18 +35,20 @@ from db.repositories import (
     customers_repo,
     flags_repo,
     messages_repo,
-    order_events_repo,
     orders_repo,
+    slots_repo,
     tickets_repo,
 )
+from services import booking_flow
 from services.auto_reply import SENDER_NOT_ALLOWED, should_auto_reply
 from services.escalation import detect_escalation
-from services.order_extraction import accumulate_from_messages
 from services.privacy import mask_phone, normalize_e164
 from settings import get_settings
 
 router = APIRouter(prefix="/webhooks", tags=["evolution-webhook"])
 logger = structlog.get_logger()
+
+_GST = _dt.timezone(_dt.timedelta(hours=4))  # Dubai (no DST)
 
 # Escalation category -> (flag_type, priority, team) for the dashboard inbox.
 _ESCALATION_FLAG: dict[str, tuple[str, str, str]] = {
@@ -58,23 +64,86 @@ _ESCALATION_FLAG: dict[str, tuple[str, str, str]] = {
 }
 _DEFAULT_FLAG = ("handoff", "high", "Customer Facing")
 
+_BOOKING_SELECTION_PREFIXES = ("service:", "slot:", "instruction:", "date:", "change:")
+_BOOKING_SELECTION_IDS = {"confirm_booking", "change_details", "cancel_booking"}
 
-def _confirmation_reply(order_row: dict) -> str:
-    """Deterministic confirmation message for a just-confirmed booking. No
-    invented figures — the amount, if shown, is the configured per-item estimate
-    and is explicitly flagged as team-confirmed."""
-    oid = order_row["order_id"]
-    service = order_row.get("service") or "your order"
-    lines = ["✅ Thank you! Your booking is confirmed.", f"Order {oid} — {service}."]
-    if order_row.get("pickup_slot"):
-        lines.append(f"Pickup: {order_row['pickup_slot']}.")
-    if order_row.get("amount") is not None:
-        lines.append(
-            f"Estimated total: {order_row['amount']} AED "
-            "(our team will confirm the final price)."
-        )
-    lines.append("Our team will reach out shortly to finalise the details.")
+
+def _today() -> _dt.date:
+    return _dt.datetime.now(_GST).date()
+
+
+def _is_booking_selection(selection_id: str | None) -> bool:
+    if not selection_id:
+        return False
+    return selection_id in _BOOKING_SELECTION_IDS or any(
+        selection_id.startswith(p) for p in _BOOKING_SELECTION_PREFIXES
+    )
+
+
+def _booking_from_row(row: dict) -> booking_flow.Booking:
+    return booking_flow.Booking(
+        conversation_state=row.get("conversation_state"),
+        service_id=row.get("service_id"),
+        service_name_snapshot=row.get("service_name_snapshot") or row.get("service"),
+        pickup_date=row.get("pickup_date"),
+        pickup_slot_id=row.get("pickup_slot_id"),
+        pickup_slot_label=row.get("pickup_slot"),
+        pickup_address=row.get("pickup_address"),
+        pickup_area=row.get("pickup_area") or row.get("area"),
+        pickup_instruction_code=row.get("pickup_instruction_code"),
+        pickup_instruction_text=row.get("pickup_instruction_text"),
+    )
+
+
+def _final_confirmation_text(row: dict) -> str:
+    d = row.get("pickup_date")
+    date_str = d.strftime("%A, %d %B") if isinstance(d, _dt.date) else "—"
+    lines = [
+        "✅ Booking confirmed! Thank you.",
+        f"Order {row.get('order_id')}",
+        f"Service: {row.get('service_display_name') or row.get('service') or '—'}",
+        f"Pickup date: {date_str}",
+        f"Pickup time: {row.get('pickup_slot') or '—'}",
+        f"Address: {row.get('pickup_address') or '—'}",
+        f"Instructions: {row.get('pickup_instruction_text') or 'No additional instructions'}",
+        "Our team will reach out shortly to finalise the details.",
+    ]
     return "\n".join(lines)
+
+
+async def _send_reply(channel, phone: str, reply) -> str:
+    """Send a booking reply. Interactive list/buttons are attempted via Evolution;
+    on any failure we fall back to a numbered-text message (still mapped to real
+    ids by the FSM). Returns the text stored as the agent message."""
+    interactive = reply.interactive
+    if interactive is None:
+        await channel.send_text(to_phone=phone, text=reply.text)
+        return reply.text
+    try:
+        if interactive.kind == "list":
+            await channel.send_list(
+                to_phone=phone,
+                body=interactive.body,
+                button_text=interactive.button_text or "Choose",
+                section_title=interactive.section_title or "Options",
+                header=interactive.header or "",
+                rows=[{"id": o.id, "title": o.title, "description": o.description}
+                      for o in interactive.options],
+            )
+        else:
+            await channel.send_buttons(
+                to_phone=phone,
+                body=interactive.body,
+                header=interactive.header or "",
+                buttons=[{"id": o.id, "title": o.title} for o in interactive.options],
+            )
+        return interactive.body
+    except Exception as exc:  # noqa: BLE001 - fall back to numbered text, never fail
+        logger.warning("evolution_interactive_failed", kind=interactive.kind, error=str(exc))
+        fallback = booking_flow.numbered_fallback(interactive)
+        await channel.send_text(to_phone=phone, text=fallback)
+        logger.info("evolution_fallback_sent", kind=interactive.kind)
+        return fallback
 
 
 @router.post("/evolution")
@@ -89,192 +158,173 @@ async def receive_evolution_webhook(request: Request):
     if not inbound:
         return {"status": "ignored", "processed": 0}
 
-    # The rich model lives in Supabase. In local SQLite mode we acknowledge but
-    # don't store (nothing to fail the webhook over).
     if not database.is_supabase_mode():
-        return {
-            "status": "ok",
-            "stored": False,
-            "processed": 0,
-            "reason": "capture requires DATABASE_MODE=supabase",
-        }
+        return {"status": "ok", "stored": False, "processed": 0,
+                "reason": "booking requires DATABASE_MODE=supabase"}
 
-    # SAFETY: only approved test numbers (EVOLUTION_ALLOWED_TEST_NUMBERS) are ever
-    # processed or replied to. Empty list = no one is processed (fail safe).
+    mode = settings.agent_operating_mode  # test | live | paused (safe default = paused)
     allowed = settings.allowed_auto_reply_numbers
+    # Sending an automated reply requires BOTH the mode to allow replies (test/live)
+    # AND Evolution to be live-ready.
+    live = settings.agent_replies_enabled and settings.evolution_live_ready
 
     processed = 0
     skipped = 0
+    duplicates = 0
     for msg in inbound:
         sender = normalize_e164(msg["phone"])
         masked = mask_phone(sender)
 
-        # --- Sender allow-list gate (before storing / calling the agent) -------
-        if sender not in allowed:
+        # Sender gate: LIVE mode processes every valid customer; TEST and PAUSED
+        # only process allow-listed test numbers (others are ignored entirely).
+        if mode != "live" and sender not in allowed:
             skipped += 1
-            logger.info(
-                "evolution_inbound_skipped",
-                sender=masked,
-                allowed_sender=False,
-                auto_reply_decision="hold",
-                no_auto_reply_reason=SENDER_NOT_ALLOWED,
-            )
+            logger.info("evolution_inbound_skipped", sender=masked, allowed_sender=False,
+                        agent_mode=mode, no_auto_reply_reason=SENDER_NOT_ALLOWED)
             continue
+
+        wa_id = msg.get("wa_message_id") or None
+        if await messages_repo.wa_message_seen(wa_id):
+            duplicates += 1
+            logger.info("evolution_duplicate_ignored", sender=masked, wa_message_id=bool(wa_id))
+            continue
+
+        text = msg.get("text") or ""
+        inbound_obj = booking_flow.Inbound(
+            text=text,
+            selection_id=msg.get("selection_id"),
+            latitude=msg.get("latitude"),
+            longitude=msg.get("longitude"),
+        )
 
         customer = await customers_repo.get_or_create_by_phone(msg["phone"], msg["name"])
         convo = await conversations_repo.get_or_create_for_customer(
-            customer["id"], external_id=f"evo:{msg['phone']}"
+            customer["id"], external_id=f"evo:{sender}"
         )
 
-        # 1) Conversation context BEFORE this message: prior turns (for the
-        #    agent), whether we've already welcomed (welcome-once), and every
-        #    prior CUSTOMER message (so extraction accumulates across the whole
-        #    conversation, not just this line).
-        prior = await messages_repo.list_messages(convo["id"])
-        history = [
-            (m["sender_type"], m["message_text"])
-            for m in prior
-            if m["sender_type"] in ("customer", "agent")
-        ]
-        welcome_sent = any(m["sender_type"] == "agent" for m in prior)
-        customer_texts = [m["message_text"] for m in prior if m["sender_type"] == "customer"]
-        customer_texts.append(msg["text"])
-
-        # 2) Extract structured details across the whole conversation + decide.
-        details = accumulate_from_messages(customer_texts)
-        decision = should_auto_reply(msg["text"], {"welcome_sent": welcome_sent})
-        category = detect_escalation(msg["text"])
-        is_escalation = decision.domain == "escalation" or bool(category)
-        will_send = bool(
-            decision.send_reply
-            and settings.evolution_auto_reply
-            and settings.evolution_live_ready
-            and not is_escalation
-        )
-
-        # 3) Store the inbound message with derived (non-PII) metadata.
+        stored_text = text or (msg.get("selection_id") or "shared location")
         inbound_msg = await messages_repo.add_message(
-            convo["id"],
-            "customer",
-            msg["text"],
-            status="received",
-            metadata={
-                "intent": decision.intent,
-                "domain": decision.domain,
-                "auto_reply_decision": "send" if will_send else "hold",
-                "escalation": category,
-            },
+            convo["id"], "customer", stored_text, status="received", wa_message_id=wa_id,
+            metadata={"selection_id": msg.get("selection_id"),
+                      "has_location": inbound_obj.is_location},
         )
-        await conversations_repo.register_inbound(convo["id"], msg["text"])
+        await conversations_repo.register_inbound(convo["id"], stored_text)
 
-        # 4) Backfill the customer profile from what we've learned. Address is
-        #    stored backend-only and is NOT logged.
-        cust_fields = details.customer_fields()
-        if cust_fields:
-            await customers_repo.update_customer_details(customer["id"], cust_fields)
-
-        # --- ESCALATION: flag + ticket, mark human-needed, never auto-resolve ---
-        if is_escalation:
-            reply = await handle_message(text=msg["text"], history=history, db=None)
+        # --- ESCALATION (interrupts everything, never auto-resolves) -----------
+        category = detect_escalation(text)
+        if category:
             flag_type, priority, team = _ESCALATION_FLAG.get(category, _DEFAULT_FLAG)
-            reason = (category or "handoff").replace("_", " ")
+            reason = category.replace("_", " ")
             open_order = await orders_repo.get_open_for_conversation(convo["id"])
             order_uuid = open_order["id"] if open_order else None
-
-            await conversations_repo.set_flagged(
-                convo["id"], reason=reason, priority=priority, team=team
-            )
-            await flags_repo.create(
-                conversation_id=convo["id"],
-                flag_type=flag_type,
-                priority=priority,
-                assigned_team=team,
-                reason=f"Agent flagged: {reason}",
-                suggested_reply=reply.text,
-                order_id=order_uuid,
-            )
-            await tickets_repo.create_or_update(
-                conversation_id=convo["id"],
-                ticket_type=flag_type,
-                priority=priority,
-                assigned_team=team,
-                title=f"{reason.title()} — WhatsApp",
-                description=f"Raised from WhatsApp conversation. Category: {reason}.",
-                order_uuid=order_uuid,
-            )
-            if order_uuid:
-                await order_events_repo.create(
-                    order_uuid=order_uuid,
-                    event_type="human_handoff_created",
-                    actor_type="agent",
-                    notes=f"Escalation raised: {reason}.",
-                )
+            await conversations_repo.set_flagged(convo["id"], reason=reason, priority=priority, team=team)
+            await flags_repo.create(conversation_id=convo["id"], flag_type=flag_type,
+                                    priority=priority, assigned_team=team,
+                                    reason=f"Agent flagged: {reason}", order_id=order_uuid)
+            await tickets_repo.create_or_update(conversation_id=convo["id"], ticket_type=flag_type,
+                                                priority=priority, assigned_team=team,
+                                                title=f"{reason.title()} — WhatsApp",
+                                                description=f"Raised from WhatsApp. Category: {reason}.",
+                                                order_uuid=order_uuid)
             if inbound_msg:
                 await messages_repo.set_status(inbound_msg["id"], "human_needed")
-            logger.info(
-                "evolution_inbound_escalation",
-                sender=masked,
-                allowed_sender=True,
-                auto_reply_decision="hold",
-                flag_type=flag_type,
-                order_linked=bool(order_uuid),
-            )
+            logger.info("evolution_inbound_escalation", sender=masked, flag_type=flag_type)
             processed += 1
             continue
 
-        # --- HAPPY PATH: create/update the draft order from the conversation ----
-        order_result = None
-        if details.has_booking_details():
-            order_result = await orders_repo.create_or_update_draft_from_conversation(
-                conversation_id=convo["id"], customer=customer, details=details
-            )
-
-        # 5) Auto-reply (only if opted in + approved by the decision layer).
-        if will_send:
-            if order_result and order_result["confirmed_now"]:
-                reply_text = _confirmation_reply(order_result["row"])
-            else:
-                reply = await handle_message(text=msg["text"], history=history, db=None)
-                reply_text = reply.text
-            try:
-                await EvolutionWhatsAppChannel.from_settings().send_text(
-                    to_phone=msg["phone"], text=reply_text
-                )
-                await messages_repo.add_message(
-                    convo["id"],
-                    "agent",
-                    reply_text,
-                    status="sent",
-                    metadata={
-                        "intent": decision.intent,
-                        "domain": decision.domain,
-                        "auto_reply_decision": "send",
-                    },
-                )
-                logger.info(
-                    "evolution_auto_reply_sent",
-                    sender=masked,
-                    allowed_sender=True,
-                    order_confirmed=bool(order_result and order_result["confirmed_now"]),
-                )
-            except Exception as exc:  # noqa: BLE001 - never fail webhook on send error
-                logger.warning("evolution_auto_reply_failed", sender=masked, error=str(exc))
-        else:
-            # Stored (and any draft updated), but no WhatsApp reply goes out.
-            no_reply_reason = (
-                decision.reason if not decision.send_reply else "auto_reply_disabled"
-            )
-            logger.info(
-                "evolution_inbound_held",
-                sender=masked,
-                allowed_sender=True,
-                auto_reply_decision="hold",
-                no_auto_reply_reason=no_reply_reason,
-                order_touched=bool(order_result),
+        # --- PAUSED / human-takeover: store only, never auto-reply -------------
+        # The message is already persisted above (ops can see it). We do NOT run
+        # the booking state machine or send anything, so a human operator owns the
+        # conversation and the AI never talks over them. AI resumes on the next
+        # message once takeover ends / mode returns to test|live.
+        if mode == "paused" or convo.get("status") == "human_takeover" or not live:
+            reason = (
+                "human_takeover" if convo.get("status") == "human_takeover"
+                else "agent_paused" if mode == "paused"
+                else "replies_disabled"
             )
             if inbound_msg:
                 await messages_repo.set_status(inbound_msg["id"], "no_auto_reply")
+            logger.info("evolution_inbound_held", sender=masked, agent_mode=mode,
+                        no_auto_reply_reason=reason)
+            processed += 1
+            continue
 
+        # --- BOOKING routing ---------------------------------------------------
+        active = await orders_repo.get_active_booking(convo["id"])
+        state = active.get("conversation_state") if active else None
+        booking_row = None
+        reply = None
+
+        if state in booking_flow.ACTIVE_STATES:
+            booking_row = active
+            reply = await booking_flow.advance(_booking_from_row(active), inbound_obj,
+                                               today=_today(), available_slots=slots_repo.available_slots)
+        elif booking_flow.is_book_pickup_intent(text) or _is_booking_selection(inbound_obj.selection_id):
+            booking_row = await orders_repo.start_booking(convo["id"], customer)
+            logger.info("booking_intent_detected", sender=masked, order=booking_row["order_id"])
+            if _is_booking_selection(inbound_obj.selection_id) or text.strip().isdigit():
+                reply = await booking_flow.advance(_booking_from_row(booking_row), inbound_obj,
+                                                   today=_today(), available_slots=slots_repo.available_slots)
+            else:
+                reply = booking_flow.begin()
+
+        if reply is not None:
+            order_uuid = booking_row["id"]
+            if reply.confirm_now:
+                row, created_now = await orders_repo.confirm_booking(order_uuid)
+                to_send = booking_flow.BookingReply(
+                    text=_final_confirmation_text(row) if row else "Your booking is confirmed.",
+                    state=booking_flow.BOOKING_CONFIRMED,
+                )
+                logger.info("booking_confirmed", sender=masked,
+                            order=row["order_id"] if row else None, created_now=created_now)
+            elif reply.cancel_now:
+                await orders_repo.cancel_booking(order_uuid)
+                to_send = reply
+                logger.info("booking_cancelled", sender=masked, order=booking_row["order_id"])
+            else:
+                await orders_repo.apply_booking_updates(order_uuid, reply.updates, reply.state)
+                to_send = reply
+                if reply.log_event:
+                    logger.info("booking_step", sender=masked,
+                                booking_event=reply.log_event, state=reply.state)
+
+            if live:
+                channel = EvolutionWhatsAppChannel.from_settings()
+                try:
+                    sent = await _send_reply(channel, msg["phone"], to_send)
+                    await messages_repo.add_message(convo["id"], "agent", sent, status="sent",
+                                                    metadata={"booking_state": to_send.state})
+                except Exception as exc:  # noqa: BLE001 - never fail webhook on send error
+                    logger.warning("evolution_send_failed", sender=masked, error=str(exc))
+            processed += 1
+            continue
+
+        # --- NON-BOOKING (greetings / general questions) -----------------------
+        prior = await messages_repo.list_messages(convo["id"])
+        history = [(m["sender_type"], m["message_text"]) for m in prior
+                   if m["sender_type"] in ("customer", "agent")]
+        welcome_sent = any(m["sender_type"] == "agent" for m in prior)
+        decision = should_auto_reply(text, {"welcome_sent": welcome_sent})
+        will_send = bool(decision.send_reply and live)
+
+        if will_send:
+            agent_reply = await handle_message(text=text, history=history, db=None)
+            try:
+                await EvolutionWhatsAppChannel.from_settings().send_text(
+                    to_phone=msg["phone"], text=agent_reply.text)
+                await messages_repo.add_message(convo["id"], "agent", agent_reply.text,
+                                                status="sent", metadata={"intent": decision.intent})
+                logger.info("evolution_auto_reply_sent", sender=masked)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("evolution_auto_reply_failed", sender=masked, error=str(exc))
+        else:
+            logger.info("evolution_inbound_held", sender=masked,
+                        no_auto_reply_reason=decision.reason)
+            if inbound_msg:
+                await messages_repo.set_status(inbound_msg["id"], "no_auto_reply")
         processed += 1
 
-    return {"status": "ok", "stored": True, "processed": processed, "skipped": skipped}
+    return {"status": "ok", "stored": True, "processed": processed,
+            "skipped": skipped, "duplicates": duplicates}

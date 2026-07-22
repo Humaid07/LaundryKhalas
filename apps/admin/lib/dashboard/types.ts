@@ -14,13 +14,18 @@ export type City =
 
 export type Channel = "WhatsApp" | "Website" | "App" | "Walk-in" | "B2B";
 
+// Canonical LaundryKhalas 8-service taxonomy (mirror of service-catalog.ts /
+// the backend catalog). These exact display names are the values used by every
+// mock Order.service field and the global Service filter.
 export type ServiceType =
-  | "Wash & Fold"
-  | "Dry Cleaning"
-  | "Ironing / Pressing"
-  | "Blankets / Duvets"
-  | "Curtains / Upholstery"
-  | "Business Laundry";
+  | "Premium Wash & Fold"
+  | "Boutique Clean & Press"
+  | "Steam Pressing Only"
+  | "Luxe Bed & Bath Care"
+  | "Artisan Shoe Restoration"
+  | "Luxury Bag Spa"
+  | "Tailoring & Alterations"
+  | "Deep Carpet & Curtain Care";
 
 export type OrderStatus =
   | "New"

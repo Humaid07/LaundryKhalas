@@ -140,8 +140,20 @@ def _build_facts(
         f"still missing: {', '.join(missing) if missing else 'none - all details collected'}.",
     ]
     if intent == "pricing_question" and slots["service_type"]:
+        from rules import service_by_id
+
+        service = service_by_id(slots["service_type"])
         price = tools.lookup_price(slots["service_type"])
-        if price:
+        # Services priced only after inspection/measurement (bag spa, tailoring,
+        # carpet/curtain) must NOT be auto-quoted an exact total — the team
+        # confirms after seeing the item (CLAUDE.md RULE 7/8), even though a
+        # 'from' starting price exists on the website.
+        if service and service.get("requires_manual_quote"):
+            facts.append(
+                f"{slots['service_type']} is priced after inspection/measurement - do NOT "
+                "quote an exact figure; tell the customer the team will confirm the exact price."
+            )
+        elif price:
             facts.append(
                 f"Known price for {slots['service_type']}: {price['price']} {price['currency']} "
                 f"per {price['unit']} (minimum {price['min_price']} {price['currency']})."

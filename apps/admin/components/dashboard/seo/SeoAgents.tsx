@@ -50,6 +50,29 @@ import { applyGlobalFilters } from "@/lib/dashboard/filters";
 import type { SeoTask } from "@/lib/dashboard/types";
 import { cn } from "@/lib/utils";
 
+/* --------------------------- live data hook (API) --------------------------- */
+
+// Fetch a subsection's rows from the SEO backend; fall back to the passed static
+// list until it resolves (or if the backend is unreachable), so the page always
+// renders. The fetcher must be a stable module-level reference.
+function useSeoLive<T>(fetcher: () => Promise<T[]>, fallback: T[]): T[] {
+  const [rows, setRows] = useState<T[]>(fallback);
+  useEffect(() => {
+    let active = true;
+    fetcher()
+      .then((r) => {
+        if (active && Array.isArray(r) && r.length) setRows(r);
+      })
+      .catch(() => {
+        /* keep fallback */
+      });
+    return () => {
+      active = false;
+    };
+  }, [fetcher]);
+  return rows;
+}
+
 /* ------------------------------- shared table ------------------------------- */
 
 /** Shared empty state for lists narrowed to nothing by the global filters. */
@@ -110,11 +133,12 @@ function BriefPanel() {
 }
 
 function OverviewSection() {
+  const kpis = useSeoLive(seoAgentApi.getOverviewKpis, seoKpis);
   return (
     <div className="space-y-6">
       <SnapshotRow label="SEO overview" />
       <BriefPanel />
-      <StatGrid stats={seoKpis} cols="auto" />
+      <StatGrid stats={kpis} cols="auto" />
       <div className="grid gap-4 xl:grid-cols-3">
         <ChartCard title="GSC performance" subtitle="Clicks & impressions · 4 weeks" className="xl:col-span-2">
           <AreaTrend data={gscPerformance} series={[{ key: "Impressions", color: CHART.plum }, { key: "Clicks", color: CHART.rose }]} />
@@ -217,7 +241,7 @@ const gscCols: Column<GscPage>[] = [
 
 function GscSection() {
   const { filters } = useFilters();
-  const pages = applyGlobalFilters(gscPages, filters);
+  const pages = applyGlobalFilters(useSeoLive(seoAgentApi.getGscPages, gscPages), filters);
   return (
     <div className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-3">
@@ -250,7 +274,7 @@ const indexCols: Column<IndexRow>[] = [
 
 function IndexingSection() {
   const { filters } = useFilters();
-  const queue = applyGlobalFilters(indexingQueue, filters);
+  const queue = applyGlobalFilters(useSeoLive(seoAgentApi.getIndexing, indexingQueue), filters);
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-3">
@@ -272,7 +296,7 @@ function IndexingSection() {
 
 function ContentPipelineSection() {
   const { filters } = useFilters();
-  const tasks = applyGlobalFilters(seoTasks, filters);
+  const tasks = applyGlobalFilters(useSeoLive(seoAgentApi.getContentTasks, seoTasks), filters);
   return (
     <div className="space-y-4">
       <ChartCard title="Content pipeline" subtitle="Overall · articles & area pages by stage">
@@ -301,7 +325,7 @@ const hyperCols: Column<HyperlocalPage>[] = [
 
 function HyperlocalSection() {
   const { filters } = useFilters();
-  const pages = applyGlobalFilters(hyperlocalPages, filters);
+  const pages = applyGlobalFilters(useSeoLive(seoAgentApi.getHyperlocal, hyperlocalPages), filters);
   return (
     <Panel padded={false}>
       <PanelHeader title="Hyperlocal area pages" subtitle="Area/market pages with duplicate checks" className="p-4" action={<StatusBadge tone="danger">{pages.filter((p) => p.status === "Duplicate Risk").length} duplicate risk</StatusBadge>} />
@@ -327,7 +351,7 @@ function TechnicalSeoSection() {
   const { filters } = useFilters();
   // Site-wide issues are tagged scope:"global" and stay visible under geo filters;
   // market-specific issues (e.g. a Dubai cannibalization) carry a city.
-  const issues = applyGlobalFilters(techSeoIssues, filters);
+  const issues = applyGlobalFilters(useSeoLive(seoAgentApi.getTechnicalIssues, techSeoIssues), filters);
   return (
     <Panel padded={false}>
       <PanelHeader title="Technical SEO" subtitle="Crawl, cannibalization, decay & internal linking" className="p-4" action={<StatusBadge tone="warning">{issues.filter((t) => t.status !== "Resolved").length} open</StatusBadge>} />
@@ -345,7 +369,7 @@ function CompetitorsSection() {
   const Icon = { up: TrendingUp, down: TrendingDown, flat: Minus };
   // Domain-wide signals (backlinks/PR) are scope:"global"; ranking/page moves
   // tied to a market carry a city.
-  const rows = applyGlobalFilters(competitors, filters);
+  const rows = applyGlobalFilters(useSeoLive(seoAgentApi.getCompetitors, competitors), filters);
   return (
     <Panel>
       <PanelHeader title="Competitor monitor" subtitle="Ranking movement, new pages and backlinks" />
@@ -385,7 +409,7 @@ const aiCols: Column<AiSearchRow>[] = [
 
 function AiSearchSection() {
   const { filters } = useFilters();
-  const rows = applyGlobalFilters(aiSearch, filters);
+  const rows = applyGlobalFilters(useSeoLive(seoAgentApi.getAiSearch, aiSearch), filters);
   return (
     <Panel padded={false}>
       <PanelHeader title="AI search visibility" subtitle="Answer-engine presence & structured content opportunities" className="p-4" action={<StatusBadge tone="warning">{rows.filter((a) => a.presence === "Absent").length} gaps</StatusBadge>} />

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from seo_agents import approvals, reports, runner, store
+from seo_agents import approvals, dashboard_data, reports, runner, store
 from seo_agents.catalog import get_agent, list_agents
 from seo_agents.schemas import (
     ApprovalActionRequest,
@@ -154,6 +154,40 @@ async def daily_report():
 @router.get("/reports/weekly", response_model=SEOReport)
 async def weekly_report():
     return reports.weekly()
+
+
+# --- dashboard subsection tables ------------------------------------------
+# Served in the exact shapes the admin subsection tables render (see
+# seo_agents/dashboard_data.py). Rows carry market/city/service (+ scope=global
+# for site-wide rows) so the dashboard global filters slice them.
+@router.get("/dashboard/gsc-pages")
+async def dashboard_gsc_pages():
+    return dashboard_data.GSC_PAGES
+
+
+@router.get("/dashboard/indexing")
+async def dashboard_indexing():
+    return dashboard_data.INDEXING_QUEUE
+
+
+@router.get("/dashboard/hyperlocal")
+async def dashboard_hyperlocal():
+    return dashboard_data.HYPERLOCAL_PAGES
+
+
+@router.get("/dashboard/technical-issues")
+async def dashboard_technical_issues():
+    return dashboard_data.TECH_SEO_ISSUES
+
+
+@router.get("/dashboard/competitors")
+async def dashboard_competitors():
+    return dashboard_data.COMPETITORS
+
+
+@router.get("/dashboard/ai-search")
+async def dashboard_ai_search():
+    return dashboard_data.AI_SEARCH
 
 
 # --- overview KPIs ---------------------------------------------------------

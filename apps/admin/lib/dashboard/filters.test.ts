@@ -41,14 +41,14 @@ interface Row extends Filterable {
   id: string;
 }
 const rows: Row[] = [
-  { id: "dxb-wa-dry", city: "Dubai", channel: "WhatsApp", service: "Dry Cleaning", createdAt: "2026-07-20", status: "Active" },
-  { id: "dxb-web-wash", city: "Dubai", channel: "Website", service: "Wash & Fold", createdAt: "2026-07-10" },
-  { id: "auh-wa-dry", city: "Abu Dhabi", channel: "WhatsApp", service: "Dry Cleaning", createdAt: "2026-07-19" },
-  { id: "doha-app-iron", market: "Qatar", channel: "App", service: "Ironing", createdAt: "2026-07-18" },
-  { id: "ruh-b2b", country: "Saudi Arabia", channel: "B2B", service: "Wash & Fold", createdAt: "2026-07-01" },
+  { id: "dxb-wa-dry", city: "Dubai", channel: "WhatsApp", service: "Boutique Clean & Press", createdAt: "2026-07-20", status: "Active" },
+  { id: "dxb-web-wash", city: "Dubai", channel: "Website", service: "Premium Wash & Fold", createdAt: "2026-07-10" },
+  { id: "auh-wa-dry", city: "Abu Dhabi", channel: "WhatsApp", service: "Boutique Clean & Press", createdAt: "2026-07-19" },
+  { id: "doha-app-iron", market: "Qatar", channel: "App", service: "Steam Pressing Only", createdAt: "2026-07-18" },
+  { id: "ruh-b2b", country: "Saudi Arabia", channel: "B2B", service: "Premium Wash & Fold", createdAt: "2026-07-01" },
   { id: "london-lead", region: "Europe", city: "London", createdAt: "2026-07-15" }, // non-GCC
-  { id: "facility-marina", area: "Dubai · Marina", service: "Dry Cleaning" }, // area-derived city
-  { id: "sitewide-seo", scope: "global", service: "Dry Cleaning" }, // bypasses geo
+  { id: "facility-marina", area: "Dubai · Marina", service: "Boutique Clean & Press" }, // area-derived city
+  { id: "sitewide-seo", scope: "global", service: "Boutique Clean & Press" }, // bypasses geo
   { id: "no-geo-note" }, // carries no geo signal at all
 ];
 
@@ -86,11 +86,11 @@ const rows: Row[] = [
   assert(ids.includes("facility-marina"), "Channel filter passes through a row with no channel field");
 }
 
-/* 5. Service filter — Dry Cleaning keeps dry-cleaning rows + rows with no service. */
+/* 5. Service filter — Boutique Clean & Press keeps dry-cleaning rows + rows with no service. */
 {
-  const ids = applyGlobalFilters(rows, f({ service: "Dry Cleaning" })).map((r) => r.id);
-  assert(ids.includes("dxb-wa-dry") && ids.includes("auh-wa-dry") && ids.includes("facility-marina"), "Service=Dry Cleaning keeps dry-cleaning rows");
-  assert(!ids.includes("dxb-web-wash") && !ids.includes("doha-app-iron"), "Service=Dry Cleaning drops other services");
+  const ids = applyGlobalFilters(rows, f({ service: "Boutique Clean & Press" })).map((r) => r.id);
+  assert(ids.includes("dxb-wa-dry") && ids.includes("auh-wa-dry") && ids.includes("facility-marina"), "Service=Boutique Clean & Press keeps dry-cleaning rows");
+  assert(!ids.includes("dxb-web-wash") && !ids.includes("doha-app-iron"), "Service=Boutique Clean & Press drops other services");
   assert(ids.includes("no-geo-note"), "Service filter passes through a row with no service field");
 }
 
@@ -105,10 +105,10 @@ const rows: Row[] = [
   assert(ids.includes("facility-marina"), "range=Today passes through a row with no date");
 }
 
-/* 7. Combined filters — UAE + Dubai + WhatsApp + Dry Cleaning narrows correctly. */
+/* 7. Combined filters — UAE + Dubai + WhatsApp + Boutique Clean & Press narrows correctly. */
 {
-  const ids = applyGlobalFilters(rows, f({ market: "UAE", city: "Dubai", channel: "WhatsApp", service: "Dry Cleaning" })).map((r) => r.id);
-  assert(ids.includes("dxb-wa-dry"), "Combined UAE/Dubai/WhatsApp/Dry Cleaning keeps the matching row");
+  const ids = applyGlobalFilters(rows, f({ market: "UAE", city: "Dubai", channel: "WhatsApp", service: "Boutique Clean & Press" })).map((r) => r.id);
+  assert(ids.includes("dxb-wa-dry"), "Combined UAE/Dubai/WhatsApp/Boutique Clean & Press keeps the matching row");
   assert(!ids.includes("dxb-web-wash") && !ids.includes("auh-wa-dry"), "Combined filters exclude non-matching rows");
 }
 
@@ -134,7 +134,7 @@ const rows: Row[] = [
 {
   const opts = getAvailableFilterOptions(rows);
   assert(opts.cities.includes("Dubai") && opts.cities.includes("Abu Dhabi"), "getAvailableFilterOptions surfaces cities");
-  assert(opts.channels.includes("WhatsApp") && opts.services.includes("Dry Cleaning"), "getAvailableFilterOptions surfaces channels & services");
+  assert(opts.channels.includes("WhatsApp") && opts.services.includes("Boutique Clean & Press"), "getAvailableFilterOptions surfaces channels & services");
 }
 
 /* 11. No filters — everything passes (isFiltered false). */

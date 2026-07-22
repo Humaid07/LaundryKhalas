@@ -50,8 +50,23 @@ Full mapping + data contract: [[seo-agent-dashboard-contract]].
 `GET /reports/daily`, `GET /reports/weekly`, `GET /overview`.
 
 ## 5. Dashboard pages wired
-- **Agent Fleet** (`/seo-agents/agent-fleet`): LIVE — renders all 16 agents from `/api/seo/agent-health`, graceful fallback to the static list.
-- Client methods exist (same DTOs) for Overview, GSC, Indexing, Content Pipeline, Hyperlocal, Technical, Competitors, AI Search, Reports, Approvals — these subsections still render their existing `seo-data.ts` mock arrays; swapping each to the client is a mechanical next step (adapter is ready).
+All content subsections now pull from the SEO API via `seoAgentApi`, each with a
+graceful fallback to the previous static array (`useSeoLive` hook) so the page
+always renders:
+- **Agent Fleet** → `/api/seo/agent-health` (all 16 agents)
+- **SEO Overview** KPI row → `/api/seo/overview`
+- **GSC Performance** table → `/api/seo/dashboard/gsc-pages`
+- **Indexing** queue → `/api/seo/dashboard/indexing`
+- **Content Pipeline** tasks → `/api/seo/tasks` (live approval tasks mapped to the table)
+- **Hyperlocal Pages** → `/api/seo/dashboard/hyperlocal`
+- **Technical SEO** → `/api/seo/dashboard/technical-issues`
+- **Competitors** → `/api/seo/dashboard/competitors`
+- **AI Search** → `/api/seo/dashboard/ai-search`
+
+Backend serves the six subsection tables in the exact frontend row shapes
+(`seo_agents/dashboard_data.py`), with `market`/`service` added so global filters
+slice them. Charts (time-series/donuts) and the Reports cards still use their
+existing mock modules (the backend produces no time-series yet).
 
 ## 6. Mock / live status
 - **Mock-only:** all agent output (deterministic fixtures in `mock_sources.py`), in-memory store, GSC data, indexing data. Resets on backend restart.

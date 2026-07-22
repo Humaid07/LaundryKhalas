@@ -47,16 +47,72 @@ def tone_rules() -> dict:
     return _load("agent_tone_rules.json")
 
 
+def pickup_instructions() -> list[dict]:
+    """Stable [{code, label}] pickup-instruction options for the booking flow's
+    instructions step. Source of truth: config/pickup_instructions.json."""
+    return _load("pickup_instructions.json")["instructions"]
+
+
 # --- Convenience accessors used across the agent --------------------------
 
 def service_catalog() -> list[dict]:
-    """List of {key, label, keywords, pricing} — the configured services."""
+    """List of {service_id/key, display_name/label, aliases/keywords, pricing,
+    unit_type, category, requires_manual_quote, ...} — the configured services,
+    synced to the live LaundryKhalas website taxonomy."""
     return services_config()["services"]
 
 
+def active_service_catalog() -> list[dict]:
+    """Only services with ``active`` truthy (default true) — what the agent
+    offers and the dashboard/SEO taxonomy derive from."""
+    return [s for s in service_catalog() if s.get("active", True)]
+
+
 def service_labels() -> dict[str, str]:
-    """service key -> display label."""
+    """service id -> display label."""
     return {s["key"]: s["label"] for s in service_catalog()}
+
+
+def service_by_id(service_id: str | None) -> dict | None:
+    """Full canonical service object for a service_id/key, or None."""
+    if not service_id:
+        return None
+    for s in service_catalog():
+        if s.get("service_id", s.get("key")) == service_id or s.get("key") == service_id:
+            return s
+    return None
+
+
+def service_ids() -> list[str]:
+    """Ordered list of canonical service ids."""
+    return [s.get("service_id", s.get("key")) for s in service_catalog()]
+
+
+def service_options() -> list[dict]:
+    """[{id, label, unit_type, starting_price_aed, requires_manual_quote}] for the
+    active services — the ordered options the WhatsApp agent shows when asking
+    the customer which service they need, and the dashboard filter source."""
+    return [
+        {
+            "id": s.get("service_id", s.get("key")),
+            "label": s["label"],
+            "unit_type": s.get("unit_type"),
+            "starting_price_aed": s.get("starting_price_aed"),
+            "requires_manual_quote": bool(s.get("requires_manual_quote")),
+        }
+        for s in active_service_catalog()
+    ]
+
+
+def promotional_items() -> list[dict]:
+    """Verified item-level promo prices from the live site (illustrative/reference
+    only — never auto-applied to a customer order)."""
+    return services_config().get("promotional_items", [])
+
+
+def service_promises() -> list[str]:
+    """The customer-facing service promises shown on the live website."""
+    return services_config().get("service_promises", [])
 
 
 def refusal_message() -> str:

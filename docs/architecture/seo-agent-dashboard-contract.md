@@ -56,10 +56,17 @@ getSeoOverview`. Every method has a same-shape mock fallback so the dashboard ne
 breaks offline ("mock now, API next, same DTO"). Dashboard → FastAPI only (never Supabase).
 
 ## Wiring status (Phase 1)
-- **Live now:** Agent Fleet → `/api/seo/agent-health` (all 16 agents).
-- **Adapter-ready (still mock arrays):** Overview, GSC, Indexing, Content Pipeline,
-  Hyperlocal, Technical, Competitors, AI Search, Reports, Approvals, Agent Health.
-  Swapping each to `seoAgentApi` is mechanical — DTOs already match the row shapes.
+- **Live now (via `seoAgentApi` + `useSeoLive` fallback):** Agent Fleet
+  (`/agent-health`), Overview KPIs (`/overview`), GSC Performance
+  (`/dashboard/gsc-pages`), Indexing (`/dashboard/indexing`), Content Pipeline
+  tasks (`/tasks`), Hyperlocal (`/dashboard/hyperlocal`), Technical SEO
+  (`/dashboard/technical-issues`), Competitors (`/dashboard/competitors`),
+  AI Search (`/dashboard/ai-search`).
+- **Still mock (no live equivalent yet):** subsection charts (time-series/donuts)
+  and the Reports cards, plus Dev & Automation Agent Health rows. These are the
+  remaining mechanical swaps.
+- Every wired subsection keeps `applyGlobalFilters`, and rows carry
+  `market/city/service` (+ `scope="global"`) so global filters still apply.
 
 ## Filters
 Every SEO row carries `market/country/city/service` + a date; site-wide rows use

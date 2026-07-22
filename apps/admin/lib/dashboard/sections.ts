@@ -30,6 +30,8 @@ export type Subsection = {
   icon: LucideIcon;
   kpis?: SubKpi[];
   status?: { label: string; tone: Tone };
+  /** Optional sidebar sub-tab count badge (subsection-specific). */
+  badge?: number;
 };
 
 export type SectionDef = {
@@ -64,10 +66,10 @@ export const SECTIONS: Record<string, SectionDef> = {
       "Your operational command center. Open a section to manage it on its own focused page.",
     cols: 2,
     subsections: [
-      { slug: "customer-facing", label: "Customer Facing", icon: Headset, description: "WhatsApp conversations, tickets, cancellations, follow-ups and support escalations.", kpis: [{ label: "Open convos", value: "24" }, { label: "Pending", value: "8", tone: "warning" }, { label: "Urgent", value: "5", tone: "danger" }], status: { label: "Live console", tone: "success" } },
-      { slug: "facility-facing", label: "Facility Facing", icon: Factory, description: "Facility assignment, cleaning progress, quality checks, issues and delivery handoff.", kpis: [{ label: "In cleaning", value: "18" }, { label: "QC pending", value: "6", tone: "warning" }, { label: "Delayed", value: "3", tone: "danger" }], status: { label: "Privacy on", tone: "info" } },
-      { slug: "drivers", label: "Drivers", icon: Truck, description: "Pickup/delivery drivers, queues, delivery progress, route status and driver issues.", kpis: [{ label: "Active", value: "12", tone: "success" }, { label: "Assigned", value: "9" }, { label: "Delayed", value: "4", tone: "danger" }] },
-      { slug: "customer-orders", label: "Customer Orders", icon: ClipboardList, description: "Every customer order from WhatsApp, website, app, B2B and manual bookings.", kpis: [{ label: "Active", value: "82", tone: "rose" }, { label: "Done today", value: "31", tone: "success" }, { label: "Changes", value: "7", tone: "warning" }] },
+      { slug: "customer-facing", label: "Customer Facing", icon: Headset, badge: 7, description: "WhatsApp conversations, tickets, cancellations, follow-ups and support escalations.", kpis: [{ label: "Open convos", value: "24" }, { label: "Pending", value: "8", tone: "warning" }, { label: "Urgent", value: "5", tone: "danger" }], status: { label: "Live console", tone: "success" } },
+      { slug: "facility-facing", label: "Facility Facing", icon: Factory, badge: 3, description: "Facility assignment, cleaning progress, quality checks, issues and delivery handoff.", kpis: [{ label: "In cleaning", value: "18" }, { label: "QC pending", value: "6", tone: "warning" }, { label: "Delayed", value: "3", tone: "danger" }], status: { label: "Privacy on", tone: "info" } },
+      { slug: "drivers", label: "Drivers", icon: Truck, badge: 12, description: "Pickup/delivery drivers, queues, delivery progress, route status and driver issues.", kpis: [{ label: "Active", value: "12", tone: "success" }, { label: "Assigned", value: "9" }, { label: "Delayed", value: "4", tone: "danger" }] },
+      { slug: "customer-orders", label: "Customer Orders", icon: ClipboardList, badge: 82, description: "Every customer order from WhatsApp, website, app, B2B and manual bookings.", kpis: [{ label: "Active", value: "82", tone: "rose" }, { label: "Done today", value: "31", tone: "success" }, { label: "Changes", value: "7", tone: "warning" }] },
     ],
   },
 
@@ -82,7 +84,7 @@ export const SECTIONS: Record<string, SectionDef> = {
       { slug: "overview", label: "Sales Overview", icon: TrendingUp, description: "Revenue & order KPIs, growth summary and quick charts.", kpis: [{ label: "Revenue", value: "AED 612K", tone: "rose" }, { label: "Growth", value: "+11.2%", tone: "success" }] },
       { slug: "markets", label: "Markets", icon: Globe2, description: "Sales by market, region and city — market comparison.", kpis: [{ label: "Top market", value: "UAE" }, { label: "Markets", value: "6" }] },
       { slug: "channels", label: "Channels", icon: Radio, description: "WhatsApp, Website, App, Manual and B2B — channel conversion.", kpis: [{ label: "Top channel", value: "WhatsApp" }, { label: "Channels", value: "5" }] },
-      { slug: "services", label: "Services", icon: WashingMachine, description: "Revenue and volume by service type.", kpis: [{ label: "Top service", value: "Wash & Fold" }, { label: "Services", value: "6" }] },
+      { slug: "services", label: "Services", icon: WashingMachine, description: "Revenue and volume by service type.", kpis: [{ label: "Top service", value: "Premium Wash & Fold" }, { label: "Services", value: "8" }] },
       { slug: "b2b-b2c", label: "B2B / B2C", icon: Building2, description: "Corporate/hotel/business vs consumer sales split.", kpis: [{ label: "B2B share", value: "34%", tone: "plum" }, { label: "B2C share", value: "66%" }] },
       { slug: "top-customers", label: "Top Customers", icon: Users, description: "Repeat, high-value customers and business accounts.", kpis: [{ label: "Accounts", value: "8" }, { label: "Top AOV", value: "AED 1.6K" }] },
       { slug: "conversion-funnel", label: "Conversion Funnel", icon: Filter, description: "Leads → inquiries → bookings → completed → lost.", kpis: [{ label: "Lead→order", value: "18.5%", tone: "success" }] },

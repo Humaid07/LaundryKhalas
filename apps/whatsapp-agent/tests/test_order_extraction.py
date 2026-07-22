@@ -58,7 +58,10 @@ def test_items_two_suits():
 
 def test_service_and_items_together():
     d = extract_customer_order_details("I need dry cleaning for two suits")
-    assert d.service_key == "dry_cleaning"
+    assert d.service_key == "boutique_clean_press"
+    assert d.service_label == "Boutique Clean & Press"
+    assert d.unit_type == "item"
+    assert d.requires_manual_quote is False
     assert d.items == [{"item": "Suit", "quantity": 2}]
 
 
@@ -89,7 +92,7 @@ def test_accumulate_full_booking_flow():
     assert d.name == "Amaan"
     assert d.area == "Dubai Marina"
     assert d.city == "Dubai"
-    assert d.service_key == "dry_cleaning"
+    assert d.service_key == "boutique_clean_press"
     assert {"item": "Suit", "quantity": 2} in d.items
     assert d.pickup_slot in ("tomorrow", "evening")
     assert d.payment_method == "Cash on delivery"

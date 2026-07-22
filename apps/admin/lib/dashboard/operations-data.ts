@@ -82,7 +82,7 @@ export interface OpsActivity {
 }
 
 export const customerActivity: OpsActivity[] = [
-  { id: "ca1", title: "New WhatsApp pickup request", detail: "Aisha Rahman · Wash & Fold · Dubai Marina", time: "2026-07-20T09:40:00Z", tone: "rose" },
+  { id: "ca1", title: "New WhatsApp pickup request", detail: "Aisha Rahman · Premium Wash & Fold · Dubai Marina", time: "2026-07-20T09:40:00Z", tone: "rose" },
   { id: "ca2", title: "Reply drafted, awaiting approval", detail: "Omar Haddad · share 'In Cleaning' status", time: "2026-07-20T09:38:00Z", tone: "warning" },
   { id: "ca3", title: "Human takeover started", detail: "Hassan Ali · curtain quality concern", time: "2026-07-20T09:22:00Z", tone: "info" },
   { id: "ca4", title: "Cancellation requested", detail: "Fatima Al-Suwaidi · order LK-24815", time: "2026-07-20T09:02:00Z", tone: "danger" },
@@ -139,14 +139,14 @@ export interface FacilityOrder {
 }
 
 export const facilityOrders: FacilityOrder[] = [
-  { id: "LK-24816", facility: "Khalidiya Plant", service: "Dry Cleaning", items: 3, area: "Abu Dhabi · Khalidiya", status: "In Cleaning", priority: "Standard", pickupReceived: "2026-07-20T08:55:00Z", expectedCompletion: "2026-07-21T10:00:00Z", quality: "N/A" },
-  { id: "LK-24808", facility: "West Bay Hub", service: "Business Laundry", items: 360, area: "Doha · West Bay", status: "Delayed", priority: "Urgent", pickupReceived: "2026-07-20T05:10:00Z", expectedCompletion: "2026-07-20T18:00:00Z", quality: "N/A" },
-  { id: "LK-24811", facility: "Seef Hub", service: "Wash & Fold", items: 1, area: "Manama · Seef", status: "Ready for Delivery", priority: "Standard", pickupReceived: "2026-07-20T06:20:00Z", expectedCompletion: "2026-07-20T12:00:00Z", quality: "Passed" },
-  { id: "LK-24812", facility: "Industrial Area Plant", service: "Curtains / Upholstery", items: 8, area: "Sharjah · Al Nahda", status: "Quality Check", priority: "High", pickupReceived: "2026-07-19T15:40:00Z", expectedCompletion: "2026-07-20T16:00:00Z", quality: "Pending" },
-  { id: "LK-24817", facility: "Marina Hub", service: "Wash & Fold", items: 10, area: "Dubai · Dubai Marina", status: "Ready for Delivery", priority: "Standard", pickupReceived: "2026-07-20T09:20:00Z", expectedCompletion: "2026-07-20T15:00:00Z", quality: "Passed" },
-  { id: "LK-24814", facility: "Al Quoz Plant", service: "Business Laundry", items: 100, area: "Dubai · Business Bay", status: "In Cleaning", priority: "High", pickupReceived: "2026-07-20T07:30:00Z", expectedCompletion: "2026-07-21T09:00:00Z", quality: "N/A" },
-  { id: "LK-24810", facility: "—", service: "Dry Cleaning", items: 3, area: "Kuwait City · Salmiya", status: "Awaiting Assignment", priority: "Standard", pickupReceived: "—", expectedCompletion: "—", quality: "N/A" },
-  { id: "LK-24818", facility: "—", service: "Blankets / Duvets", items: 2, area: "Dubai · JLT", status: "Awaiting Assignment", priority: "High", pickupReceived: "—", expectedCompletion: "—", quality: "N/A" },
+  { id: "LK-24816", facility: "Khalidiya Plant", service: "Boutique Clean & Press", items: 3, area: "Abu Dhabi · Khalidiya", status: "In Cleaning", priority: "Standard", pickupReceived: "2026-07-20T08:55:00Z", expectedCompletion: "2026-07-21T10:00:00Z", quality: "N/A" },
+  { id: "LK-24808", facility: "West Bay Hub", service: "Premium Wash & Fold", items: 360, area: "Doha · West Bay", status: "Delayed", priority: "Urgent", pickupReceived: "2026-07-20T05:10:00Z", expectedCompletion: "2026-07-20T18:00:00Z", quality: "N/A" },
+  { id: "LK-24811", facility: "Seef Hub", service: "Premium Wash & Fold", items: 1, area: "Manama · Seef", status: "Ready for Delivery", priority: "Standard", pickupReceived: "2026-07-20T06:20:00Z", expectedCompletion: "2026-07-20T12:00:00Z", quality: "Passed" },
+  { id: "LK-24812", facility: "Industrial Area Plant", service: "Deep Carpet & Curtain Care", items: 8, area: "Sharjah · Al Nahda", status: "Quality Check", priority: "High", pickupReceived: "2026-07-19T15:40:00Z", expectedCompletion: "2026-07-20T16:00:00Z", quality: "Pending" },
+  { id: "LK-24817", facility: "Marina Hub", service: "Premium Wash & Fold", items: 10, area: "Dubai · Dubai Marina", status: "Ready for Delivery", priority: "Standard", pickupReceived: "2026-07-20T09:20:00Z", expectedCompletion: "2026-07-20T15:00:00Z", quality: "Passed" },
+  { id: "LK-24814", facility: "Al Quoz Plant", service: "Premium Wash & Fold", items: 100, area: "Dubai · Business Bay", status: "In Cleaning", priority: "High", pickupReceived: "2026-07-20T07:30:00Z", expectedCompletion: "2026-07-21T09:00:00Z", quality: "N/A" },
+  { id: "LK-24810", facility: "—", service: "Boutique Clean & Press", items: 3, area: "Kuwait City · Salmiya", status: "Awaiting Assignment", priority: "Standard", pickupReceived: "—", expectedCompletion: "—", quality: "N/A" },
+  { id: "LK-24818", facility: "—", service: "Luxe Bed & Bath Care", items: 2, area: "Dubai · JLT", status: "Awaiting Assignment", priority: "High", pickupReceived: "—", expectedCompletion: "—", quality: "N/A" },
 ];
 
 export interface FacilityIssue {
@@ -176,10 +176,10 @@ export interface QualityCheck {
 }
 
 export const qualityChecks: QualityCheck[] = [
-  { id: "QC-901", orderId: "LK-24812", facility: "Industrial Area Plant", service: "Curtains / Upholstery", area: "Sharjah · Al Nahda", result: "Pending", note: "Re-check reported mark before handoff" },
-  { id: "QC-902", orderId: "LK-24817", facility: "Marina Hub", service: "Wash & Fold", area: "Dubai · Dubai Marina", result: "Passed", note: "Folded & bagged, ready" },
-  { id: "QC-903", orderId: "LK-24811", facility: "Seef Hub", service: "Wash & Fold", area: "Manama · Seef", result: "Passed", note: "OK" },
-  { id: "QC-904", orderId: "LK-24816", facility: "Khalidiya Plant", service: "Dry Cleaning", area: "Abu Dhabi · Khalidiya", result: "Pending", note: "Awaiting press completion" },
+  { id: "QC-901", orderId: "LK-24812", facility: "Industrial Area Plant", service: "Deep Carpet & Curtain Care", area: "Sharjah · Al Nahda", result: "Pending", note: "Re-check reported mark before handoff" },
+  { id: "QC-902", orderId: "LK-24817", facility: "Marina Hub", service: "Premium Wash & Fold", area: "Dubai · Dubai Marina", result: "Passed", note: "Folded & bagged, ready" },
+  { id: "QC-903", orderId: "LK-24811", facility: "Seef Hub", service: "Premium Wash & Fold", area: "Manama · Seef", result: "Passed", note: "OK" },
+  { id: "QC-904", orderId: "LK-24816", facility: "Khalidiya Plant", service: "Boutique Clean & Press", area: "Abu Dhabi · Khalidiya", result: "Pending", note: "Awaiting press completion" },
 ];
 
 export interface HandoffOrder {
@@ -308,13 +308,13 @@ export interface PickupJob {
 }
 
 export const pickupQueue: PickupJob[] = [
-  { orderId: "LK-24817", area: "Dubai · Dubai Marina", service: "Wash & Fold", pickupSlot: "Today 15:00–17:00", driver: "Ahmed Khan", status: "Driver Assigned", priority: "Standard", notes: "Building 2, concierge hold" },
-  { orderId: "LK-24818", area: "Dubai · JLT", service: "Blankets / Duvets", pickupSlot: "Today 16:00–18:00", driver: null, status: "Awaiting Driver", priority: "High", notes: "2 duvets, bulky" },
-  { orderId: "LK-24810", area: "Kuwait City · Salmiya", service: "Dry Cleaning", pickupSlot: "Tomorrow 13:00–15:00", driver: null, status: "Awaiting Driver", priority: "Standard", notes: "Reschedule confirmed" },
-  { orderId: "LK-24814", area: "Dubai · Business Bay", service: "Business Laundry", pickupSlot: "Today 12:00–14:00", driver: "Omar Saeed", status: "En Route to Customer", priority: "High", notes: "Reception pickup" },
-  { orderId: "LK-24820", area: "Abu Dhabi · Khalidiya", service: "Wash & Fold", pickupSlot: "Today 14:00–16:00", driver: "Fatima Noor", status: "Picked Up", priority: "Standard", notes: "Collected, en route to plant" },
-  { orderId: "LK-24821", area: "Dubai · Jumeirah", service: "Ironing / Pressing", pickupSlot: "Today 17:00–19:00", driver: "Bilal Ansari", status: "Driver Assigned", priority: "Standard", notes: "" },
-  { orderId: "LK-24808", area: "Doha · West Bay", service: "Business Laundry", pickupSlot: "Today 10:00–12:00", driver: null, status: "Delayed", priority: "Urgent", notes: "Driver not reachable — reassign" },
+  { orderId: "LK-24817", area: "Dubai · Dubai Marina", service: "Premium Wash & Fold", pickupSlot: "Today 15:00–17:00", driver: "Ahmed Khan", status: "Driver Assigned", priority: "Standard", notes: "Building 2, concierge hold" },
+  { orderId: "LK-24818", area: "Dubai · JLT", service: "Luxe Bed & Bath Care", pickupSlot: "Today 16:00–18:00", driver: null, status: "Awaiting Driver", priority: "High", notes: "2 duvets, bulky" },
+  { orderId: "LK-24810", area: "Kuwait City · Salmiya", service: "Boutique Clean & Press", pickupSlot: "Tomorrow 13:00–15:00", driver: null, status: "Awaiting Driver", priority: "Standard", notes: "Reschedule confirmed" },
+  { orderId: "LK-24814", area: "Dubai · Business Bay", service: "Premium Wash & Fold", pickupSlot: "Today 12:00–14:00", driver: "Omar Saeed", status: "En Route to Customer", priority: "High", notes: "Reception pickup" },
+  { orderId: "LK-24820", area: "Abu Dhabi · Khalidiya", service: "Premium Wash & Fold", pickupSlot: "Today 14:00–16:00", driver: "Fatima Noor", status: "Picked Up", priority: "Standard", notes: "Collected, en route to plant" },
+  { orderId: "LK-24821", area: "Dubai · Jumeirah", service: "Steam Pressing Only", pickupSlot: "Today 17:00–19:00", driver: "Bilal Ansari", status: "Driver Assigned", priority: "Standard", notes: "" },
+  { orderId: "LK-24808", area: "Doha · West Bay", service: "Premium Wash & Fold", pickupSlot: "Today 10:00–12:00", driver: null, status: "Delayed", priority: "Urgent", notes: "Driver not reachable — reassign" },
 ];
 
 export type DeliveryStatus =
@@ -337,12 +337,12 @@ export interface DeliveryJob {
 }
 
 export const deliveryQueue: DeliveryJob[] = [
-  { orderId: "LK-24817", area: "Dubai · Dubai Marina", service: "Wash & Fold", deliverySlot: "Today 18:00–20:00", driver: "Ahmed Khan", facility: "Marina Hub", status: "Driver Assigned", paymentStatus: "Pending" },
-  { orderId: "LK-24811", area: "Manama · Seef", service: "Wash & Fold", deliverySlot: "Today 13:00–15:00", driver: null, facility: "Seef Hub", status: "Awaiting Delivery", paymentStatus: "Paid" },
-  { orderId: "LK-24806", area: "Dubai · JBR", service: "Dry Cleaning", deliverySlot: "Today 11:00–12:00", driver: "Bilal Ansari", facility: "Marina Hub", status: "Delivered", paymentStatus: "Paid" },
-  { orderId: "LK-24816", area: "Abu Dhabi · Khalidiya", service: "Dry Cleaning", deliverySlot: "Tomorrow 10:00–12:00", driver: "Fatima Noor", facility: "Khalidiya Plant", status: "Driver Assigned", paymentStatus: "Pending" },
-  { orderId: "LK-24809", area: "Dubai · Business Bay", service: "Wash & Fold", deliverySlot: "Today 19:00–21:00", driver: "Omar Saeed", facility: "Al Quoz Plant", status: "En Route to Customer", paymentStatus: "Pending" },
-  { orderId: "LK-24805", area: "Sharjah · Al Nahda", service: "Blankets / Duvets", deliverySlot: "Today 20:00–22:00", driver: null, facility: "Industrial Area Plant", status: "Delayed", paymentStatus: "Pending" },
+  { orderId: "LK-24817", area: "Dubai · Dubai Marina", service: "Premium Wash & Fold", deliverySlot: "Today 18:00–20:00", driver: "Ahmed Khan", facility: "Marina Hub", status: "Driver Assigned", paymentStatus: "Pending" },
+  { orderId: "LK-24811", area: "Manama · Seef", service: "Premium Wash & Fold", deliverySlot: "Today 13:00–15:00", driver: null, facility: "Seef Hub", status: "Awaiting Delivery", paymentStatus: "Paid" },
+  { orderId: "LK-24806", area: "Dubai · JBR", service: "Boutique Clean & Press", deliverySlot: "Today 11:00–12:00", driver: "Bilal Ansari", facility: "Marina Hub", status: "Delivered", paymentStatus: "Paid" },
+  { orderId: "LK-24816", area: "Abu Dhabi · Khalidiya", service: "Boutique Clean & Press", deliverySlot: "Tomorrow 10:00–12:00", driver: "Fatima Noor", facility: "Khalidiya Plant", status: "Driver Assigned", paymentStatus: "Pending" },
+  { orderId: "LK-24809", area: "Dubai · Business Bay", service: "Premium Wash & Fold", deliverySlot: "Today 19:00–21:00", driver: "Omar Saeed", facility: "Al Quoz Plant", status: "En Route to Customer", paymentStatus: "Pending" },
+  { orderId: "LK-24805", area: "Sharjah · Al Nahda", service: "Luxe Bed & Bath Care", deliverySlot: "Today 20:00–22:00", driver: null, facility: "Industrial Area Plant", status: "Delayed", paymentStatus: "Pending" },
 ];
 
 export interface DriverPerformance {
@@ -468,13 +468,13 @@ export interface PaymentRecord {
 }
 
 export const paymentRecords: PaymentRecord[] = [
-  { orderId: "LK-AE-1024", customer: "Yusuf Ahmed", service: "Wash & Fold", amount: 145, method: "Pay on Delivery", status: "Pending", chargeStatus: "Not Charged", area: "Dubai · Dubai Marina", channel: "WhatsApp", createdAt: "2026-07-20T08:10:00Z" },
-  { orderId: "LK-AE-1025", customer: "Noor Salem", service: "Dry Cleaning", amount: 90, method: "Card", status: "Failed", chargeStatus: "Failed", area: "Dubai · JLT", channel: "App", createdAt: "2026-07-20T08:25:00Z" },
-  { orderId: "LK-AE-1026", customer: "Grand Bay Hotel", service: "Business Laundry", amount: 2800, method: "Invoice", status: "Invoice Sent", chargeStatus: "Invoice Sent", area: "Doha · West Bay", channel: "B2B", createdAt: "2026-07-19T14:00:00Z" },
-  { orderId: "LK-AE-1027", customer: "Mariam Khalid", service: "Ironing / Pressing", amount: 60, method: "Card", status: "Paid", chargeStatus: "Charged", area: "Abu Dhabi · Khalidiya", channel: "Website", createdAt: "2026-07-20T07:50:00Z" },
-  { orderId: "LK-AE-2031", customer: "Hamad Al Otaibi", service: "Wash & Fold", amount: 120, method: "Pay on Delivery", status: "Pending", chargeStatus: "Not Charged", area: "Sharjah · Al Nahda", channel: "WhatsApp", createdAt: "2026-07-20T09:15:00Z" },
-  { orderId: "LK-24817", customer: "Aisha Rahman", service: "Wash & Fold", amount: 85, method: "Card", status: "Paid", chargeStatus: "Charged", area: "Dubai · Dubai Marina", channel: "WhatsApp", createdAt: "2026-07-20T09:20:00Z" },
-  { orderId: "LK-24815", customer: "Fatima Al-Suwaidi", service: "Blankets / Duvets", amount: 150, method: "Card", status: "Refund Requested", chargeStatus: "Charged", area: "Doha · West Bay", channel: "App", createdAt: "2026-07-20T08:40:00Z" },
+  { orderId: "LK-AE-1024", customer: "Yusuf Ahmed", service: "Premium Wash & Fold", amount: 145, method: "Pay on Delivery", status: "Pending", chargeStatus: "Not Charged", area: "Dubai · Dubai Marina", channel: "WhatsApp", createdAt: "2026-07-20T08:10:00Z" },
+  { orderId: "LK-AE-1025", customer: "Noor Salem", service: "Boutique Clean & Press", amount: 90, method: "Card", status: "Failed", chargeStatus: "Failed", area: "Dubai · JLT", channel: "App", createdAt: "2026-07-20T08:25:00Z" },
+  { orderId: "LK-AE-1026", customer: "Grand Bay Hotel", service: "Premium Wash & Fold", amount: 2800, method: "Invoice", status: "Invoice Sent", chargeStatus: "Invoice Sent", area: "Doha · West Bay", channel: "B2B", createdAt: "2026-07-19T14:00:00Z" },
+  { orderId: "LK-AE-1027", customer: "Mariam Khalid", service: "Steam Pressing Only", amount: 60, method: "Card", status: "Paid", chargeStatus: "Charged", area: "Abu Dhabi · Khalidiya", channel: "Website", createdAt: "2026-07-20T07:50:00Z" },
+  { orderId: "LK-AE-2031", customer: "Hamad Al Otaibi", service: "Premium Wash & Fold", amount: 120, method: "Pay on Delivery", status: "Pending", chargeStatus: "Not Charged", area: "Sharjah · Al Nahda", channel: "WhatsApp", createdAt: "2026-07-20T09:15:00Z" },
+  { orderId: "LK-24817", customer: "Aisha Rahman", service: "Premium Wash & Fold", amount: 85, method: "Card", status: "Paid", chargeStatus: "Charged", area: "Dubai · Dubai Marina", channel: "WhatsApp", createdAt: "2026-07-20T09:20:00Z" },
+  { orderId: "LK-24815", customer: "Fatima Al-Suwaidi", service: "Luxe Bed & Bath Care", amount: 150, method: "Card", status: "Refund Requested", chargeStatus: "Charged", area: "Doha · West Bay", channel: "App", createdAt: "2026-07-20T08:40:00Z" },
 ];
 
 export interface PendingPayment {
@@ -530,9 +530,9 @@ export interface Adjustment {
 }
 
 export const adjustments: Adjustment[] = [
-  { orderId: "LK-24814", customer: "Business Bay Offices", originalAmount: 900, extraCharge: 120, reason: "Extra 40 shirts added at pickup", approvalStatus: "Approval Required", finalAmount: 1020, area: "Dubai · Business Bay", service: "Business Laundry" },
-  { orderId: "LK-24818", customer: "Sara Juma", originalAmount: 140, extraCharge: 35, reason: "Express turnaround surcharge", approvalStatus: "Approval Required", finalAmount: 175, area: "Dubai · JLT", service: "Blankets / Duvets" },
-  { orderId: "LK-24816", customer: "Omar Haddad", originalAmount: 90, extraCharge: 25, reason: "Additional stain treatment", approvalStatus: "Approved", finalAmount: 115, area: "Abu Dhabi · Khalidiya", service: "Dry Cleaning" },
+  { orderId: "LK-24814", customer: "Business Bay Offices", originalAmount: 900, extraCharge: 120, reason: "Extra 40 shirts added at pickup", approvalStatus: "Approval Required", finalAmount: 1020, area: "Dubai · Business Bay", service: "Premium Wash & Fold" },
+  { orderId: "LK-24818", customer: "Sara Juma", originalAmount: 140, extraCharge: 35, reason: "Express turnaround surcharge", approvalStatus: "Approval Required", finalAmount: 175, area: "Dubai · JLT", service: "Luxe Bed & Bath Care" },
+  { orderId: "LK-24816", customer: "Omar Haddad", originalAmount: 90, extraCharge: 25, reason: "Additional stain treatment", approvalStatus: "Approved", finalAmount: 115, area: "Abu Dhabi · Khalidiya", service: "Boutique Clean & Press" },
 ];
 
 export interface PaymentIssue {
@@ -568,10 +568,10 @@ export interface Invoice {
 }
 
 export const invoices: Invoice[] = [
-  { id: "INV-2201", businessCustomer: "Grand Bay Hotel", service: "Business Laundry", amount: 2800, billingPeriod: "Jul 2026", status: "Sent", dueDate: "2026-08-01", city: "Doha", channel: "B2B" },
-  { id: "INV-2202", businessCustomer: "West Bay Hotel", service: "Business Laundry", amount: 3200, billingPeriod: "Jun 2026", status: "Overdue", dueDate: "2026-07-15", city: "Doha", channel: "B2B" },
-  { id: "INV-2203", businessCustomer: "Business Bay Offices", service: "Wash & Fold", amount: 1450, billingPeriod: "Jul 2026", status: "Paid", dueDate: "2026-07-10", city: "Dubai", channel: "B2B" },
-  { id: "INV-2204", businessCustomer: "Marina Residences", service: "Curtains / Upholstery", amount: 980, billingPeriod: "Jul 2026", status: "Draft", dueDate: "2026-08-05", city: "Dubai", channel: "B2B" },
+  { id: "INV-2201", businessCustomer: "Grand Bay Hotel", service: "Premium Wash & Fold", amount: 2800, billingPeriod: "Jul 2026", status: "Sent", dueDate: "2026-08-01", city: "Doha", channel: "B2B" },
+  { id: "INV-2202", businessCustomer: "West Bay Hotel", service: "Premium Wash & Fold", amount: 3200, billingPeriod: "Jun 2026", status: "Overdue", dueDate: "2026-07-15", city: "Doha", channel: "B2B" },
+  { id: "INV-2203", businessCustomer: "Business Bay Offices", service: "Premium Wash & Fold", amount: 1450, billingPeriod: "Jul 2026", status: "Paid", dueDate: "2026-07-10", city: "Dubai", channel: "B2B" },
+  { id: "INV-2204", businessCustomer: "Marina Residences", service: "Deep Carpet & Curtain Care", amount: 980, billingPeriod: "Jul 2026", status: "Draft", dueDate: "2026-08-05", city: "Dubai", channel: "B2B" },
 ];
 
 export const paymentActivity: OpsActivity[] = [
@@ -708,9 +708,9 @@ export interface OrderCenterActivity {
 }
 
 export const orderCenterActivity: OrderCenterActivity[] = [
-  { id: "oc1", title: "New order created", detail: "LK-24810 · Dry Cleaning · Kuwait City", time: "2026-07-20T09:45:00Z", tone: "info" },
-  { id: "oc2", title: "Order out for delivery", detail: "LK-24817 · Wash & Fold · Dubai", time: "2026-07-20T09:20:00Z", tone: "rose" },
+  { id: "oc1", title: "New order created", detail: "LK-24810 · Boutique Clean & Press · Kuwait City", time: "2026-07-20T09:45:00Z", tone: "info" },
+  { id: "oc2", title: "Order out for delivery", detail: "LK-24817 · Premium Wash & Fold · Dubai", time: "2026-07-20T09:20:00Z", tone: "rose" },
   { id: "oc3", title: "Concern raised on order", detail: "LK-24812 · curtain returned with a mark", time: "2026-07-19T09:30:00Z", tone: "danger" },
-  { id: "oc4", title: "Order delivered", detail: "LK-24806 · Ironing · Dubai · rated 4★", time: "2026-07-19T10:20:00Z", tone: "success" },
+  { id: "oc4", title: "Order delivered", detail: "LK-24806 · Steam Pressing Only · Dubai · rated 4★", time: "2026-07-19T10:20:00Z", tone: "success" },
   { id: "oc5", title: "Order change requested", detail: "LK-24810 · reschedule pickup", time: "2026-07-20T09:05:00Z", tone: "plum" },
 ];

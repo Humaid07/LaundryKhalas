@@ -67,26 +67,35 @@ async def test_multi_turn_uses_same_conversation(client):
 
 
 async def test_slots_accumulate_across_turns_not_just_last_message(client):
+    # Turn 1: a bare pickup request with NO service must ask which service
+    # (never guess a service — CLAUDE.md RULE 8 / service-taxonomy spec) while
+    # still remembering the time given ("tomorrow") for later turns.
     first = await client.post(
         "/api/test-chat/message", json={"message": "I need laundry pickup tomorrow"}
     )
     conversation_id = first.json()["conversation_id"]
+    assert "which service" in first.json()["agent_reply"].lower()
 
+    # Turn 2: service ("Dry cleaning" -> Boutique Clean & Press) + area arrive.
+    # The agent must not re-ask area/time; it moves on to item details.
     second = await client.post(
         "/api/test-chat/message",
         json={"conversation_id": conversation_id, "message": "Dry cleaning in Dubai Marina"},
     )
-    # service + area (this turn) + time ("tomorrow", from turn 1) are now all
-    # known - the agent must not ask for area/time again.
     reply = second.json()["agent_reply"].lower()
+    assert "item details" in reply
     assert "which area" not in reply
     assert "what day or time" not in reply
-    assert "dubai marina" in reply and "tomorrow" in reply
 
+    # Turn 3: items complete the booking. The summary proves the earlier slots
+    # accumulated — the area from turn 2 and the time ("tomorrow") from turn 1
+    # are both still present rather than forgotten.
     third = await client.post(
-        "/api/test-chat/message", json={"conversation_id": conversation_id, "message": "7pm"}
+        "/api/test-chat/message", json={"conversation_id": conversation_id, "message": "2 suits"}
     )
-    assert "7pm" in third.json()["agent_reply"].lower()
+    reply3 = third.json()["agent_reply"].lower()
+    assert "dubai marina" in reply3
+    assert "tomorrow" in reply3
 
 
 @pytest.mark.parametrize("text", ["Hi", "hello!", "hey", "Good morning"])

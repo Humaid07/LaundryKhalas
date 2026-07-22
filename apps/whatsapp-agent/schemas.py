@@ -61,11 +61,17 @@ class OrderRead(BaseModel):
     conversation_id: str | None = None
     customer_name: str | None = None
     service_type: str | None = None
+    service_id: str | None = None
+    service_display_name: str | None = None
+    unit_type: str | None = None
+    requires_manual_quote: bool = False
     items: list[str] = []
     pickup_area: str | None = None
     pickup_address: str | None = None
     pickup_date: str | None = None
     pickup_time: str | None = None
+    pickup_instructions: str | None = None
+    booking_state: str | None = None
     city: str | None = None
     delivery_preference: str | None = None
     status: str
@@ -79,13 +85,32 @@ class OrderRead(BaseModel):
     payment: str | None = None
     source_channel: str
     is_demo: bool
+    # Dashboard-only fields (populated by the /search list; None elsewhere).
+    customer_phone: str | None = None
+    needs_attention: bool = False
+    conversation_status: str | None = None
+    human_takeover: bool = False
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None = None
 
 
+class OrderPage(BaseModel):
+    """Paginated order list for the dashboard Orders section."""
+    orders: list[OrderRead]
+    total: int
+    page: int
+    page_size: int
+
+
 class OrderStatusUpdate(BaseModel):
     status: str
+    actor_name: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
 
 class HumanTakeoverRequest(BaseModel):

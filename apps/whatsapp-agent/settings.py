@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     allow_test_seed: bool = False
     allow_test_reset: bool = False
 
+    # Demo (is_demo=true) rows are seeded fake orders/customers for local dev &
+    # demos. When false (the production-safe default), dashboard order APIs
+    # EXCLUDE is_demo rows and the local SQLite auto-seed is skipped. Real
+    # WhatsApp orders are is_demo=false, so they always show regardless.
+    enable_demo_data: bool = False
+
     # Supabase connection. DATABASE_URL (below) is the backend-only Postgres DSN.
     # The service role key is BACKEND-ONLY and must never reach the frontend.
     supabase_url: str = ""
@@ -88,6 +94,28 @@ class Settings(BaseSettings):
     # autonomous reply. Example: EVOLUTION_ALLOWED_TEST_NUMBERS=+971502485658
     evolution_allowed_test_numbers: str = ""
 
+    # Agent operating mode: test | live | paused. SAFE DEFAULT = paused (the
+    # agent NEVER auto-replies live by accident — a missing/invalid value also
+    # resolves to paused).
+    #   test   -> reply ONLY to numbers on EVOLUTION_ALLOWED_TEST_NUMBERS
+    #   live   -> reply to every valid customer number
+    #   paused -> store incoming messages, send NO automated reply
+    whatsapp_agent_mode: str = "paused"
+
+    # Draft orders with no confirmation older than this become 'abandoned' when the
+    # expiry job runs (scripts/expire_drafts.py). Confirmed orders are never touched.
+    draft_expiry_hours: int = 24
+
+    # --- Auth / RBAC ---
+    # When true, every dashboard /api/* endpoint requires a valid JWT + role.
+    # Default false so local dev works without logging in; MUST be true in
+    # staging/production. Webhooks and /health are never auth-gated.
+    require_auth: bool = False
+    # HMAC secret for signing dashboard JWTs. MUST be set (long random) when
+    # require_auth=true. In dev an ephemeral fallback is used with a warning.
+    jwt_secret: str = ""
+    jwt_expiry_hours: int = 12
+
     # Meta WhatsApp Cloud API — FUTURE provider. Placeholders; required only when
     # whatsapp_mode=meta. Never required for mock or evolution.
     meta_whatsapp_access_token: str = ""
@@ -107,6 +135,30 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
+    @property
+    def jwt_secret_effective(self) -> str:
+        """The JWT signing secret. Falls back to a fixed dev-only secret when
+        unset AND auth is not required; when require_auth=true a real JWT_SECRET
+        must be provided (an unset secret makes tokens unverifiable → all
+        requests are rejected, which is fail-safe)."""
+        if self.jwt_secret:
+            return self.jwt_secret
+        return "" if self.require_auth else "dev-only-insecure-jwt-secret"
+
+    @property
+    def agent_operating_mode(self) -> str:
+        """Normalized WhatsApp operating mode (test|live|paused); anything
+        unrecognized resolves to the safe 'paused' (never accidentally 'live').
+        Distinct from the unrelated ``agent_mode`` field ('standalone')."""
+        m = (self.whatsapp_agent_mode or "").strip().lower()
+        return m if m in ("test", "live", "paused") else "paused"
+
+    @property
+    def agent_replies_enabled(self) -> bool:
+        """True in test/live, False in paused. Sending still additionally requires
+        evolution_live_ready and (in test) the sender allow-list."""
+        return self.agent_operating_mode in ("test", "live")
 
     @property
     def allowed_auto_reply_numbers(self) -> frozenset[str]:

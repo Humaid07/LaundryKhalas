@@ -23,10 +23,13 @@ def ago(hours: float = 0, days: float = 0) -> datetime:
 # Region every GCC market rolls up to (matches the admin region filter).
 REGION = "Middle East"
 
-SERVICES = [
-    "Laundry", "Wash & Fold", "Dry Cleaning", "Ironing / Pressing",
-    "Shoe Cleaning", "Carpet Cleaning", "Curtain Cleaning", "Commercial Laundry",
-]
+# Controlled service vocabulary — DERIVED from the canonical catalog (single
+# source of truth), so SEO targets the real LaundryKhalas services. See
+# seo_agents/taxonomy.py. "Personal Laundry Pickup & Delivery" is an umbrella
+# topic kept for the illustrative competitor/GSC rows below.
+from seo_agents.taxonomy import service_names as _canonical_service_names
+
+SERVICES = [*_canonical_service_names(), "Personal Laundry Pickup & Delivery"]
 
 MARKETS = [
     {"market": "UAE", "country": "UAE", "city": "Dubai"},
@@ -165,10 +168,13 @@ TREND_ALERTS = [
 ]
 
 # --- SEO-07 Topical clusters / SEO-15 GCC expansion (illustrative) --------
+# Clusters use the canonical service names (see seo_agents/taxonomy.py) so the
+# content plan targets the real live services.
 TOPICAL_GAPS = [
-    {"cluster": "dry cleaning", "missing_subtopic": "leather & suede care", "market": "UAE", "city": "Dubai", "service": "Dry Cleaning", "priority": "medium"},
-    {"cluster": "carpet cleaning", "missing_subtopic": "pet stain & odour removal", "market": "UAE", "city": "Sharjah", "service": "Carpet Cleaning", "priority": "medium"},
-    {"cluster": "commercial laundry", "missing_subtopic": "hospital & clinic linen", "market": "UAE", "city": "Dubai", "service": "Commercial Laundry", "priority": "high"},
+    {"cluster": "dry cleaning / clean and press", "missing_subtopic": "leather & suede care", "market": "UAE", "city": "Dubai", "service": "Boutique Clean & Press", "priority": "medium"},
+    {"cluster": "carpet and curtain cleaning", "missing_subtopic": "pet stain & odour removal", "market": "UAE", "city": "Sharjah", "service": "Deep Carpet & Curtain Care", "priority": "medium"},
+    {"cluster": "shoe cleaning and restoration", "missing_subtopic": "sneaker sole whitening", "market": "UAE", "city": "Dubai", "service": "Artisan Shoe Restoration", "priority": "high"},
+    {"cluster": "tailoring and alterations", "missing_subtopic": "same-day zipper repair", "market": "UAE", "city": "Dubai", "service": "Tailoring & Alterations", "priority": "medium"},
 ]
 
 GCC_EXPANSION_OPPS = [

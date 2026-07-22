@@ -19,6 +19,7 @@ import type {
   Ticket,
   TimeSeriesPoint,
 } from "./types";
+import { SERVICE_NAMES } from "@/lib/dashboard/service-catalog";
 
 export const MARKETS = ["UAE", "Qatar", "Saudi Arabia", "Kuwait", "Bahrain", "Oman"] as const;
 export const CITIES = [
@@ -32,14 +33,9 @@ export const CITIES = [
   "Muscat",
 ] as const;
 export const CHANNELS = ["WhatsApp", "Website", "App", "Walk-in", "B2B"] as const;
-export const SERVICES = [
-  "Wash & Fold",
-  "Dry Cleaning",
-  "Ironing / Pressing",
-  "Blankets / Duvets",
-  "Curtains / Upholstery",
-  "Business Laundry",
-] as const;
+// Canonical 8-service taxonomy — re-exported from the single source of truth
+// (service-catalog.ts, mirror of the backend catalog).
+export const SERVICES = SERVICE_NAMES as readonly string[];
 // Continental region model — the single global Region taxonomy shared by every
 // section (ops markets roll up to GCC; partner leads span the other regions).
 export const REGIONS = ["GCC", "MENA", "Asia", "Europe", "Americas"] as const;
@@ -102,13 +98,14 @@ export const ordersByCity: TimeSeriesPoint[] = [
   { label: "Muscat", value: 75 },
 ];
 
+// Business Laundry maps to Premium Wash & Fold in the new taxonomy, so its volume
+// is folded into that category to keep unique, coherent chart categories.
 export const serviceDemand: TimeSeriesPoint[] = [
-  { label: "Wash & Fold", value: 1420 },
-  { label: "Dry Cleaning", value: 864 },
-  { label: "Ironing / Pressing", value: 512 },
-  { label: "Blankets / Duvets", value: 318 },
-  { label: "Curtains / Upholstery", value: 214 },
-  { label: "Business Laundry", value: 154 },
+  { label: "Premium Wash & Fold", value: 1574 },
+  { label: "Boutique Clean & Press", value: 864 },
+  { label: "Steam Pressing Only", value: 512 },
+  { label: "Luxe Bed & Bath Care", value: 318 },
+  { label: "Deep Carpet & Curtain Care", value: 214 },
 ];
 
 export const ticketsByCategory: TimeSeriesPoint[] = [
@@ -133,18 +130,18 @@ export const automationRate: TimeSeriesPoint[] = [
 /* ---------------------------------- Orders ----------------------------------- */
 
 export const orders: Order[] = [
-  { id: "LK-24817", customer: "Aisha Rahman", phone: "+971 50 220 4471", service: "Wash & Fold", channel: "WhatsApp", city: "Dubai", market: "UAE", status: "Out for Delivery", pickupSlot: "Today 14:00–16:00", driver: "Bilal K.", facility: "Marina Hub", amount: 86, payment: "Paid", createdAt: "2026-07-20T09:12:00Z", items: [{ name: "Shirts", qty: 6 }, { name: "Trousers", qty: 4 }] },
-  { id: "LK-24816", customer: "Omar Haddad", phone: "+971 55 771 9930", service: "Dry Cleaning", channel: "Website", city: "Abu Dhabi", market: "UAE", status: "In Cleaning", pickupSlot: "Today 10:00–12:00", driver: "Yusuf A.", facility: "Khalidiya Plant", amount: 142, payment: "Paid", createdAt: "2026-07-20T08:40:00Z", items: [{ name: "Suits", qty: 2 }, { name: "Blazer", qty: 1 }] },
-  { id: "LK-24815", customer: "Fatima Al-Suwaidi", phone: "+974 33 118 2245", service: "Blankets / Duvets", channel: "WhatsApp", city: "Doha", market: "Qatar", status: "Pickup Scheduled", pickupSlot: "Tomorrow 09:00–11:00", driver: null, facility: "West Bay Hub", amount: 120, payment: "Pending", createdAt: "2026-07-20T07:55:00Z", items: [{ name: "King Duvet", qty: 1 }, { name: "Blankets", qty: 2 }] },
-  { id: "LK-24814", customer: "Noor Villas (B2B)", phone: "+971 4 559 8820", service: "Business Laundry", channel: "B2B", city: "Dubai", market: "UAE", status: "Driver Assigned", pickupSlot: "Today 16:00–18:00", driver: "Rashid M.", facility: "Al Quoz Plant", amount: 940, payment: "Pending", createdAt: "2026-07-20T07:20:00Z", items: [{ name: "Bed linen sets", qty: 40 }, { name: "Towels", qty: 60 }] },
-  { id: "LK-24813", customer: "Layla Kareem", phone: "+966 55 402 1189", service: "Ironing / Pressing", channel: "App", city: "Riyadh", market: "Saudi Arabia", status: "Delivered", pickupSlot: "Yesterday 12:00–14:00", driver: "Salem H.", facility: "Olaya Hub", amount: 54, payment: "Paid", createdAt: "2026-07-19T11:05:00Z", items: [{ name: "Thobes", qty: 5 }] },
-  { id: "LK-24812", customer: "Hassan Ali", phone: "+971 52 664 7712", service: "Curtains / Upholstery", channel: "Website", city: "Sharjah", market: "UAE", status: "Concern Raised", pickupSlot: "Yesterday 15:00–17:00", driver: "Bilal K.", facility: "Industrial Area Plant", amount: 320, payment: "Paid", createdAt: "2026-07-19T09:30:00Z", items: [{ name: "Curtain panels", qty: 8 }] },
-  { id: "LK-24811", customer: "Mariam Zayed", phone: "+973 33 909 1120", service: "Wash & Fold", channel: "WhatsApp", city: "Manama", market: "Bahrain", status: "Ready for Delivery", pickupSlot: "Today 11:00–13:00", driver: "Ahmed R.", facility: "Seef Hub", amount: 72, payment: "Paid", createdAt: "2026-07-20T06:10:00Z", items: [{ name: "Mixed load", qty: 1 }] },
-  { id: "LK-24810", customer: "Khalid Nasser", phone: "+965 99 220 8841", service: "Dry Cleaning", channel: "App", city: "Kuwait City", market: "Kuwait", status: "New", pickupSlot: "Tomorrow 13:00–15:00", driver: null, facility: "Salmiya Hub", amount: 96, payment: "Pending", createdAt: "2026-07-20T09:45:00Z", items: [{ name: "Dresses", qty: 3 }] },
-  { id: "LK-24809", customer: "Sara Juma", phone: "+968 92 551 3307", service: "Wash & Fold", channel: "WhatsApp", city: "Muscat", market: "Oman", status: "Picked Up", pickupSlot: "Today 08:00–10:00", driver: "Tariq S.", facility: "Qurum Hub", amount: 64, payment: "Paid", createdAt: "2026-07-20T05:30:00Z", items: [{ name: "Shirts", qty: 8 }] },
-  { id: "LK-24808", customer: "Grand Bay Hotel (B2B)", phone: "+974 4 118 7654", service: "Business Laundry", channel: "B2B", city: "Doha", market: "Qatar", status: "In Cleaning", pickupSlot: "Today 07:00–09:00", driver: "Yusuf A.", facility: "Industrial City Plant", amount: 1680, payment: "Pending", createdAt: "2026-07-20T04:50:00Z", items: [{ name: "Table linen", qty: 120 }, { name: "Napkins", qty: 240 }] },
-  { id: "LK-24807", customer: "Reem Fahad", phone: "+966 56 771 2093", service: "Blankets / Duvets", channel: "Website", city: "Riyadh", market: "Saudi Arabia", status: "Cancelled", pickupSlot: "Yesterday 10:00–12:00", driver: null, facility: "Olaya Hub", amount: 0, payment: "Refunded", createdAt: "2026-07-19T08:15:00Z", items: [{ name: "Comforter", qty: 1 }] },
-  { id: "LK-24806", customer: "Yousef Baladi", phone: "+971 50 883 4410", service: "Ironing / Pressing", channel: "WhatsApp", city: "Dubai", market: "UAE", status: "Delivered", pickupSlot: "Yesterday 09:00–11:00", driver: "Rashid M.", facility: "Marina Hub", amount: 48, payment: "Paid", createdAt: "2026-07-19T06:40:00Z", items: [{ name: "Shirts", qty: 10 }] },
+  { id: "LK-24817", customer: "Aisha Rahman", phone: "+971 50 220 4471", service: "Premium Wash & Fold", channel: "WhatsApp", city: "Dubai", market: "UAE", status: "Out for Delivery", pickupSlot: "Today 14:00–16:00", driver: "Bilal K.", facility: "Marina Hub", amount: 86, payment: "Paid", createdAt: "2026-07-20T09:12:00Z", items: [{ name: "Shirts", qty: 6 }, { name: "Trousers", qty: 4 }] },
+  { id: "LK-24816", customer: "Omar Haddad", phone: "+971 55 771 9930", service: "Boutique Clean & Press", channel: "Website", city: "Abu Dhabi", market: "UAE", status: "In Cleaning", pickupSlot: "Today 10:00–12:00", driver: "Yusuf A.", facility: "Khalidiya Plant", amount: 142, payment: "Paid", createdAt: "2026-07-20T08:40:00Z", items: [{ name: "Suits", qty: 2 }, { name: "Blazer", qty: 1 }] },
+  { id: "LK-24815", customer: "Fatima Al-Suwaidi", phone: "+974 33 118 2245", service: "Luxe Bed & Bath Care", channel: "WhatsApp", city: "Doha", market: "Qatar", status: "Pickup Scheduled", pickupSlot: "Tomorrow 09:00–11:00", driver: null, facility: "West Bay Hub", amount: 120, payment: "Pending", createdAt: "2026-07-20T07:55:00Z", items: [{ name: "King Duvet", qty: 1 }, { name: "Blankets", qty: 2 }] },
+  { id: "LK-24814", customer: "Noor Villas (B2B)", phone: "+971 4 559 8820", service: "Premium Wash & Fold", channel: "B2B", city: "Dubai", market: "UAE", status: "Driver Assigned", pickupSlot: "Today 16:00–18:00", driver: "Rashid M.", facility: "Al Quoz Plant", amount: 940, payment: "Pending", createdAt: "2026-07-20T07:20:00Z", items: [{ name: "Bed linen sets", qty: 40 }, { name: "Towels", qty: 60 }] },
+  { id: "LK-24813", customer: "Layla Kareem", phone: "+966 55 402 1189", service: "Steam Pressing Only", channel: "App", city: "Riyadh", market: "Saudi Arabia", status: "Delivered", pickupSlot: "Yesterday 12:00–14:00", driver: "Salem H.", facility: "Olaya Hub", amount: 54, payment: "Paid", createdAt: "2026-07-19T11:05:00Z", items: [{ name: "Thobes", qty: 5 }] },
+  { id: "LK-24812", customer: "Hassan Ali", phone: "+971 52 664 7712", service: "Deep Carpet & Curtain Care", channel: "Website", city: "Sharjah", market: "UAE", status: "Concern Raised", pickupSlot: "Yesterday 15:00–17:00", driver: "Bilal K.", facility: "Industrial Area Plant", amount: 320, payment: "Paid", createdAt: "2026-07-19T09:30:00Z", items: [{ name: "Curtain panels", qty: 8 }] },
+  { id: "LK-24811", customer: "Mariam Zayed", phone: "+973 33 909 1120", service: "Premium Wash & Fold", channel: "WhatsApp", city: "Manama", market: "Bahrain", status: "Ready for Delivery", pickupSlot: "Today 11:00–13:00", driver: "Ahmed R.", facility: "Seef Hub", amount: 72, payment: "Paid", createdAt: "2026-07-20T06:10:00Z", items: [{ name: "Mixed load", qty: 1 }] },
+  { id: "LK-24810", customer: "Khalid Nasser", phone: "+965 99 220 8841", service: "Boutique Clean & Press", channel: "App", city: "Kuwait City", market: "Kuwait", status: "New", pickupSlot: "Tomorrow 13:00–15:00", driver: null, facility: "Salmiya Hub", amount: 96, payment: "Pending", createdAt: "2026-07-20T09:45:00Z", items: [{ name: "Dresses", qty: 3 }] },
+  { id: "LK-24809", customer: "Sara Juma", phone: "+968 92 551 3307", service: "Premium Wash & Fold", channel: "WhatsApp", city: "Muscat", market: "Oman", status: "Picked Up", pickupSlot: "Today 08:00–10:00", driver: "Tariq S.", facility: "Qurum Hub", amount: 64, payment: "Paid", createdAt: "2026-07-20T05:30:00Z", items: [{ name: "Shirts", qty: 8 }] },
+  { id: "LK-24808", customer: "Grand Bay Hotel (B2B)", phone: "+974 4 118 7654", service: "Premium Wash & Fold", channel: "B2B", city: "Doha", market: "Qatar", status: "In Cleaning", pickupSlot: "Today 07:00–09:00", driver: "Yusuf A.", facility: "Industrial City Plant", amount: 1680, payment: "Pending", createdAt: "2026-07-20T04:50:00Z", items: [{ name: "Table linen", qty: 120 }, { name: "Napkins", qty: 240 }] },
+  { id: "LK-24807", customer: "Reem Fahad", phone: "+966 56 771 2093", service: "Luxe Bed & Bath Care", channel: "Website", city: "Riyadh", market: "Saudi Arabia", status: "Cancelled", pickupSlot: "Yesterday 10:00–12:00", driver: null, facility: "Olaya Hub", amount: 0, payment: "Refunded", createdAt: "2026-07-19T08:15:00Z", items: [{ name: "Comforter", qty: 1 }] },
+  { id: "LK-24806", customer: "Yousef Baladi", phone: "+971 50 883 4410", service: "Steam Pressing Only", channel: "WhatsApp", city: "Dubai", market: "UAE", status: "Delivered", pickupSlot: "Yesterday 09:00–11:00", driver: "Rashid M.", facility: "Marina Hub", amount: 48, payment: "Paid", createdAt: "2026-07-19T06:40:00Z", items: [{ name: "Shirts", qty: 10 }] },
 ];
 
 /* ------------------------------- Conversations ------------------------------- */
@@ -154,7 +151,7 @@ export const conversations: Conversation[] = [
   { id: "c-9002", customer: "Hassan Ali", phone: "+971 52 664 7712", city: "Sharjah", lastMessage: "One of the curtains came back with a mark on it.", status: "Human takeover", mode: "Human", assignedOrder: "LK-24812", suggestedAction: "Escalate to quality team", updatedAt: "2026-07-20T09:22:00Z", unread: 2 },
   { id: "c-9003", customer: "Khalid Nasser", phone: "+965 99 220 8841", city: "Kuwait City", lastMessage: "Can I get a pickup tomorrow afternoon?", status: "Awaiting reply", mode: "AI", assignedOrder: "LK-24810", suggestedAction: "Confirm 13:00–15:00 slot", updatedAt: "2026-07-20T09:05:00Z", unread: 1 },
   { id: "c-9004", customer: "Mariam Zayed", phone: "+973 33 909 1120", city: "Manama", lastMessage: "Great, order received. See you soon!", status: "Resolved", mode: "AI", assignedOrder: "LK-24811", suggestedAction: "No action needed", updatedAt: "2026-07-20T08:12:00Z", unread: 0 },
-  { id: "c-9005", customer: "Sara Juma", phone: "+968 92 551 3307", city: "Muscat", lastMessage: "Do you clean traditional dishdasha?", status: "AI handling", mode: "AI", assignedOrder: null, suggestedAction: "Offer Dry Cleaning service", updatedAt: "2026-07-20T07:58:00Z", unread: 0 },
+  { id: "c-9005", customer: "Sara Juma", phone: "+968 92 551 3307", city: "Muscat", lastMessage: "Do you clean traditional dishdasha?", status: "AI handling", mode: "AI", assignedOrder: null, suggestedAction: "Offer Boutique Clean & Press service", updatedAt: "2026-07-20T07:58:00Z", unread: 0 },
   { id: "c-9006", customer: "Omar Haddad", phone: "+971 55 771 9930", city: "Abu Dhabi", lastMessage: "Is my order ready yet?", status: "Awaiting reply", mode: "AI", assignedOrder: "LK-24816", suggestedAction: "Share status: In Cleaning", updatedAt: "2026-07-20T07:30:00Z", unread: 1 },
 ];
 
@@ -182,12 +179,12 @@ export const approvals: Approval[] = [
 /* ------------------------------- Activity feed ------------------------------- */
 
 export const activityFeed: ActivityEvent[] = [
-  { id: "e1", title: "New order created", detail: "LK-24817 · Wash & Fold · Dubai Marina", time: "2026-07-20T09:40:00Z", tone: "rose", actor: "AI Agent" },
+  { id: "e1", title: "New order created", detail: "LK-24817 · Premium Wash & Fold · Dubai Marina", time: "2026-07-20T09:40:00Z", tone: "rose", actor: "AI Agent" },
   { id: "e2", title: "Reply drafted, awaiting approval", detail: "Conversation with Omar Haddad", time: "2026-07-20T09:38:00Z", tone: "warning", actor: "AI Agent" },
   { id: "e3", title: "Human takeover started", detail: "Hassan Ali · curtain quality concern", time: "2026-07-20T09:22:00Z", tone: "info", actor: "Ops Team" },
   { id: "e4", title: "Facility assigned", detail: "LK-24814 → Al Quoz Plant", time: "2026-07-20T07:25:00Z", tone: "neutral", actor: "System" },
   { id: "e5", title: "SEO agent flagged ranking drop", detail: "'laundry service dubai marina' −4 positions", time: "2026-07-20T06:50:00Z", tone: "danger", actor: "AI Agent" },
-  { id: "e6", title: "Delivery completed", detail: "LK-24806 · Ironing · Dubai", time: "2026-07-19T10:20:00Z", tone: "success", actor: "System" },
+  { id: "e6", title: "Delivery completed", detail: "LK-24806 · Steam Pressing Only · Dubai", time: "2026-07-19T10:20:00Z", tone: "success", actor: "System" },
 ];
 
 /* ----------------------------------- Sales ----------------------------------- */
@@ -200,7 +197,7 @@ export const salesKpis: KpiStat[] = [
   { label: "Avg Order Value", value: "AED 176", delta: 2.7, tone: "rose", spark: spark([168, 170, 169, 172, 174, 175, 176]) },
   { label: "Conversion Rate", value: "6.8%", delta: 0.6, tone: "success", spark: spark([6.1, 6.2, 6.3, 6.4, 6.5, 6.7, 6.8]) },
   { label: "Top City", value: "Dubai", tone: "rose", hint: "1,284 orders · 37% of volume" },
-  { label: "Top Service", value: "Wash & Fold", tone: "info", hint: "1,420 orders · 41% of volume" },
+  { label: "Top Service", value: "Premium Wash & Fold", tone: "info", hint: "1,574 orders · 47% of volume" },
   { label: "B2B Revenue", value: "AED 184K", delta: 21.5, tone: "plum", spark: spark([120, 130, 140, 152, 164, 176, 184]) },
   { label: "B2C Revenue", value: "AED 428K", delta: 7.8, tone: "success", spark: spark([360, 372, 380, 396, 408, 420, 428]) },
 ];
@@ -229,13 +226,13 @@ export const salesByChannel: TimeSeriesPoint[] = [
   { label: "Walk-in", value: 14000 },
 ];
 
+// Business Laundry revenue folds into Premium Wash & Fold (its new-taxonomy home).
 export const revenueByService: TimeSeriesPoint[] = [
-  { label: "Wash & Fold", value: 214000 },
-  { label: "Dry Cleaning", value: 158000 },
-  { label: "Business Laundry", value: 96000 },
-  { label: "Blankets / Duvets", value: 62000 },
-  { label: "Ironing / Pressing", value: 48000 },
-  { label: "Curtains / Upholstery", value: 34000 },
+  { label: "Premium Wash & Fold", value: 310000 },
+  { label: "Boutique Clean & Press", value: 158000 },
+  { label: "Luxe Bed & Bath Care", value: 62000 },
+  { label: "Steam Pressing Only", value: 48000 },
+  { label: "Deep Carpet & Curtain Care", value: 34000 },
 ];
 
 export const acquisitionTrend: TimeSeriesPoint[] = [
@@ -260,12 +257,12 @@ export const topCities: { city: string; orders: number; revenue: number; growth:
   { city: "Sharjah", orders: 288, revenue: 42000, growth: 6.6 },
 ];
 
+// Business Laundry (154 orders / AED 96K) folds into Premium Wash & Fold.
 export const topServices: { service: string; orders: number; revenue: number; share: number }[] = [
-  { service: "Wash & Fold", orders: 1420, revenue: 214000, share: 41 },
-  { service: "Dry Cleaning", orders: 864, revenue: 158000, share: 25 },
-  { service: "Ironing / Pressing", orders: 512, revenue: 48000, share: 15 },
-  { service: "Blankets / Duvets", orders: 318, revenue: 62000, share: 9 },
-  { service: "Business Laundry", orders: 154, revenue: 96000, share: 6 },
+  { service: "Premium Wash & Fold", orders: 1574, revenue: 310000, share: 47 },
+  { service: "Boutique Clean & Press", orders: 864, revenue: 158000, share: 25 },
+  { service: "Steam Pressing Only", orders: 512, revenue: 48000, share: 15 },
+  { service: "Luxe Bed & Bath Care", orders: 318, revenue: 62000, share: 9 },
 ];
 
 export const topCustomers: { name: string; type: "B2B" | "B2C"; orders: number; revenue: number }[] = [
@@ -390,7 +387,7 @@ export const marketingApprovals: MarketingApproval[] = [
   { id: "m-01", platform: "Instagram", caption: "Eid-ready wardrobe starts here ✨ Book a pickup on WhatsApp.", assetType: "Reel", status: "Awaiting Approval", createdBy: "Social Posting Agent", scheduledFor: "2026-07-22T10:00:00Z" },
   { id: "m-02", platform: "TikTok", caption: "A day inside our Al Quoz cleaning plant 🧺", assetType: "Video", status: "Awaiting Approval", createdBy: "Video / Reel Scripts Agent", scheduledFor: "2026-07-21T18:00:00Z" },
   { id: "m-03", platform: "Facebook", caption: "Eid offer: 20% off blankets & duvets this week only.", assetType: "Carousel", status: "Changes Requested", createdBy: "Social Posting Agent", scheduledFor: "2026-07-24T12:00:00Z" },
-  { id: "m-04", platform: "WhatsApp", caption: "Loyalty reward: your next Wash & Fold is on us 💛", assetType: "Image", status: "Awaiting Approval", createdBy: "Campaign Agent", scheduledFor: "2026-07-27T11:00:00Z" },
+  { id: "m-04", platform: "WhatsApp", caption: "Loyalty reward: your next Premium Wash & Fold is on us 💛", assetType: "Image", status: "Awaiting Approval", createdBy: "Campaign Agent", scheduledFor: "2026-07-27T11:00:00Z" },
 ];
 
 export const marketingAgents: { name: string; status: string; note: string; approvalGate: boolean }[] = [

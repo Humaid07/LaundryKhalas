@@ -64,6 +64,10 @@ export interface Order {
   facility_id: string | null;
   status: OrderStatus | string;
   service_type: string;
+  // Canonical 8-service taxonomy fields (optional — added additively by the
+  // backend; existing React-Query pages must still compile without them).
+  service_id?: string | null;
+  service_display_name?: string | null;
   items_json: Record<string, unknown>;
   address_id: string | null;
   pickup_window_start: string | null;

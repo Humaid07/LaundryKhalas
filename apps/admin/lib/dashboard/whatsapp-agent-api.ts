@@ -1,10 +1,10 @@
 /**
- * Client for the standalone WhatsApp Agent backend (apps/whatsapp-agent, :8100).
+ * Client for the standalone WhatsApp Agent backend (apps/whatsapp-agent, :8101).
  * This is an existing *local mock* service (LLM + WhatsApp both in mock mode) —
  * no live third-party calls. Used by the Operations → WhatsApp Agent tab.
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_WHATSAPP_AGENT_API_URL ?? "http://localhost:8100";
+const BASE_URL = process.env.NEXT_PUBLIC_WHATSAPP_AGENT_API_URL ?? "http://localhost:8101";
 
 export type DomainStatus = "in_domain" | "out_of_domain" | "uncertain";
 
@@ -107,15 +107,91 @@ export interface OrderDTO {
   order_id: string;
   customer_name: string | null;
   service_type: string | null;
+  // Canonical 8-service taxonomy fields the backend now returns alongside the
+  // raw service_type. Optional so older payloads still type-check.
+  service_id: string | null;
+  service_display_name: string | null;
+  unit_type: string | null;
+  requires_manual_quote: boolean;
   status: string;
   status_label: string;
   city: string | null;
   pickup_area: string | null;
+  // WhatsApp booking state-machine fields (booking flow).
+  pickup_date: string | null;
+  pickup_time: string | null;
+  pickup_instructions: string | null;
+  booking_state: string | null;
+  pickup_address: string | null;
   amount: number | null;
   currency: string;
   payment: string | null;
   is_demo: boolean;
+  // Order↔conversation link + dashboard-only fields (from /api/orders/search).
+  conversation_id: string | null;
+  customer_phone: string | null;
+  needs_attention: boolean;
+  human_takeover: boolean;
+  conversation_status: string | null;
+  source_channel: string;
+  created_at: string;
+  updated_at: string;
   [key: string]: unknown;
+}
+
+/** Paginated order list (GET /api/orders/search). */
+export interface OrderPageDTO {
+  orders: OrderDTO[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+/** Order audit event (GET /api/orders/{id}/events). */
+export interface OrderEventDTO {
+  id: string;
+  order_id: string;
+  event_type: string;
+  from_status: string | null;
+  to_status: string | null;
+  actor_type: string | null;
+  actor_name: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+/** Real Orders-section metric cards (GET /api/orders/metrics/summary). */
+export interface OrderMetricsSummary {
+  new_today: number;
+  active_orders: number;
+  confirmed_pickups: number;
+  completed: number;
+  cancelled: number;
+  needs_attention: number;
+}
+
+/** Filters for the Orders section list. */
+export interface OrderSearchParams {
+  search?: string;
+  status?: string;
+  service_id?: string;
+  pickup_date?: string;
+  source?: string;
+  needs_attention?: boolean;
+  sort?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * Service-taxonomy sync health (GET /api/service-taxonomy/health). The backend
+ * compares its live surfaces against the canonical catalog; `in_sync: false`
+ * means one or more surfaces drifted. `mismatches` entries may be plain surface
+ * strings or small objects — the UI renders either.
+ */
+export interface ServiceTaxonomyHealth {
+  in_sync: boolean;
+  mismatches: Array<string | { surface?: string; name?: string; detail?: string }>;
 }
 
 export class AgentApiError extends Error {
@@ -134,7 +210,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     });
   } catch {
-    throw new AgentApiError(0, "Could not reach the WhatsApp agent backend (:8100). Is it running?");
+    throw new AgentApiError(0, "Could not reach the WhatsApp agent backend (:8101). Is it running?");
   }
   if (!res.ok) {
     let detail = res.statusText;
@@ -197,9 +273,31 @@ export const agentApi = {
   resolveFlag: (flagId: string) =>
     request<AgentFlagDTO>(`/api/flags/${flagId}/resolve`, { method: "POST" }),
 
+  // --- Service taxonomy health ---
+  serviceTaxonomyHealth: () =>
+    request<ServiceTaxonomyHealth>("/api/service-taxonomy/health"),
+
   // --- Orders ---
   listOrders: () => request<OrderDTO[]>("/api/orders"),
   listActiveOrders: () => request<OrderDTO[]>("/api/orders/active"),
   listCompletedOrders: () => request<OrderDTO[]>("/api/orders/completed"),
   getOrder: (id: string) => request<OrderDTO>(`/api/orders/${id}`),
+  // Orders section (filtered/paginated, backend-backed).
+  searchOrders: (params: OrderSearchParams = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    });
+    const q = qs.toString();
+    return request<OrderPageDTO>(`/api/orders/search${q ? `?${q}` : ""}`);
+  },
+  orderMetricsSummary: () => request<OrderMetricsSummary>("/api/orders/metrics/summary"),
+  getOrderEvents: (id: string) => request<OrderEventDTO[]>(`/api/orders/${id}/events`),
+  getOrderConversation: (id: string) =>
+    request<InboxConversationDTO>(`/api/orders/${id}/conversation`),
+  updateOrderStatus: (id: string, status: string, actor_name?: string) =>
+    request<OrderDTO>(`/api/orders/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, actor_name }),
+    }),
 };

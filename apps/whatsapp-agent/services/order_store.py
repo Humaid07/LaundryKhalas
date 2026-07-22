@@ -39,6 +39,7 @@ CANCELLED = "cancelled"
 SUPPORT_REQUIRED = "support_required"
 CANCELLATION_REQUESTED = "cancellation_requested"
 PICKUP_CHANGE_REQUESTED = "pickup_change_requested"
+ABANDONED = "abandoned"  # a draft that expired without confirmation (spec §29)
 
 ORDER_STATUSES = [
     DRAFT,
@@ -50,6 +51,7 @@ ORDER_STATUSES = [
     OUT_FOR_DELIVERY,
     COMPLETED,
     CANCELLED,
+    ABANDONED,
     SUPPORT_REQUIRED,
     CANCELLATION_REQUESTED,
     PICKUP_CHANGE_REQUESTED,
@@ -58,7 +60,7 @@ ORDER_STATUSES = [
 # "Active" for the dashboard = anything in flight: not a bare draft, and not
 # a terminal completed/cancelled order. Cancellation/pickup-change requests
 # stay visible as active because the team still has to action them.
-_TERMINAL = {COMPLETED, CANCELLED}
+_TERMINAL = {COMPLETED, CANCELLED, ABANDONED}
 _HIDDEN_FROM_ACTIVE = _TERMINAL | {DRAFT}
 
 # Human-readable label for chat replies (only where the raw status isn't

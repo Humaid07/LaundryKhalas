@@ -1,0 +1,11 @@
+{
+  "_note": "Stable pickup-instruction options offered AFTER the address step. `code` is the stable id sent as `instruction:<code>` in the WhatsApp button/list reply (never rely on the visible label). `other` opens a free-text prompt; `none` stores no special instruction. Editing this file changes the agent with no code change (restart to reload).",
+  "instructions": [
+    { "code": "dont_ring_bell", "label": "Don't ring the bell" },
+    { "code": "pickup_from_door", "label": "Pick up from the door" },
+    { "code": "pickup_from_reception", "label": "Pick up from reception" },
+    { "code": "pickup_from_security", "label": "Pick up from security" },
+    { "code": "none", "label": "No additional instructions" },
+    { "code": "other", "label": "Other instructions" }
+  ]
+}

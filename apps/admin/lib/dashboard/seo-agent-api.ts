@@ -10,6 +10,16 @@
  * The dashboard never calls Supabase directly — FastAPI only.
  */
 
+import type {
+  GscPage,
+  IndexRow,
+  HyperlocalPage,
+  TechSeoIssue,
+  Competitor,
+  AiSearchRow,
+} from "./seo-data";
+import type { SeoTask, KpiStat } from "./types";
+
 const BASE_URL =
   process.env.NEXT_PUBLIC_SEO_AGENT_API_URL ??
   process.env.NEXT_PUBLIC_WHATSAPP_AGENT_API_URL ??
@@ -247,7 +257,74 @@ export const seoAgentApi = {
   getWeeklySeoReport: () =>
     withFallback(() => request<SeoReportDTO>("/api/seo/reports/weekly"), MOCK_REPORT("weekly")),
   getSeoOverview: () => withFallback(() => request<SeoOverviewDTO>("/api/seo/overview"), MOCK_OVERVIEW),
+
+  // --- subsection tables (throw on error; the component supplies fallback) --
+  // The backend returns these in the exact dashboard row shapes.
+  getGscPages: () => request<GscPage[]>("/api/seo/dashboard/gsc-pages"),
+  getIndexing: () => request<IndexRow[]>("/api/seo/dashboard/indexing"),
+  getHyperlocal: () => request<HyperlocalPage[]>("/api/seo/dashboard/hyperlocal"),
+  getTechnicalIssues: () => request<TechSeoIssue[]>("/api/seo/dashboard/technical-issues"),
+  getCompetitors: () => request<Competitor[]>("/api/seo/dashboard/competitors"),
+  getAiSearch: () => request<AiSearchRow[]>("/api/seo/dashboard/ai-search"),
+
+  // Content Pipeline: live approval tasks mapped to the SeoTask table shape.
+  getContentTasks: async (): Promise<SeoTask[]> => {
+    const tasks = await request<SeoApprovalTaskDTO[]>("/api/seo/tasks");
+    return tasks.map(taskToSeoTask);
+  },
+
+  // Overview KPI row derived from the live overview summary.
+  getOverviewKpis: async (): Promise<KpiStat[]> => {
+    const o = await request<SeoOverviewDTO>("/api/seo/overview");
+    return [
+      { label: "Active agents", value: `${o.active_agents}/${o.total_agents}` },
+      { label: "Runs today", value: String(o.runs_today) },
+      {
+        label: "Pending approvals",
+        value: String(o.pending_approvals),
+        tone: o.pending_approvals > 0 ? "warning" : "success",
+      },
+      {
+        label: "Urgent issues",
+        value: String(o.urgent_issues),
+        tone: o.urgent_issues > 0 ? "danger" : "success",
+      },
+      { label: "Content opportunities", value: String(o.content_opportunities) },
+      {
+        label: "Indexing issues",
+        value: String(o.indexing_issues),
+        tone: o.indexing_issues > 0 ? "warning" : "success",
+      },
+    ];
+  },
 };
+
+const PRIORITY_LABEL: Record<string, SeoTask["priority"]> = {
+  urgent: "Urgent",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+const APPROVAL_TO_STATUS: Record<string, SeoTask["status"]> = {
+  pending: "Needs Review",
+  approved: "Done",
+  rejected: "Done",
+};
+
+function taskToSeoTask(t: SeoApprovalTaskDTO): SeoTask {
+  return {
+    id: t.task_id,
+    task: t.title,
+    agent: t.agent_id,
+    priority: PRIORITY_LABEL[t.priority] ?? "Medium",
+    url: t.page_url ?? "—",
+    status: APPROVAL_TO_STATUS[t.approval_status] ?? "Todo",
+    suggestedAction: t.suggested_action,
+    approvalRequired: t.approval_status === "pending",
+    // city/scope carried through for global filtering when present.
+    ...(t.city ? { city: t.city as SeoTask["city"] } : { scope: "global" as const }),
+  };
+}
 
 // --- deterministic mock fallback (same DTO shape) ---------------------------
 const AGENT_SEED: Array<[string, string, string]> = [

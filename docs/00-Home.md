@@ -46,6 +46,62 @@ Agent Fleet. Architecture: [[seo-agent-system]] · dashboard contract:
 
 ## Latest Build Report
 
+[[2026-07-22-customer-order-detail-redesign]] —
+`build-reports/2026-07-22-customer-order-detail-redesign.md` — Customer Orders
+cards now open a **dedicated full-page order workspace** at
+`/operations/customer-orders/[orderId]` instead of a cramped right-side drawer:
+header + breadcrumb + grouped actions, a scannable summary strip, and a 2-column
+body (overview · items · pickup/delivery · **premium lifecycle timeline** · notes ·
+related conversation · events) with a sticky sidebar (customer · payment ·
+assignment · SLA · quick actions). Active status tab preserved on back; fully
+responsive. Fixed a timeline bug where completed steps showed future timestamps.
+Drawer pattern retained for the other 3 Operations subsections. Rule in
+[[customer-order-detail-page]] / [[operations-navigation]]. **tsc 0 · 45/45 filter
+tests · Playwright verified.**
+
+[[2026-07-22-operations-workflow-tabs-refactor]] —
+`build-reports/2026-07-22-operations-workflow-tabs-refactor.md` — Operations top
+tabs are now **workflow/status views per subsection**, not subsection navigation.
+Customer Facing + Drivers migrated onto the shared workspace pattern
+(`WorkflowTabs → RecordCard → DetailDrawer`); standalone action panels removed —
+actions live only inside a record's detail drawer; dead `OperationsSubNav`
+deleted. Rule documented in [[operations-navigation]]. **tsc 0 + Playwright verified.**
+
+[[2026-07-22-whatsapp-booking-state-machine]] —
+`build-reports/2026-07-22-whatsapp-booking-state-machine.md` — replaces the
+hallucinating stateless order-capture with an explicit **persisted booking state
+machine** (`services/booking_flow.py`): "I need a laundry pickup" now only detects
+intent and sends the interactive service list — no assumed service/date/area. DB
+is the source of truth; slots come from a new DB-backed `pickup_slots` table;
+Evolution v2.3.7 interactive lists/buttons with a numbered-text fallback; webhook
+idempotency; operational order created exactly once on explicit confirm. Migration
+000005 (+ applied the stranded 000004). **263 tests pass**, live-verified.
+
+[[2026-07-22-sidebar-subnavigation-refactor]] —
+`build-reports/2026-07-22-sidebar-subnavigation-refactor.md` — **Hierarchical sidebar
+navigation**: converted the flat left sidebar into a nested, expand/collapse tree where
+every section's subsections (Operations ▸ Customer Facing / Facility Facing / Drivers /
+Customer Orders, and the same for SEO Agents, Marketing, Partner Acquisition, Finance,
+Dev & Automation, Reports, Settings) are reachable directly from the sidebar. Parent stays
+highlighted on child routes; active child is filled + railed; badges at both levels;
+auto-expand of the active section; collapsed + mobile preserved. Replaced the Operations
+big-card landing with a clean **Operations Overview** (KPIs, urgent alerts, recent activity,
+quick links). Children derived from `sections.ts` (no route changes). **tsc 0 errors + live
+Playwright verified.** See [[dashboard-navigation]].
+
+[[2026-07-22-service-taxonomy-sync]] —
+`build-reports/2026-07-22-service-taxonomy-sync.md` — **Service taxonomy synced to the
+live website**: replaced the four disjoint service lists with ONE canonical catalog of
+the **8 real LaundryKhalas services** (crawled from `laundrykhalas.com/en-ae/personal-laundry/`,
+incl. the newly-found **Luxury Bag Spa**) in `config/laundry_services.json`, read by the
+WhatsApp agent, order extraction, Supabase (`service_id`/`unit_type`/`requires_manual_quote`
+columns), the dashboard filters (TS mirror), and the SEO agents. Adds an **"ask, don't
+guess" service selection** (bare "laundry pickup" now asks which service), pricing safety
+(manual-quote services never auto-priced), a `/api/service-taxonomy` catalog + **sync-check
+CLI + `/health` endpoint** driving a dashboard **"Service taxonomy mismatch detected."**
+warning. **245 backend tests + sync CLI green; admin tsc 0 errors, filters 45/45.** See
+[[service-taxonomy]].
+
 [[2026-07-22-whatsapp-supabase-order-capture]] —
 `build-reports/2026-07-22-whatsapp-supabase-order-capture.md` — **WhatsApp → Supabase
 order capture**: an extraction/order-state layer turns approved Evolution test chats
@@ -372,6 +428,9 @@ Earlier: [[week-01-admin-ui-demo-notes]] —
 - [[mock-order-lifecycle]] — `architecture/mock-order-lifecycle.md`
 - [[whatsapp-cloud-api-integration]] — `architecture/whatsapp-cloud-api-integration.md`
 - [[domain-guard]] — `architecture/domain-guard.md`
+- [[dashboard-navigation]] — `architecture/dashboard-navigation.md` (hierarchical sidebar + page tabs)
+- [[operations-navigation]] — `architecture/operations-navigation.md` (sidebar = subsection, top tabs = workflow/status, actions in drawer)
+- [[service-taxonomy]] — `architecture/service-taxonomy.md` (live 8-service catalog, single source of truth)
 - [[whatsapp-agent-architecture]] — `architecture/whatsapp-agent-architecture.md`
 - [[admin-ui-architecture]] — `architecture/admin-ui-architecture.md`
 - [[privacy-firewall]] — `architecture/privacy-firewall.md`
@@ -395,6 +454,7 @@ Earlier: [[week-01-admin-ui-demo-notes]] —
 - [[live-whatsapp-readiness]] — `checklists/live-whatsapp-readiness.md`
 - [[admin-dashboard-mvp]] — `checklists/admin-dashboard-mvp.md`
 - [[admin-ui-manual-test-script]] — `checklists/admin-ui-manual-test-script.md`
+- [[service-taxonomy-test-script]] — `checklists/service-taxonomy-test-script.md`
 
 ## Audits
 

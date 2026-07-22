@@ -23,8 +23,18 @@ def _upsert(text=None, from_me=False, jid="919372522055@s.whatsapp.net", name="H
 # ------------------------------ parsing ------------------------------------
 def test_parse_plain_text():
     out = parse_evolution_webhook(_upsert("I need a laundry pickup"))
+    # The parser returns a uniform shape; interactive/location fields are None
+    # for a plain text message.
     assert out == [
-        {"phone": "919372522055", "text": "I need a laundry pickup", "name": "Humaid", "wa_message_id": "3EB0ABC123"}
+        {
+            "phone": "919372522055",
+            "text": "I need a laundry pickup",
+            "name": "Humaid",
+            "wa_message_id": "3EB0ABC123",
+            "selection_id": None,
+            "latitude": None,
+            "longitude": None,
+        }
     ]
 
 

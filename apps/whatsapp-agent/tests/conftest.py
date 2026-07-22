@@ -18,6 +18,16 @@ os.environ.setdefault("DATABASE_MODE", "sqlite")
 
 @pytest.fixture(autouse=True, scope="session")
 def _cleanup_test_db():
+    # Start clean. The teardown delete below is best-effort and, on Windows, can
+    # be skipped when the async SQLite engine still holds the file handle
+    # (WinError 32). A DB left over from a crashed/interrupted prior run would
+    # then leak stale rows/schema into this run and break demo-order seeding
+    # (UNIQUE constraint failed: orders.order_id). Deleting at session start
+    # guarantees a hermetic run regardless of how the previous one ended.
+    try:
+        _TEST_DB_PATH.unlink(missing_ok=True)
+    except PermissionError:
+        pass
     yield
     # On Windows the async SQLite engine may still hold the file handle at
     # session teardown (WinError 32). Best-effort delete: never fail the run

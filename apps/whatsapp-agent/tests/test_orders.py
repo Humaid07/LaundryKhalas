@@ -72,7 +72,7 @@ async def _book_full_order(client):
     # service (via chip), then items, area, time as the flow asks.
     await client.post(
         "/api/test-chat/message",
-        json={"conversation_id": cid, "message": "Dry Cleaning", "action_id": "dry_cleaning"},
+        json={"conversation_id": cid, "message": "Boutique Clean & Press", "action_id": "boutique_clean_press"},
     )
     await client.post(
         "/api/test-chat/message",
@@ -109,7 +109,7 @@ async def test_booking_flow_creates_active_order_behind_the_scenes(client):
     assert order_id in active_ids
 
     detail = (await client.get(f"/api/orders/{order_id}")).json()
-    assert detail["service_type"] == "Dry Cleaning"
+    assert detail["service_type"] == "Boutique Clean & Press"
     assert detail["pickup_area"] == "Dubai Marina"
     assert detail["items"]  # item details were captured
 
