@@ -66,8 +66,11 @@ The site (external) should consume `GET /api/public/pricing` server-side (SSR / 
 - Covered task §25 scenarios: 1-3 (view/permissions), 4-9 (draft-invisible/publish/public reflects), 10 (historical snapshot unchanged), 11-13 (regular vs promo, window activate/expire), 14-15 (starting/inspection stay pending), 16 (VAT config), 17 (cache/version), 21-24 (rollback restore+audit, unauthorized rollback via guard, import→draft), 25 (dup codes), 26 (concurrent edit), 27-29 (public excludes internal/disabled, one atomic version). Plus the agent-override engine test and the scheduled-worker activation test.
 - Frontend `tsc --noEmit`: pending the UI subagent; will be recorded on completion.
 
+## Update (same day) — internal Definition of Done complete
+- **Live agent-FSM wiring DONE**: `booking_flow.advance(price_overrides=…)` (via a context var read by the sync quote helpers) + the Evolution webhook fetches `price_resolver.published_overrides` (fail-safe) and passes it — the agent now quotes the published price with no restart. Test added; **full suite 414 passed**.
+- **Pricing Management UI DONE**: Operations → Pricing Management (`/operations/pricing`), `lib/dashboard/pricing-api.ts` + `PricingManagement.tsx` — published-version header, tabs (Current Prices / Drafts / Promotions / History / Sync), searchable 120-item table, click-to-edit → draft, publish with WhatsApp+website preview + diff, promotions, rollback, history, sync; permission-gated. 0 tsc errors; Playwright-verified (0 console/hydration errors). Commit `382d426`.
+
 ## Known limitations
-- **Live agent-FSM wiring**: the dynamic-pricing mechanism is built + tested; wiring the live message handler to fetch/pass overrides is the one remaining integration line (helpers already accept it).
 - **Store is versioned per market** (`AE` default); multi-currency schema is extensible but only AED is wired.
 - No scheduler infra → `apply_scheduled_pricing.py` must be run by cron/beat/Cron-Trigger in production.
 - Migration `000009` applies to the dev/test Supabase project; run the seed/migrate before enabling in Supabase mode (the store also works in SQLite via the models).
