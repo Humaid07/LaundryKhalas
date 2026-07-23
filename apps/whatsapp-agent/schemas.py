@@ -113,6 +113,22 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class UserCreate(BaseModel):
+    """Admin-created dashboard user. Role must be one of services.auth.ROLES."""
+    email: str
+    password: str
+    full_name: str | None = None
+    role: str = "operations"
+    market: str | None = None
+
+
+class UserUpdate(BaseModel):
+    """Partial update of a dashboard user (admin only). Email/password unchanged."""
+    full_name: str | None = None
+    role: str | None = None
+    is_active: bool | None = None
+
+
 class HumanTakeoverRequest(BaseModel):
     operator_name: str | None = None
 

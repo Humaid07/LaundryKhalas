@@ -69,3 +69,37 @@ async def set_active(user_id: str, is_active: bool) -> dict | None:
         user_id, is_active,
     )
     return _public(row)
+
+
+async def update_user(
+    user_id: str, *, full_name: str | None = None, role: str | None = None,
+    is_active: bool | None = None,
+) -> dict | None:
+    """Partial update of a user's profile fields. Only the passed (non-None)
+    fields change — password and email are never touched here. Returns the
+    public (hash-stripped) user, or None if the id doesn't exist."""
+    sets: list[str] = []
+    args: list = []
+    if full_name is not None:
+        args.append(full_name)
+        sets.append(f"full_name = ${len(args)}")
+    if role is not None:
+        args.append(role)
+        sets.append(f"role = ${len(args)}")
+    if is_active is not None:
+        args.append(is_active)
+        sets.append(f"is_active = ${len(args)}")
+    if not sets:
+        return await _public_by_id(user_id)
+    args.append(user_id)
+    row = await database.fetchrow(
+        f"update public.users set {', '.join(sets)} where id = ${len(args)} "
+        "returning id, email, password_hash, full_name, role, is_active, market, "
+        "created_at, updated_at",
+        *args,
+    )
+    return _public(row)
+
+
+async def _public_by_id(user_id: str) -> dict | None:
+    return _public(await get_by_id(user_id))

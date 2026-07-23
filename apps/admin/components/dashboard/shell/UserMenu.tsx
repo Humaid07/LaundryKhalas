@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/dashboard/auth-context";
+import { roleLabel as roleLabelFor } from "@/lib/dashboard/roles";
 
 function initials(name: string | null | undefined, email: string): string {
   const source = (name && name.trim()) || email;
@@ -11,11 +12,6 @@ function initials(name: string | null | undefined, email: string): string {
   const letters = (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
   return (letters || source.slice(0, 2)).toUpperCase();
 }
-
-const ROLE_LABEL: Record<string, string> = {
-  admin: "Administrator",
-  operations: "Operations",
-};
 
 /** Topbar account chip wired to the real authenticated user, with a sign-out
  *  action. Falls back to nothing when the auth context has no user yet. */
@@ -41,7 +37,7 @@ export function UserMenu() {
   if (!user) return null;
 
   const name = user.full_name || user.email;
-  const roleLabel = (role && ROLE_LABEL[role]) || "Member";
+  const roleLabel = roleLabelFor(role);
 
   return (
     <div ref={ref} className="relative">

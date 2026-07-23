@@ -18,6 +18,7 @@ from api import (
     service_taxonomy,
     settings_route,
     tickets,
+    users,
     webhooks,
 )
 from db import AsyncSessionLocal, database, init_db
@@ -77,6 +78,7 @@ app.include_router(conversations.router, dependencies=_OPS)
 app.include_router(flags.router, dependencies=_OPS)
 app.include_router(tickets.router, dependencies=_OPS)
 app.include_router(settings_route.router, dependencies=_ADMIN)
+app.include_router(users.router, dependencies=_ADMIN)  # user management (admin only)
 app.include_router(webhooks.router)
 app.include_router(evolution_webhooks.router)
 app.include_router(seo_agents.router, dependencies=_ADMIN)

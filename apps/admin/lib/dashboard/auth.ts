@@ -14,6 +14,7 @@ import {
   getToken,
   setSession,
 } from "./auth-token";
+import { roleAllowsRoute } from "./roles";
 
 export { type AuthUser, type UserRole, clearSession, getStoredUser, getToken };
 
@@ -93,17 +94,12 @@ export async function fetchMe(): Promise<AuthUser | null> {
 }
 
 // --- Route access (spec §25) -----------------------------------------------
-// Operations staff may reach the Orders section and the linked Operations chat
-// only; everything else is admin-only. Enforced in the UI by AuthGuard/Sidebar
-// AND independently on the backend by api/deps.require_roles — hiding nav is
-// never the only line of defence.
-const OPERATIONS_ALLOWED_PREFIXES = ["/orders", "/operations"];
-
+// Access rules live in ONE place — lib/dashboard/roles.ts — so the sidebar, the
+// AuthGuard, and the Settings → Roles & Permissions view can never disagree.
+// Enforced in the UI by AuthGuard/Sidebar AND independently on the backend by
+// api/deps.require_roles — hiding nav is never the only line of defence.
 export function isRouteAllowed(role: UserRole, pathname: string): boolean {
-  if (role === "admin") return true;
-  return OPERATIONS_ALLOWED_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
-  );
+  return roleAllowsRoute(role, pathname);
 }
 
 export function homeRouteFor(role: UserRole | null): string {

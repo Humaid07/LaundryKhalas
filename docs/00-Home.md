@@ -46,6 +46,16 @@ Agent Fleet. Architecture: [[seo-agent-system]] · dashboard contract:
 
 ## Latest Build Report
 
+[[2026-07-23-dashboard-rbac-auth]] —
+`build-reports/2026-07-23-dashboard-rbac-auth.md` — **Dashboard RBAC / auth (complete & harden)**:
+real auth already existed (JWT + PBKDF2, login, AuthGuard, role-gated sidebar) — this completed
+it. Kept the 2 real roles (admin, operations) as the single source of truth ([[rbac-auth]]),
+added admin-only user management (`/api/users` + real Settings Profile/Users & Roles UI replacing
+the 5-role mock), self-lockout protection, users-table RLS/privilege hardening, 401→logout, env
+cleanup. Backend 8 new tests pass; frontend 0 tsc errors, Playwright-verified.
+
+## Earlier Build Report
+
 [[2026-07-23-dashboard-minimal-redesign]] —
 `build-reports/2026-07-23-dashboard-minimal-redesign.md` — **Dashboard minimal redesign**:
 every section's main pages made calm and low-density (compact KPI strip → workflow tabs →

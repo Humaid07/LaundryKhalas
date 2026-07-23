@@ -1,10 +1,10 @@
-import { User, Users, Shield, Globe, Plug, Bot, Bell, Palette, ShieldCheck } from "lucide-react";
+import { User, Globe, Plug, Bot, Bell, Palette, ShieldCheck } from "lucide-react";
 import { Panel, PanelHeader, StatusBadge } from "@/components/dashboard/ui/primitives";
-import { Button } from "@/components/dashboard/ui/Button";
 import { Switch } from "@/components/dashboard/ui/Switch";
 import { ThemeToggle } from "@/components/dashboard/shell/ThemeToggle";
 import { ConnectedAppRow } from "@/components/dashboard/widgets";
-import { teamMembers, roles, connectedApps, marketConfig } from "@/lib/dashboard/mock-data";
+import { connectedApps, marketConfig } from "@/lib/dashboard/mock-data";
+import { ProfileTeamPanel, RolesPermissionsPanel } from "./UserManagement";
 
 function SettingsSection({
   icon: Icon,
@@ -51,61 +51,8 @@ function ReviewModeBanner() {
 }
 
 /* -------------------------------- Subsections ------------------------------- */
-
-function ProfileTeam() {
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <SettingsSection icon={User} title="Profile" description="Your account details">
-        <div className="flex items-center gap-4">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose/12 font-display text-lg font-bold text-rose">NE</span>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-ink">Nada El-Amin</p>
-            <p className="text-xs text-ink-muted">n•••@laundrykhalas.com · Owner</p>
-          </div>
-          <Button variant="secondary" size="sm">Edit</Button>
-        </div>
-      </SettingsSection>
-      <SettingsSection icon={Users} title="Team members" description={`${teamMembers.length} people`}>
-        <ul className="divide-y divide-border">
-          {teamMembers.map((m) => (
-            <li key={m.email} className="flex items-center justify-between gap-3 py-2.5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose/12 text-xxs font-bold text-rose">{m.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}</span>
-                <div>
-                  <p className="text-sm font-medium text-ink">{m.name}</p>
-                  <p className="text-xxs text-ink-faint">{m.email} · {m.markets}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="hidden text-xs text-ink-muted sm:block">{m.role}</span>
-                <StatusBadge tone={m.status === "Active" ? "success" : "warning"} dot={false}>{m.status}</StatusBadge>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <Button variant="secondary" size="sm" className="mt-3">Invite member</Button>
-      </SettingsSection>
-    </div>
-  );
-}
-
-function RolesPermissions() {
-  return (
-    <SettingsSection icon={Shield} title="Roles & permissions" description="Access levels">
-      <ul className="space-y-2">
-        {roles.map((r) => (
-          <li key={r.role} className="rounded-xl border border-border bg-surface-2 p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-ink">{r.role}</p>
-              <span className="text-xxs text-ink-faint">{r.members} member{r.members > 1 ? "s" : ""}</span>
-            </div>
-            <p className="mt-0.5 text-xs text-ink-muted">{r.permissions}</p>
-          </li>
-        ))}
-      </ul>
-    </SettingsSection>
-  );
-}
+/* Profile/Users and Roles & Permissions are real, RBAC-backed views — see
+ * ./UserManagement.tsx (backed by /api/users). Everything else is mock config. */
 
 function Markets() {
   return (
@@ -203,13 +150,13 @@ function Theme() {
 /** Renders one Settings subsection by slug (see lib/dashboard/sections.ts). */
 export function SettingsSubsection({ slug }: { slug: string }) {
   switch (slug) {
-    case "profile-team": return <ProfileTeam />;
-    case "roles-permissions": return <RolesPermissions />;
+    case "profile-team": return <ProfileTeamPanel />;
+    case "roles-permissions": return <RolesPermissionsPanel />;
     case "markets": return <Markets />;
     case "notifications": return <Notifications />;
     case "agent-guardrails": return <AgentGuardrails />;
     case "connected-apps": return <ConnectedApps />;
     case "theme": return <Theme />;
-    default: return <ProfileTeam />;
+    default: return <ProfileTeamPanel />;
   }
 }
