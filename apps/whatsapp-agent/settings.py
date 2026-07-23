@@ -95,11 +95,17 @@ class Settings(BaseSettings):
     evolution_allowed_test_numbers: str = ""
 
     # Native WhatsApp interactive LIST messages via Evolution (/message/sendList).
-    # Verified working on Evolution 2.3.7 + Baileys once every row carries a
-    # non-empty description (empty rows 400 with "description cannot be empty").
-    # Default true → service/slot/instruction selection is sent as a real
-    # tappable list; on ANY send failure it still falls back to numbered text.
-    evolution_use_interactive: bool = True
+    # Default FALSE: current Evolution 2.3.7 + Baileys builds fail to ENCODE a
+    # listMessage against the shipping WhatsApp Web protocol version — the send
+    # 400s with "TypeError: this.isZero is not a function" (a library-level bug,
+    # not a payload issue: no row/description tweak avoids it). With native lists
+    # off, service/slot/instruction selection is sent directly as a reliably
+    # answerable numbered-text menu (the same content the fallback produced),
+    # skipping a doomed ~5s round-trip on every prompt. Set
+    # EVOLUTION_USE_INTERACTIVE=true to re-trial native lists on a build/WhatsApp
+    # Web version where sendList encodes successfully; on ANY send failure it
+    # still falls back to numbered text.
+    evolution_use_interactive: bool = False
 
     # Native WhatsApp reply BUTTONS via Evolution (/message/sendButtons). The
     # payload is accepted, but button RENDERING on Baileys is inconsistent across
