@@ -333,6 +333,22 @@ async def test_import_creates_draft_only():
         assert draft.status == "draft" and draft.source == "import"
 
 
+# DoD. Live booking-FSM uses published overrides (no restart) ----------------
+async def test_booking_flow_uses_published_overrides():
+    from services import booking_flow as bf
+    code = _exact_code()
+    # advance() sets this per turn from resolver.published_overrides(); simulate it.
+    token = bf._PRICE_OVERRIDES.set({code: 250.0})
+    try:
+        updates = bf._pricing_updates([{"item_code": code, "quantity": 1}], "CAT", "Cat")
+    finally:
+        bf._PRICE_OVERRIDES.reset(token)
+    assert updates["subtotal_amount"] == 250.0  # published override used, not catalogue price
+    # Without the override the static catalogue price is used (unchanged behaviour).
+    static = bf._pricing_updates([{"item_code": code, "quantity": 1}], "CAT", "Cat")
+    assert static["subtotal_amount"] == cat.item_by_code(code)["current_price"]
+
+
 # 27/28. Public API excludes disabled items ----------------------------------
 async def test_public_excludes_disabled_items():
     async with AsyncSessionLocal() as s:

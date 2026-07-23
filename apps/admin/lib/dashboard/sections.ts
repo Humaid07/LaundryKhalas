@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   // operations
-  Headset, Factory, Truck, ClipboardList,
+  Headset, Factory, Truck, ClipboardList, Tags,
   // sales
   TrendingUp, Globe2, Radio, WashingMachine, Building2, Users, Filter,
   // partner
@@ -70,6 +70,7 @@ export const SECTIONS: Record<string, SectionDef> = {
       { slug: "facility-facing", label: "Facility Facing", icon: Factory, badge: 3, description: "Facility assignment, cleaning progress, quality checks, issues and delivery handoff.", kpis: [{ label: "In cleaning", value: "18" }, { label: "QC pending", value: "6", tone: "warning" }, { label: "Delayed", value: "3", tone: "danger" }], status: { label: "Privacy on", tone: "info" } },
       { slug: "drivers", label: "Drivers", icon: Truck, badge: 12, description: "Pickup/delivery drivers, queues, delivery progress, route status and driver issues.", kpis: [{ label: "Active", value: "12", tone: "success" }, { label: "Assigned", value: "9" }, { label: "Delayed", value: "4", tone: "danger" }] },
       { slug: "customer-orders", label: "Customer Orders", icon: ClipboardList, badge: 82, description: "Every customer order from WhatsApp, website, app, B2B and manual bookings.", kpis: [{ label: "Active", value: "82", tone: "rose" }, { label: "Done today", value: "31", tone: "success" }, { label: "Changes", value: "7", tone: "warning" }] },
+      { slug: "pricing", label: "Pricing Management", icon: Tags, description: "The published price catalogue read by the WhatsApp agent, orders and the public website. Edit a draft, preview, publish, run promotions, and roll back.", status: { label: "Source of truth", tone: "rose" } },
     ],
   },
 

@@ -50,6 +50,21 @@ logger = structlog.get_logger()
 
 _GST = _dt.timezone(_dt.timedelta(hours=4))  # Dubai (no DST)
 
+
+async def _published_price_overrides() -> dict:
+    """Current published/promotional unit prices for the booking quote, so the
+    agent reflects a just-published price with no restart. Fail-safe: any error
+    (no published version / DB down) → empty dict → the static catalogue price is
+    used and no price is ever invented (task spec §24)."""
+    try:
+        from db import AsyncSessionLocal
+        from services import price_resolver
+
+        async with AsyncSessionLocal() as session:
+            return await price_resolver.published_overrides(session, market="AE")
+    except Exception:  # noqa: BLE001 — never let pricing lookup break the webhook
+        return {}
+
 # Escalation category -> (flag_type, priority, team) for the dashboard inbox.
 _ESCALATION_FLAG: dict[str, tuple[str, str, str]] = {
     "refund": ("refund_request", "urgent", "Customer Facing / Finance"),
@@ -344,7 +359,8 @@ async def receive_evolution_webhook(request: Request):
                 reply = booking_flow.resume_or_new_prompt()
             else:
                 reply = await booking_flow.advance(_booking(active_draft), inbound_obj,
-                                                   today=_today(), available_slots=slots_repo.available_slots)
+                                                   today=_today(), available_slots=slots_repo.available_slots,
+                                                   price_overrides=await _published_price_overrides())
         else:
             # No in-progress draft — free to start a new order or handle next-actions.
             latest = await orders_repo.get_latest_for_conversation(convo["id"])
@@ -368,7 +384,8 @@ async def receive_evolution_webhook(request: Request):
                 logger.info("booking_intent_detected", sender=masked, order=booking_row["order_id"])
                 if _is_booking_selection(sel) or text.strip().isdigit():
                     reply = await booking_flow.advance(_booking(booking_row), inbound_obj,
-                                                       today=_today(), available_slots=slots_repo.available_slots)
+                                                       today=_today(), available_slots=slots_repo.available_slots,
+                                                       price_overrides=await _published_price_overrides())
                 else:
                     reply = booking_flow.begin_new_order() if latest else booking_flow.begin()
             elif action == booking_flow.CHECK_ORDER_STATUS:

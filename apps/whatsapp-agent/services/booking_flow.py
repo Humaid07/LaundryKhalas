@@ -22,6 +22,7 @@ numbered-text fallback.
 """
 from __future__ import annotations
 
+import contextvars
 import datetime as _dt
 import re
 from dataclasses import dataclass, field
@@ -395,14 +396,29 @@ def _raw_lines(booking: "Booking") -> list[dict]:
     return out
 
 
+# The CURRENT published/promotional unit prices for this turn, set by ``advance``
+# from ``price_resolver.published_overrides`` and read by the sync quote helpers
+# below — so a published price change flows into the agent's quote with no
+# restart, without threading a DB session through every FSM function. Empty in
+# tests / when nothing is published → the static catalogue price is used.
+_PRICE_OVERRIDES: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "booking_price_overrides", default=None)
+
+
+def _live_overrides() -> dict:
+    return _PRICE_OVERRIDES.get() or {}
+
+
 def _pricing_updates(raw_lines: list[dict], category_code: str | None,
                      category_name: str | None,
                      price_overrides: dict[str, float] | None = None) -> dict:
     """Recompute the quote from raw lines and return the order-row PATCH (priced
     line snapshot + VAT columns + amount mirror). ``price_overrides`` (from
-    ``services.price_resolver.published_overrides``) makes the snapshot use the
-    CURRENT published/promotional prices; omitted → the static catalogue price."""
-    q = pricing.calculate_estimate(raw_lines, price_overrides=price_overrides)
+    ``services.price_resolver.published_overrides``, defaulting to the per-turn
+    published prices set by ``advance``) makes the snapshot use the CURRENT
+    published/promotional prices; absent → the static catalogue price."""
+    q = pricing.calculate_estimate(
+        raw_lines, price_overrides=price_overrides if price_overrides is not None else _live_overrides())
     d = q.to_dict()
     return {
         "line_items": d["lines"],
@@ -418,7 +434,9 @@ def _pricing_updates(raw_lines: list[dict], category_code: str | None,
 
 
 def _quote_for(booking: "Booking", price_overrides: dict[str, float] | None = None):
-    return pricing.calculate_estimate(_raw_lines(booking), price_overrides=price_overrides)
+    return pricing.calculate_estimate(
+        _raw_lines(booking),
+        price_overrides=price_overrides if price_overrides is not None else _live_overrides())
 
 
 _QTY_WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4,
@@ -1115,11 +1133,16 @@ async def _on_resume_or_new(booking: Booking, inbound: Inbound, available_slots)
     return resume_or_new_prompt()
 
 
-async def advance(booking: Booking, inbound: Inbound, *, today: _dt.date, available_slots) -> BookingReply:
+async def advance(booking: Booking, inbound: Inbound, *, today: _dt.date, available_slots,
+                  price_overrides: dict[str, float] | None = None) -> BookingReply:
     """Advance the booking one step. ``available_slots(pickup_date, emirate,
     service_id)`` is an ASYNC callable returning
     ``list[{slot_id,label,start_time,end_time}]`` (injected so the flow stays
-    testable). Never mutates ``booking``; returns the updates to persist."""
+    testable). ``price_overrides`` are the CURRENT published/promotional unit
+    prices (the webhook fetches them via ``price_resolver.published_overrides``)
+    so any quote produced this turn uses live published pricing with no restart;
+    omitted (tests) → the static catalogue price. Never mutates ``booking``."""
+    _PRICE_OVERRIDES.set(price_overrides)
     state = booking.conversation_state or WAITING_FOR_SERVICE
 
     # A cancel at any active step ends the booking (no operational order).
