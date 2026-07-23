@@ -410,11 +410,19 @@ agent → approval → order flow and all 8 Admin UI routes.
 
 ## Latest Weekly Report
 
-[[week-01-report]] — `weekly-reports/week-01-report.md`
+[[week-02-report]] — `weekly-reports/week-02-report.md` — period 2026-07-19 → 07-23;
+headline: dashboard minimal redesign across all sections (+ Supabase DB, WhatsApp
+provider modes/Evolution, SEO foundation, Orders vertical slice, WhatsApp hardening).
+
+Previous: [[week-01-report]] — `weekly-reports/week-01-report.md`
 
 ## Latest Presentation Notes
 
-[[week-01-whatsapp-agent-stateful-demo]] —
+[[week-02-dashboard-redesign-demo]] —
+`presentation-notes/week-02-dashboard-redesign-demo.md` — demo the minimal,
+progressive-disclosure dashboard (light lists → full detail pages) across all sections.
+
+Previous: [[week-01-whatsapp-agent-stateful-demo]] —
 `presentation-notes/week-01-whatsapp-agent-stateful-demo.md`
 
 Previous: [[week-01-internal-dashboard-demo]] —
