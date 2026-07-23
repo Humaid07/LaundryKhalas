@@ -5,7 +5,7 @@ conversation thread, its messages, and an audit trail of what the agent did.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db import Base
@@ -105,6 +105,124 @@ class Order(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class CatalogueVersion(Base):
+    """A publishable snapshot of the whole item catalogue. Admins edit a DRAFT
+    version's items without touching live pricing, then PUBLISH it atomically;
+    runtime consumers read exactly one `is_current` published version per market.
+    Rollback creates a NEW published version copying an older one (never deletes).
+    """
+
+    __tablename__ = "catalogue_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    version_number: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft|pending_review|published|archived
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False)
+    market: Mapped[str] = mapped_column(String(8), default="AE")
+    change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str | None] = mapped_column(String(30), nullable=True)  # admin_edit|import|rollback|seed
+    rollback_of_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    published_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+    items: Mapped[list["CatalogueVersionItem"]] = relationship(
+        back_populates="version", cascade="all, delete-orphan"
+    )
+
+
+class CatalogueVersionItem(Base):
+    """The immutable per-item price row for one catalogue version."""
+
+    __tablename__ = "catalogue_version_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    version_id: Mapped[str] = mapped_column(ForeignKey("catalogue_versions.id"))
+    item_code: Mapped[str] = mapped_column(String(80), index=True)
+    category_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    category_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    service_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    service_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    canonical_name: Mapped[str] = mapped_column(String(160))
+    display_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pricing_type: Mapped[str] = mapped_column(String(40), default="FIXED_PER_ITEM")
+    pricing_unit: Mapped[str] = mapped_column(String(20), default="ITEM")
+    current_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    regular_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), default="AED")
+    is_starting_price: Mapped[bool] = mapped_column(Boolean, default=False)
+    requires_inspection: Mapped[bool] = mapped_column(Boolean, default=False)
+    requires_measurement: Mapped[bool] = mapped_column(Boolean, default=False)
+    vat_rate: Mapped[float] = mapped_column(Float, default=0.05)
+    prices_include_vat: Mapped[bool] = mapped_column(Boolean, default=False)
+    market: Mapped[str] = mapped_column(String(8), default="AE")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    disclaimer: Mapped[str | None] = mapped_column(Text, nullable=True)  # customer-facing
+    internal_note: Mapped[str | None] = mapped_column(Text, nullable=True)  # NEVER public
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    version: Mapped["CatalogueVersion"] = relationship(back_populates="items")
+
+
+class PricingPromotion(Base):
+    """A time-bounded promotional overlay on a published item price. Resolved at
+    runtime by the price resolver (never overwrites the base/regular price)."""
+
+    __tablename__ = "pricing_promotions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    item_code: Mapped[str] = mapped_column(String(80), index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    promo_price: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(8), default="AED")
+    market: Mapped[str] = mapped_column(String(8), default="AE")
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class PricingAuditLog(Base):
+    """Immutable record of every material pricing change (never overwritten)."""
+
+    __tablename__ = "pricing_audit_log"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    action: Mapped[str] = mapped_column(String(30))
+    entity_type: Mapped[str] = mapped_column(String(20))  # item|version|promotion
+    entity_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    field: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    actor: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PricingSyncStatus(Base):
+    """Record of a website/cache sync attempt after a publish (§14/§19)."""
+
+    __tablename__ = "pricing_sync_status"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    target: Mapped[str] = mapped_column(String(30))  # website|whatsapp_cache
+    version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    version_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20))  # success|failed|pending
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class AgentLog(Base):

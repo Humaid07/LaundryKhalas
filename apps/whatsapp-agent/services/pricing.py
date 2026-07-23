@@ -100,9 +100,13 @@ def _round(v: float) -> float:
     return round(float(v) + 1e-9, 2)
 
 
-def _line_for(item: dict, quantity: float, measure: float | None) -> QuoteLine:
+def _line_for(item: dict, quantity: float, measure: float | None,
+              override_price: float | None = None) -> QuoteLine:
     ptype = item["pricing_type"]
-    price = item.get("current_price")
+    # A published/promotional price (from the price resolver) overrides the static
+    # catalogue price so the agent quotes the CURRENT published value with no
+    # restart. Falls back to the catalogue price when no override is supplied.
+    price = override_price if override_price is not None else item.get("current_price")
     unit = item["pricing_unit"]
     starting = item["is_starting_price"]
     inspection = item["requires_inspection"]
@@ -137,7 +141,8 @@ def _line_for(item: dict, quantity: float, measure: float | None) -> QuoteLine:
     )
 
 
-def calculate_estimate(order_items: list[dict]) -> Quote:
+def calculate_estimate(order_items: list[dict],
+                       price_overrides: dict[str, float] | None = None) -> Quote:
     """Compute a VAT-aware quote for ``order_items``.
 
     Each entry: ``{"item_code": str, "quantity": number, "measure": number?}``
@@ -146,6 +151,11 @@ def calculate_estimate(order_items: list[dict]) -> Quote:
     subtotal/VAT/total cover ONLY the firm portion; pending 'From'/inspection
     lines are itemised but excluded from the payable total, and set
     ``is_final=False`` so the caller labels the total as estimated.
+
+    ``price_overrides`` (``{item_code: price}``) supplies CURRENT published /
+    promotional unit prices from ``services.price_resolver`` so the agent quotes
+    the live published catalogue without a restart; omitted → the static
+    catalogue price is used (identical behaviour to before).
     """
     vat = catalogue.vat_rate()
     quote = Quote(
@@ -161,7 +171,8 @@ def calculate_estimate(order_items: list[dict]) -> Quote:
             continue
         qty = _coerce_number(entry.get("quantity"), default=1.0)
         measure = _coerce_number(entry.get("measure"), default=None)
-        line = _line_for(item, qty, measure)
+        override = (price_overrides or {}).get(item["item_code"])
+        line = _line_for(item, qty, measure, override_price=override)
         quote.lines.append(line)
         if line.line_kind in ("exact", "estimate") and line.line_total is not None:
             firm_subtotal += line.line_total

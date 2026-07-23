@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Depends
 
 from api import (
+    admin_pricing,
     auth,
     catalogue,
     chat,
@@ -15,6 +16,7 @@ from api import (
     flags,
     health,
     orders,
+    public_pricing,
     seo_agents,
     service_taxonomy,
     settings_route,
@@ -85,6 +87,11 @@ app.include_router(evolution_webhooks.router)
 app.include_router(seo_agents.router, dependencies=_ADMIN)
 app.include_router(service_taxonomy.router, dependencies=_ADMIN)
 app.include_router(catalogue.router, dependencies=_OPS)
+# Admin pricing management — each endpoint self-guards with a specific
+# pricing.* permission (services.pricing_permissions), so no router-level guard.
+app.include_router(admin_pricing.router)
+# Public pricing — UNAUTHENTICATED, read-only, published data only (for the website).
+app.include_router(public_pricing.router)
 app.include_router(health.router)
 
 

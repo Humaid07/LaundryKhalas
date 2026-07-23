@@ -396,10 +396,13 @@ def _raw_lines(booking: "Booking") -> list[dict]:
 
 
 def _pricing_updates(raw_lines: list[dict], category_code: str | None,
-                     category_name: str | None) -> dict:
+                     category_name: str | None,
+                     price_overrides: dict[str, float] | None = None) -> dict:
     """Recompute the quote from raw lines and return the order-row PATCH (priced
-    line snapshot + VAT columns + amount mirror)."""
-    q = pricing.calculate_estimate(raw_lines)
+    line snapshot + VAT columns + amount mirror). ``price_overrides`` (from
+    ``services.price_resolver.published_overrides``) makes the snapshot use the
+    CURRENT published/promotional prices; omitted → the static catalogue price."""
+    q = pricing.calculate_estimate(raw_lines, price_overrides=price_overrides)
     d = q.to_dict()
     return {
         "line_items": d["lines"],
@@ -414,8 +417,8 @@ def _pricing_updates(raw_lines: list[dict], category_code: str | None,
     }
 
 
-def _quote_for(booking: "Booking"):
-    return pricing.calculate_estimate(_raw_lines(booking))
+def _quote_for(booking: "Booking", price_overrides: dict[str, float] | None = None):
+    return pricing.calculate_estimate(_raw_lines(booking), price_overrides=price_overrides)
 
 
 _QTY_WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4,
