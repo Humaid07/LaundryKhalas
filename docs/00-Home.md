@@ -46,6 +46,18 @@ Agent Fleet. Architecture: [[seo-agent-system]] · dashboard contract:
 
 ## Latest Build Report
 
+[[2026-07-23-service-catalogue-pricing]] —
+`build-reports/2026-07-23-service-catalogue-pricing.md` — **Item-level service catalogue,
+pricing engine & agent item collection**: the real Laundry Khalas price list (9 categories,
+120 priced items) transcribed from the approved image into reviewed seed data →
+`service_categories/services/service_items/service_aliases` (migration
+`20260723_000007`, seeded live) → VAT-aware pricing engine (starting/inspection prices
+never auto-totalled) → catalogue/quote APIs (`/api/catalogue/*`) → the booking FSM now
+collects category → item → quantity and shows a priced, VAT summary → order line-item
+snapshot on the dashboard. 372 tests pass (all 24 required pricing scenarios). Known
+follow-ups: informational Q&A/SEO taxonomy still on the older 8-service list; order-detail
+page renders live pricing via the Orders drawer.
+
 [[2026-07-23-dashboard-rbac-auth]] —
 `build-reports/2026-07-23-dashboard-rbac-auth.md` — **Dashboard RBAC / auth (complete & harden)**:
 real auth already existed (JWT + PBKDF2, login, AuthGuard, role-gated sidebar) — this completed

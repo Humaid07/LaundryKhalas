@@ -7,6 +7,7 @@ from fastapi import Depends
 
 from api import (
     auth,
+    catalogue,
     chat,
     conversations,
     deps,
@@ -83,6 +84,7 @@ app.include_router(webhooks.router)
 app.include_router(evolution_webhooks.router)
 app.include_router(seo_agents.router, dependencies=_ADMIN)
 app.include_router(service_taxonomy.router, dependencies=_ADMIN)
+app.include_router(catalogue.router, dependencies=_OPS)
 app.include_router(health.router)
 
 

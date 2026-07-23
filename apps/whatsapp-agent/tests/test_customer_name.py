@@ -38,6 +38,18 @@ def _full(**over):
     return Booking(**base)
 
 
+# The name step is now reached AFTER item collection (category -> item(s) ->
+# name -> date -> …). This drives a draft with one collected item to the point
+# where the FSM asks for the name.
+_LINE = [{"item_code": "WASH_FOLD_6KG", "quantity": 1, "line_kind": "exact"}]
+
+
+def _items_done(**over):
+    b = Booking(conversation_state=bf.WAITING_FOR_MORE_ITEMS, service_id="WASH_FOLD",
+                service_name_snapshot="Wash & Fold", line_items=list(_LINE), **over)
+    return advance(b, Inbound(selection_id="items_done"))
+
+
 # --- name validation ---------------------------------------------------------
 def test_validate_name_accepts_international_names():
     for ok in ["Sara", "Amaan Patel", "Mary Jane", "Abdul-Rahman", "O'Connor",
@@ -73,8 +85,7 @@ def test_extract_name_absent_returns_none():
 
 # 3 — the agent asks for the name when it is missing (no profile) --------------
 def test_agent_asks_for_name_when_missing():
-    reply = advance(Booking(conversation_state=bf.WAITING_FOR_SERVICE),
-                    Inbound(selection_id=f"service:{_svc(0)}"))
+    reply = _items_done()                                # items collected, no name yet
     assert reply.state == bf.WAITING_FOR_NAME
     assert "name" in reply.text.lower()
     assert "customer_name" not in reply.updates          # nothing saved yet
@@ -82,23 +93,19 @@ def test_agent_asks_for_name_when_missing():
 
 # 4 — after the name is stored it is not asked again --------------------------
 def test_name_not_reasked_after_stored():
-    saved = advance(Booking(conversation_state=bf.WAITING_FOR_NAME, service_id=_svc(0),
-                            service_name_snapshot="Premium Wash & Fold"),
+    saved = advance(Booking(conversation_state=bf.WAITING_FOR_NAME, service_id="WASH_FOLD",
+                            service_name_snapshot="Wash & Fold", line_items=list(_LINE)),
                     Inbound(text="Sara"))
     assert saved.updates["customer_name"] == "Sara"
     assert saved.state == bf.WAITING_FOR_PICKUP_DATE      # moves on, name done
-    # a booking that already has a name skips the name step entirely
-    nxt = advance(Booking(conversation_state=bf.WAITING_FOR_SERVICE),
-                  Inbound(selection_id=f"service:{_svc(0)}", text="I'm Sara, wash & fold"))
+    # a draft whose items are collected AND that already has a name skips the name step
+    nxt = _items_done(customer_name="Sara")
     assert nxt.state == bf.WAITING_FOR_PICKUP_DATE
-    assert nxt.updates["customer_name"] == "Sara"
 
 
 # 5/6 — profile name is offered, NOT auto-confirmed ---------------------------
 def test_profile_name_offered_not_auto_saved():
-    reply = advance(Booking(conversation_state=bf.WAITING_FOR_SERVICE,
-                            whatsapp_profile_name="Humaid"),
-                    Inbound(selection_id=f"service:{_svc(0)}"))
+    reply = _items_done(whatsapp_profile_name="Humaid")
     assert reply.state == bf.WAITING_FOR_NAME_CONFIRM     # asks to confirm, doesn't save
     assert "Humaid" in reply.text
     assert "customer_name" not in reply.updates
@@ -106,8 +113,9 @@ def test_profile_name_offered_not_auto_saved():
 
 # 7 — the customer can confirm the profile name -------------------------------
 def test_confirm_profile_name():
-    b = Booking(conversation_state=bf.WAITING_FOR_NAME_CONFIRM, service_id=_svc(0),
-                service_name_snapshot="Premium Wash & Fold", whatsapp_profile_name="Humaid")
+    b = Booking(conversation_state=bf.WAITING_FOR_NAME_CONFIRM, service_id="WASH_FOLD",
+                service_name_snapshot="Wash & Fold", line_items=list(_LINE),
+                whatsapp_profile_name="Humaid")
     reply = advance(b, Inbound(selection_id="name_use"))
     assert reply.updates["customer_name"] == "Humaid"
     assert reply.state == bf.WAITING_FOR_PICKUP_DATE
@@ -128,20 +136,21 @@ def test_enter_different_name():
 
 # 9 — an existing verified name is offered for reuse and confirmed ------------
 def test_verified_name_reused_after_confirmation():
-    prompt = advance(Booking(conversation_state=bf.WAITING_FOR_SERVICE, verified_name="Sara"),
-                     Inbound(selection_id=f"service:{_svc(0)}"))
+    prompt = _items_done(verified_name="Sara")
     assert prompt.state == bf.WAITING_FOR_NAME_CONFIRM
     assert "Sara" in prompt.text
-    used = advance(Booking(conversation_state=bf.WAITING_FOR_NAME_CONFIRM, service_id=_svc(0),
-                           service_name_snapshot="Premium Wash & Fold", verified_name="Sara"),
+    used = advance(Booking(conversation_state=bf.WAITING_FOR_NAME_CONFIRM, service_id="WASH_FOLD",
+                           service_name_snapshot="Wash & Fold", line_items=list(_LINE),
+                           verified_name="Sara"),
                    Inbound(selection_id="name_use"))
     assert used.updates["customer_name"] == "Sara"
 
 
 # 10 — a missing name blocks the final summary/confirmation --------------------
 def test_missing_name_blocks_confirmation():
-    # everything filled EXCEPT the name -> next step is the name, not confirmation
-    b = Booking(service_id=_svc(0), service_name_snapshot="Premium Wash & Fold",
+    # everything filled (incl. items) EXCEPT the name -> next step is the name
+    b = Booking(service_id="WASH_FOLD", service_name_snapshot="Wash & Fold",
+                line_items=list(_LINE),
                 pickup_date=TODAY, pickup_slot_id="morning_08_11", pickup_slot_label="8–11 AM",
                 pickup_address="Marina Heights", pickup_instruction_code="none")
     r = asyncio.run(bf.next_prompt_for(b, _slots))

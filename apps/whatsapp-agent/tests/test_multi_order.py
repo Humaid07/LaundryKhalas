@@ -30,6 +30,15 @@ def _svc(i=0):
     return active_service_catalog()[i]["service_id"]
 
 
+def _cat(i=0):
+    from services import catalogue
+    return catalogue.categories()[i]["code"]
+
+
+# One collected order line (item collection now precedes name/date/…).
+_LINE = [{"item_code": "WASH_FOLD_6KG", "quantity": 1, "line_kind": "exact"}]
+
+
 # 14/15 — new-order intent is recognized (returning later, various phrasings) ---
 def test_new_order_intent_recognized():
     for phrase in ["I want another pickup", "I need to place a new order",
@@ -76,9 +85,11 @@ def test_resume_or_new_prompt_and_choices():
     assert [o.id for o in prompt.interactive.options] == [
         "resume_continue", "resume_new", "resume_cancel"]
 
-    # a draft mid-flow (address still missing) with progress made
-    draft = Booking(conversation_state=bf.RESUME_OR_NEW, service_id=_svc(0),
-                    customer_name="Sara", service_name_snapshot="Premium Wash & Fold",
+    # a draft mid-flow (address still missing) with progress made — items already
+    # collected (item collection precedes the address step)
+    draft = Booking(conversation_state=bf.RESUME_OR_NEW, service_id="WASH_FOLD",
+                    customer_name="Sara", service_name_snapshot="Wash & Fold",
+                    line_items=list(_LINE),
                     pickup_date=TODAY + _dt.timedelta(days=1),
                     pickup_slot_id="morning_08_11", pickup_slot_label="8–11 AM")
     # continue -> restores the current step (address), does NOT restart
@@ -108,13 +119,20 @@ def test_next_prompt_for_reconstructs_current_step():
         assert r.state == expected_state
 
     asyncio.run(check(Booking(), bf.WAITING_FOR_SERVICE))
-    asyncio.run(check(Booking(service_id=_svc(0)), bf.WAITING_FOR_NAME))   # name required next
-    asyncio.run(check(Booking(service_id=_svc(0), customer_name="Sara"),
-                      bf.WAITING_FOR_PICKUP_DATE))
-    asyncio.run(check(Booking(service_id=_svc(0), customer_name="Sara", pickup_date=TODAY,
+    # category picked but no items yet -> collect the item(s) next
+    r = asyncio.run(bf.next_prompt_for(Booking(service_id="WASH_FOLD"), _slots))
+    assert r.state in (bf.WAITING_FOR_SUBCATEGORY, bf.WAITING_FOR_ITEM)
+    # items collected, no name -> name
+    asyncio.run(check(Booking(service_id="WASH_FOLD", line_items=list(_LINE)),
+                      bf.WAITING_FOR_NAME))
+    asyncio.run(check(Booking(service_id="WASH_FOLD", line_items=list(_LINE),
+                              customer_name="Sara"), bf.WAITING_FOR_PICKUP_DATE))
+    asyncio.run(check(Booking(service_id="WASH_FOLD", line_items=list(_LINE),
+                              customer_name="Sara", pickup_date=TODAY,
                               pickup_slot_id="morning_08_11", pickup_slot_label="8–11 AM"),
                       bf.WAITING_FOR_ADDRESS))
-    asyncio.run(check(Booking(service_id=_svc(0), customer_name="Sara", pickup_date=TODAY,
+    asyncio.run(check(Booking(service_id="WASH_FOLD", line_items=list(_LINE),
+                              customer_name="Sara", pickup_date=TODAY,
                               pickup_slot_id="morning_08_11", pickup_slot_label="8–11 AM",
                               pickup_address="Villa 9, Barsha",
                               pickup_instruction_code="none"),
@@ -124,12 +142,12 @@ def test_next_prompt_for_reconstructs_current_step():
 # 17 — two conversations keep independent workflow state (no shared globals) ----
 def test_two_conversations_independent_state():
     a = advance(Booking(conversation_state=bf.WAITING_FOR_SERVICE),
-                Inbound(selection_id=f"service:{_svc(0)}"))
+                Inbound(selection_id=f"service:{_cat(0)}"))
     b_started = Booking(conversation_state=bf.RESUME_OR_NEW, service_id=_svc(1),
                         pickup_date=TODAY)
     b = advance(b_started, Inbound(selection_id="resume_new"))
-    # A progressed its own booking; B independently asked to start new
-    assert a.updates["service_id"] == _svc(0)
+    # A progressed its own booking (picked a category); B independently started new
+    assert a.updates["service_id"] == _cat(0)
     assert b.start_new_order is True
     assert a.start_new_order is False
 

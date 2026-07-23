@@ -27,11 +27,20 @@ import re
 from dataclasses import dataclass, field
 
 from agents.whatsapp_agent import tools
-from rules import active_service_catalog, pickup_instructions, service_by_id
+from rules import pickup_instructions
+from services import catalogue, pricing
 from services.order_extraction import area_to_city
 
 # --- States -----------------------------------------------------------------
-WAITING_FOR_SERVICE = "waiting_for_service"
+# Step 1 = category ("service"); step 2 = sub-category (only for big categories);
+# step 3 = item + quantity/measure; then "add another / done". After the items
+# are collected the flow continues to the SAME proven name→date→…→confirm path.
+WAITING_FOR_SERVICE = "waiting_for_service"             # category selection
+WAITING_FOR_SUBCATEGORY = "waiting_for_subcategory"     # sub-category (Everyday Wear, …)
+WAITING_FOR_ITEM = "waiting_for_item"                   # item within the (sub)category
+WAITING_FOR_ITEM_QUANTITY = "waiting_for_item_quantity"  # how many of the item
+WAITING_FOR_MEASURE = "waiting_for_item_measure"        # sqm for per-sqm items
+WAITING_FOR_MORE_ITEMS = "waiting_for_more_items"       # add another item / done
 WAITING_FOR_NAME = "waiting_for_customer_name"          # free-text name entry
 WAITING_FOR_NAME_CONFIRM = "waiting_for_name_confirm"   # confirm a profile/verified name
 WAITING_FOR_PICKUP_DATE = "waiting_for_pickup_date"
@@ -77,7 +86,9 @@ _EDITING_STATES = frozenset({
 })
 
 ACTIVE_STATES = frozenset({
-    WAITING_FOR_SERVICE, WAITING_FOR_NAME, WAITING_FOR_NAME_CONFIRM,
+    WAITING_FOR_SERVICE, WAITING_FOR_SUBCATEGORY, WAITING_FOR_ITEM,
+    WAITING_FOR_ITEM_QUANTITY, WAITING_FOR_MEASURE, WAITING_FOR_MORE_ITEMS,
+    WAITING_FOR_NAME, WAITING_FOR_NAME_CONFIRM,
     WAITING_FOR_PICKUP_DATE, WAITING_FOR_PICKUP_SLOT,
     WAITING_FOR_ADDRESS, WAITING_FOR_PICKUP_INSTRUCTIONS, WAITING_FOR_INSTRUCTION_TEXT,
     WAITING_FOR_CONFIRMATION, WAITING_FOR_CHANGE_FIELD, RESUME_OR_NEW,
@@ -124,8 +135,11 @@ class Booking:
     """The subset of the open draft-order row the FSM reasons over."""
     conversation_state: str | None = None
     customer_name: str | None = None        # CONFIRMED booking name (persisted snapshot)
-    service_id: str | None = None
-    service_name_snapshot: str | None = None
+    service_id: str | None = None                # = catalogue category code
+    service_name_snapshot: str | None = None     # = catalogue category name
+    line_items: list | None = None               # completed priced order lines (snapshot)
+    browse_service_code: str | None = None        # sub-category whose items are shown
+    pending_item_code: str | None = None          # item awaiting a quantity/measure
     pickup_date: _dt.date | None = None
     pickup_slot_id: str | None = None
     pickup_slot_label: str | None = None
@@ -249,31 +263,36 @@ def extract_name(text: str | None) -> str | None:
     return validate_name(m.group(1)) if m else None
 
 
-# --- Service catalogue helpers ----------------------------------------------
+# --- Service catalogue helpers (step 1 = the 9 real price-list categories) ---
 def _service_options() -> list[Option]:
-    opts: list[Option] = []
-    for s in active_service_catalog():
-        desc = (s.get("description") or "").strip()
-        opts.append(Option(
-            id=f"service:{s.get('service_id', s.get('key'))}",
-            title=s.get("display_name") or s.get("label"),
-            description=(desc[:69] + "…") if len(desc) > 70 else (desc or None),
-        ))
-    return opts
+    """The WhatsApp step-1 list: the real price-list categories (Clean & Press,
+    Press Only, …). The row id is ``service:<CATEGORY_CODE>``."""
+    return [
+        Option(id=f"service:{c['code']}", title=c["name"],
+               description=_clip(c.get("description")))
+        for c in catalogue.categories()
+    ]
+
+
+def _clip(text: str | None) -> str | None:
+    if not text:
+        return None
+    text = text.strip()
+    return (text[:69] + "…") if len(text) > 70 else (text or None)
 
 
 def resolve_service(inbound: Inbound) -> tuple[str | None, str]:
-    """Return (service_id, reason). reason: 'ok' | 'ambiguous' | 'invalid'."""
-    services = active_service_catalog()
-    ids = {s.get("service_id", s.get("key")) for s in services}
-
+    """Return (category_code, reason). reason: 'ok' | 'ambiguous' | 'invalid'.
+    Free text resolves via category aliases, then via an item alias (mapping the
+    item back to its category). Bare 'iron/press' is deliberately ambiguous so
+    the agent asks Clean & Press vs Press Only (task spec §7/§20)."""
+    ids = {c["code"] for c in catalogue.categories()}
     sel = inbound.selection_id or ""
     if sel.startswith("service:"):
         key = sel.split(":", 1)[1]
         return (key, "ok") if key in ids else (None, "invalid")
 
     text = (inbound.text or "").strip()
-    # numbered fallback ("2")
     if text.isdigit():
         idx = int(text) - 1
         opts = _service_options()
@@ -281,20 +300,393 @@ def resolve_service(inbound: Inbound) -> tuple[str | None, str]:
             return (opts[idx].id.split(":", 1)[1], "ok")
         return (None, "invalid")
 
-    # free text -> match against catalogue aliases; resolve only on a UNIQUE hit
-    lowered = text.lower()
-    matched: set[str] = set()
-    for s in services:
-        sid = s.get("service_id", s.get("key"))
-        for alias in (s.get("aliases") or s.get("keywords") or []):
-            if alias and alias.lower() in lowered:
-                matched.add(sid)
-                break
-    if len(matched) == 1:
-        return (matched.pop(), "ok")
-    if len(matched) > 1:
+    if catalogue.is_ambiguous_iron(text):
+        return (None, "ambiguous")
+    code = catalogue.resolve_category_alias(text)
+    if code:
+        return (code, "ok")
+    item_codes, reason = catalogue.resolve_item_alias(text)
+    if reason == "ok":
+        item = catalogue.item_by_code(item_codes[0])
+        return (item["category_code"], "ok") if item else (None, "invalid")
+    if reason == "ambiguous":
         return (None, "ambiguous")
     return (None, "invalid")
+
+
+# --- Item catalogue helpers (steps 2-3) -------------------------------------
+def _subcategory_options(category_code: str) -> list[Option]:
+    return [
+        Option(id=f"sub:{s['code']}", title=s["name"])
+        for s in catalogue.services_for_category(category_code)
+    ]
+
+
+def _item_options(service_code: str) -> list[Option]:
+    opts: list[Option] = []
+    for it in catalogue.items_for_service(service_code):
+        opts.append(Option(
+            id=f"item:{it['item_code']}",
+            title=it["canonical_name"],
+            description=catalogue.item_price_label(it),
+        ))
+    return opts
+
+
+def resolve_subcategory(inbound: Inbound, category_code: str) -> tuple[str | None, str]:
+    svcs = catalogue.services_for_category(category_code)
+    ids = {s["code"] for s in svcs}
+    sel = inbound.selection_id or ""
+    if sel.startswith("sub:"):
+        code = sel.split(":", 1)[1]
+        return (code, "ok") if code in ids else (None, "invalid")
+    text = (inbound.text or "").strip()
+    if text.isdigit():
+        idx = int(text) - 1
+        if 0 <= idx < len(svcs):
+            return (svcs[idx]["code"], "ok")
+        return (None, "invalid")
+    low = text.lower()
+    hits = [s["code"] for s in svcs if s["name"].lower() in low]
+    if len(hits) == 1:
+        return (hits[0], "ok")
+    return (None, "invalid")
+
+
+def resolve_item(inbound: Inbound, service_code: str | None,
+                 category_code: str | None) -> tuple[str | None, str]:
+    """Resolve an item within the currently-browsed (sub)category. Returns
+    (item_code, reason): 'ok' | 'ambiguous' | 'invalid'."""
+    items = (catalogue.items_for_service(service_code) if service_code
+             else catalogue.items_for_category(category_code or ""))
+    sel = inbound.selection_id or ""
+    if sel.startswith("item:"):
+        code = sel.split(":", 1)[1]
+        # An item selection is valid even if it belongs to another sub-category of
+        # the same category (the customer may have free-typed it).
+        return (code, "ok") if catalogue.item_by_code(code) else (None, "invalid")
+    text = (inbound.text or "").strip()
+    if text.isdigit():
+        idx = int(text) - 1
+        if 0 <= idx < len(items):
+            return (items[idx]["item_code"], "ok")
+        return (None, "invalid")
+    # free text -> alias within this category first, then the whole catalogue
+    hit_codes, reason = catalogue.resolve_item_alias(text, category_code=category_code)
+    if reason == "ok":
+        return (hit_codes[0], "ok")
+    if reason == "ambiguous":
+        return (None, "ambiguous")
+    hit_codes, reason = catalogue.resolve_item_alias(text)
+    if reason == "ok":
+        return (hit_codes[0], "ok")
+    return (None, reason if reason == "ambiguous" else "invalid")
+
+
+def _raw_lines(booking: "Booking") -> list[dict]:
+    """The completed order lines as {item_code, quantity, measure} (for repricing)."""
+    out: list[dict] = []
+    for ln in booking.line_items or []:
+        out.append({
+            "item_code": ln.get("item_code"),
+            "quantity": ln.get("quantity", 1),
+            "measure": ln.get("measure"),
+        })
+    return out
+
+
+def _pricing_updates(raw_lines: list[dict], category_code: str | None,
+                     category_name: str | None) -> dict:
+    """Recompute the quote from raw lines and return the order-row PATCH (priced
+    line snapshot + VAT columns + amount mirror)."""
+    q = pricing.calculate_estimate(raw_lines)
+    d = q.to_dict()
+    return {
+        "line_items": d["lines"],
+        "catalogue_category_code": category_code,
+        "catalogue_category_name": category_name,
+        "subtotal_amount": q.subtotal_excluding_vat,
+        "vat_rate": q.vat_rate,
+        "vat_amount": q.vat_amount,
+        "estimated_total": q.estimated_total_including_vat,
+        "amount": q.estimated_total_including_vat,
+        "pricing_is_estimated": q.is_estimated,
+    }
+
+
+def _quote_for(booking: "Booking"):
+    return pricing.calculate_estimate(_raw_lines(booking))
+
+
+_QTY_WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4,
+              "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+              "single": 1, "couple": 2, "pair": 1, "dozen": 12}
+
+
+def _extract_leading_qty(text: str | None) -> int | None:
+    """A quantity stated alongside the item ('3 shirts', 'two ties'), else None."""
+    if not text:
+        return None
+    m = re.match(r"\s*(\d{1,3})\b", text)
+    if m:
+        n = int(m.group(1))
+        return n if 1 <= n <= 500 else None
+    first = text.strip().split()[0].lower() if text.strip() else ""
+    return _QTY_WORDS.get(first)
+
+
+def _parse_qty(text: str | None) -> int | None:
+    if not text:
+        return None
+    m = re.search(r"(\d{1,3})", text)
+    if m:
+        n = int(m.group(1))
+        return n if 1 <= n <= 500 else None
+    for word, n in _QTY_WORDS.items():
+        if re.search(rf"\b{word}\b", text.lower()):
+            return n
+    return None
+
+
+def _parse_measure(text: str | None) -> float | None:
+    if not text:
+        return None
+    m = re.search(r"(\d+(?:\.\d+)?)", text)
+    if not m:
+        return None
+    v = float(m.group(1))
+    return v if 0 < v <= 1000 else None
+
+
+# --- Item-flow prompt builders ----------------------------------------------
+def _subcategory_prompt(category_code: str) -> BookingReply:
+    cat = catalogue.category_by_code(category_code) or {}
+    body = f"Great — {cat.get('name', 'that service')}. Which type of item?"
+    return BookingReply(
+        text=body, state=WAITING_FOR_SUBCATEGORY,
+        interactive=Interactive(
+            kind="list", body=body, button_text="Choose a type",
+            section_title=cat.get("name") or "Types",
+            options=_subcategory_options(category_code)),
+        log_event="subcategory_list_sent")
+
+
+def _item_prompt(category_code: str, service_code: str | None) -> BookingReply:
+    svc = next((s for s in catalogue.services_for_category(category_code)
+                if s["code"] == service_code), None)
+    section = (svc or {}).get("name") or (catalogue.category_by_code(category_code) or {}).get("name") or "Items"
+    body = "Which item would you like? You can also tell me the quantity (e.g. '3 shirts')."
+    options = _item_options(service_code) if service_code else [
+        Option(id=f"item:{i['item_code']}", title=i["canonical_name"],
+               description=catalogue.item_price_label(i))
+        for i in catalogue.items_for_category(category_code)]
+    return BookingReply(
+        text=body, state=WAITING_FOR_ITEM,
+        interactive=Interactive(
+            kind="list", body=body, button_text="Choose an item",
+            section_title=section, options=options),
+        updates={"browse_service_code": service_code},
+        log_event="item_list_sent")
+
+
+def _quantity_prompt(item: dict) -> BookingReply:
+    body = f"How many {item['canonical_name']}? ({catalogue.item_price_label(item)})"
+    return BookingReply(text=body, state=WAITING_FOR_ITEM_QUANTITY,
+                        log_event="quantity_requested")
+
+
+def _measure_prompt(item: dict) -> BookingReply:
+    body = (f"Roughly how many square metres of {item['canonical_name']}? "
+            f"({catalogue.item_price_label(item)} — estimated; the team confirms "
+            "the final measurement at pickup.)")
+    return BookingReply(text=body, state=WAITING_FOR_MEASURE,
+                        log_event="measure_requested")
+
+
+def _more_items_prompt(last_item_code: str | None, quantity) -> BookingReply:
+    item = catalogue.item_by_code(last_item_code) if last_item_code else None
+    added = (f"Added {_fmt_num(quantity)} × {item['canonical_name']}. "
+             if item else "")
+    body = f"{added}Would you like to add another item, or continue with your order?"
+    return BookingReply(
+        text=body, state=WAITING_FOR_MORE_ITEMS,
+        interactive=Interactive(kind="buttons", body=body, options=[
+            Option(id="add_item", title="Add another item"),
+            Option(id="items_done", title="That's all")]),
+        log_event="more_items_prompt")
+
+
+def _fmt_num(v) -> str:
+    try:
+        f = float(v)
+        return str(int(f)) if f == int(f) else f"{f:g}"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _iron_disambiguation_prompt() -> BookingReply:
+    body = ("Would you like Clean & Press (we wash and iron) or Press Only "
+            "(iron an item that's already washed)?")
+    return BookingReply(
+        text=body, state=WAITING_FOR_SERVICE,
+        interactive=Interactive(kind="buttons", body=body, options=[
+            Option(id="service:CLEAN_PRESS", title="Clean & Press"),
+            Option(id="service:PRESS_ONLY", title="Press Only")]),
+        log_event="iron_disambiguation")
+
+
+def _resume_item_collection(booking: "Booking") -> BookingReply:
+    """Re-issue the correct item-collection prompt for a draft mid-collection."""
+    if booking.pending_item_code:
+        item = catalogue.item_by_code(booking.pending_item_code)
+        if item and item["pricing_type"] == "PER_SQM":
+            return _measure_prompt(item)
+        if item:
+            return _quantity_prompt(item)
+    subs = catalogue.services_for_category(booking.service_id or "")
+    if len(subs) > 1 and not booking.browse_service_code:
+        return _subcategory_prompt(booking.service_id)
+    code = booking.browse_service_code or (subs[0]["code"] if subs else None)
+    return _item_prompt(booking.service_id, code)
+
+
+# --- Item-flow value handlers -----------------------------------------------
+def _enter_category(booking: "Booking", category_code: str) -> BookingReply:
+    cat = catalogue.category_by_code(category_code) or {}
+    name = cat.get("name") or category_code
+    manual = cat.get("default_pricing_type") in ("STARTING_FROM", "INSPECTION_REQUIRED")
+    base_updates = {
+        "service_id": category_code,
+        "service": name,
+        "service_display_name": name,
+        "service_name_snapshot": name,
+        "catalogue_category_code": category_code,
+        "catalogue_category_name": name,
+        "unit_type": (cat.get("default_pricing_unit") or "ITEM").lower(),
+        "requires_manual_quote": bool(manual),
+        "_touch_service_selected_at": True,
+    }
+    subs = catalogue.services_for_category(category_code)
+    if len(subs) > 1:
+        reply = _subcategory_prompt(category_code)
+    else:
+        code = subs[0]["code"] if subs else None
+        reply = _item_prompt(category_code, code)
+    reply.updates = {**base_updates, **(reply.updates or {})}
+    reply.log_event = "service_selected"
+    return reply
+
+
+def _on_subcategory(booking: "Booking", inbound: Inbound) -> BookingReply:
+    code, reason = resolve_subcategory(inbound, booking.service_id or "")
+    if reason != "ok" or not code:
+        r = _subcategory_prompt(booking.service_id)
+        r.text = "Please choose one of the item types below:"
+        if r.interactive:
+            r.interactive.body = r.text
+        r.log_event = "subcategory_invalid"
+        return r
+    reply = _item_prompt(booking.service_id, code)
+    reply.updates = {**(reply.updates or {}), "browse_service_code": code}
+    return reply
+
+
+def _start_item(booking: "Booking", item_code: str, inbound: Inbound) -> BookingReply:
+    """An item was chosen: ask sqm for per-sqm items, use an inline quantity if
+    the customer gave one, else ask the quantity."""
+    item = catalogue.item_by_code(item_code)
+    if not item:
+        return _item_prompt(booking.service_id, booking.browse_service_code)
+    if item["pricing_type"] == "PER_SQM":
+        r = _measure_prompt(item)
+        r.updates = {"pending_item_code": item_code}
+        return r
+    qty = _extract_leading_qty(inbound.text)
+    if qty:
+        return _complete_line(booking, item_code, qty, None)
+    r = _quantity_prompt(item)
+    r.updates = {"pending_item_code": item_code}
+    return r
+
+
+def _on_item(booking: "Booking", inbound: Inbound) -> BookingReply:
+    item_code, reason = resolve_item(inbound, booking.browse_service_code, booking.service_id)
+    if reason == "ambiguous":
+        r = _item_prompt(booking.service_id, booking.browse_service_code)
+        r.text = "More than one item matches that — please pick the exact one below:"
+        if r.interactive:
+            r.interactive.body = r.text
+        r.log_event = "item_selection_ambiguous"
+        return r
+    if reason != "ok" or not item_code:
+        r = _item_prompt(booking.service_id, booking.browse_service_code)
+        r.text = "Sorry, I didn't catch a valid item. Please choose one below:"
+        if r.interactive:
+            r.interactive.body = r.text
+        r.log_event = "item_selection_invalid"
+        return r
+    return _start_item(booking, item_code, inbound)
+
+
+def _on_item_quantity(booking: "Booking", inbound: Inbound) -> BookingReply:
+    qty = _parse_qty(inbound.text)
+    if not qty:
+        item = catalogue.item_by_code(booking.pending_item_code) or {}
+        name = item.get("canonical_name", "the item")
+        return BookingReply(
+            text=f"Please tell me how many {name} you'd like (a number, e.g. 3).",
+            state=WAITING_FOR_ITEM_QUANTITY, log_event="quantity_invalid")
+    return _complete_line(booking, booking.pending_item_code, qty, None)
+
+
+def _on_measure(booking: "Booking", inbound: Inbound) -> BookingReply:
+    m = _parse_measure(inbound.text)
+    if m is None:
+        return BookingReply(
+            text="Please share an approximate size in square metres (e.g. 6).",
+            state=WAITING_FOR_MEASURE, log_event="measure_invalid")
+    return _complete_line(booking, booking.pending_item_code, 1, m)
+
+
+def _complete_line(booking: "Booking", item_code: str | None, quantity, measure) -> BookingReply:
+    if not item_code or not catalogue.item_by_code(item_code):
+        return _item_prompt(booking.service_id, booking.browse_service_code)
+    raw = _raw_lines(booking) + [
+        {"item_code": item_code, "quantity": quantity, "measure": measure}]
+    updates = _pricing_updates(raw, booking.service_id, booking.service_name_snapshot)
+    updates["pending_item_code"] = None
+    reply = _more_items_prompt(item_code, quantity)
+    reply.updates = {**updates, **(reply.updates or {})}
+    reply.log_event = "item_added"
+    return reply
+
+
+async def _on_more_items(booking: "Booking", inbound: Inbound, available_slots) -> BookingReply:
+    sel = inbound.selection_id or ""
+    low = (inbound.text or "").strip().lower()
+    if sel == "add_item" or low in ("add", "1", "another", "more", "add another item",
+                                    "add another", "yes"):
+        subs = catalogue.services_for_category(booking.service_id or "")
+        if len(subs) > 1:
+            return _subcategory_prompt(booking.service_id)
+        code = booking.browse_service_code or (subs[0]["code"] if subs else None)
+        return _item_prompt(booking.service_id, code)
+    if sel == "items_done" or low in ("done", "2", "that's all", "thats all", "no",
+                                      "continue", "that is all", "nothing", "finish",
+                                      "no more", "all done"):
+        return await _after_items(booking, available_slots)
+    # The customer may have typed another item directly ("also 2 ties").
+    item_code, reason = resolve_item(inbound, booking.browse_service_code, booking.service_id)
+    if reason == "ok" and item_code:
+        return _start_item(booking, item_code, inbound)
+    return _more_items_prompt(None, None)
+
+
+async def _after_items(booking: "Booking", available_slots) -> BookingReply:
+    """Items are collected — continue to the SAME proven name→date→…→confirm flow."""
+    if not booking.customer_name:
+        return _name_prompt(booking)
+    return await next_prompt_for(booking, available_slots)
 
 
 # --- Date parsing (deterministic, never past) -------------------------------
@@ -472,16 +864,23 @@ def _format_date(d: _dt.date | None) -> str:
 
 def _summary_text(b: Booking, *, header: str = "Please confirm your pickup details:") -> str:
     instr = b.pickup_instruction_text or "No additional instructions"
-    return (
-        f"{header}\n\n"
-        f"Name: {b.customer_name or 'Name pending'}\n"
-        f"Service: {b.service_name_snapshot or '—'}\n"
-        f"Pickup date: {_format_date(b.pickup_date)}\n"
-        f"Pickup time: {b.pickup_slot_label or '—'}\n"
-        f"Address: {b.pickup_address or '—'}\n"
-        f"Instructions: {instr}\n\n"
-        "Would you like to confirm this order?"
-    )
+    lines = [
+        header, "",
+        f"Name: {b.customer_name or 'Name pending'}",
+        f"Service: {b.service_name_snapshot or '—'}",
+    ]
+    if b.line_items:
+        lines += ["", pricing.format_quote_summary(_quote_for(b))]
+    lines += [
+        "",
+        f"Pickup date: {_format_date(b.pickup_date)}",
+        f"Pickup time: {b.pickup_slot_label or '—'}",
+        f"Address: {b.pickup_address or '—'}",
+        f"Instructions: {instr}",
+        "",
+        "Would you like to confirm this order?",
+    ]
+    return "\n".join(lines)
 
 
 def _confirmation_prompt(b: Booking, *, header: str = "Please confirm your pickup details:") -> BookingReply:
@@ -546,6 +945,8 @@ async def next_prompt_for(booking: Booking, available_slots) -> BookingReply:
     without needing to stash the pre-interruption state."""
     if not booking.service_id:
         return _service_prompt()
+    if not booking.line_items:
+        return _resume_item_collection(booking)
     if not booking.customer_name:
         return _name_prompt(booking)
     if not booking.pickup_date:
@@ -749,6 +1150,16 @@ async def advance(booking: Booking, inbound: Inbound, *, today: _dt.date, availa
 async def _dispatch(state, booking, inbound, today, available_slots) -> BookingReply:
     if state == WAITING_FOR_SERVICE:
         return _on_service(booking, inbound)
+    if state == WAITING_FOR_SUBCATEGORY:
+        return _on_subcategory(booking, inbound)
+    if state == WAITING_FOR_ITEM:
+        return _on_item(booking, inbound)
+    if state == WAITING_FOR_ITEM_QUANTITY:
+        return _on_item_quantity(booking, inbound)
+    if state == WAITING_FOR_MEASURE:
+        return _on_measure(booking, inbound)
+    if state == WAITING_FOR_MORE_ITEMS:
+        return await _on_more_items(booking, inbound, available_slots)
     if state == WAITING_FOR_NAME:
         return await _on_name(booking, inbound, available_slots)
     if state == WAITING_FOR_NAME_CONFIRM:
@@ -790,36 +1201,26 @@ async def _dispatch(state, booking, inbound, today, available_slots) -> BookingR
 
 # --- Per-state handlers -----------------------------------------------------
 def _on_service(booking: Booking, inbound: Inbound) -> BookingReply:
-    service_id, reason = resolve_service(inbound)
+    category_code, reason = resolve_service(inbound)
     if reason == "ambiguous":
+        # The single most common ambiguity — "ironing"/"pressing" — gets a focused
+        # Clean & Press vs Press Only prompt (task spec §7/§20).
+        if catalogue.is_ambiguous_iron(inbound.text):
+            return _iron_disambiguation_prompt()
         r = _service_prompt()
         r.text = ("More than one service matches that — please pick the exact one "
                   "from the list below.")
         r.interactive.body = r.text
         r.log_event = "service_selection_ambiguous"
         return r
-    if reason != "ok" or not service_id:
+    if reason != "ok" or not category_code:
         r = _service_prompt()
         r.text = "Sorry, I didn't catch a valid service. Please choose one below:"
         r.interactive.body = r.text
         r.log_event = "service_selection_invalid"
         return r
-    svc = service_by_id(service_id) or {}
-    label = svc.get("display_name") or svc.get("label") or service_id
-    # Ask for the name next unless it is already known (provided in this or an
-    # earlier message). Only THEN move on to the pickup date.
-    reply = _date_prompt(label) if booking.customer_name else _name_prompt(booking)
-    reply.updates = {
-        "service_id": service_id,
-        "service": label,                       # back-compat label mirror
-        "service_display_name": label,
-        "service_name_snapshot": label,
-        "unit_type": svc.get("unit_type"),
-        "requires_manual_quote": bool(svc.get("requires_manual_quote")),
-        "_touch_service_selected_at": True,     # webhook fills the timestamp
-    }
-    reply.log_event = "service_selected"
-    return reply
+    # Category picked -> collect the item(s) before name/date (task spec §6-8).
+    return _enter_category(booking, category_code)
 
 
 async def _on_date(booking: Booking, inbound: Inbound, today, available_slots) -> BookingReply:
@@ -1123,27 +1524,26 @@ async def _on_edit_service(booking, inbound, available_slots) -> BookingReply:
         r.interactive.body = r.text
         r.log_event = "edit_service_invalid"
         return r
-    svc = service_by_id(service_id) or {}
-    label = svc.get("display_name") or svc.get("label") or service_id
-    updates = {
-        "service_id": service_id, "service": label, "service_display_name": label,
-        "service_name_snapshot": label, "unit_type": svc.get("unit_type"),
-        "requires_manual_quote": bool(svc.get("requires_manual_quote")),
-        "_touch_service_selected_at": True,
+    category_code = service_id
+    # Same category chosen — nothing changes, return to the summary.
+    if category_code == booking.service_id:
+        return _confirmation_prompt(booking, header="Here are your updated pickup details:")
+    # A different category invalidates the collected items (they belong to the old
+    # category), so we clear them and re-collect for the new category. This is an
+    # item-only re-collection, NOT a full restart: name/date/slot/address are all
+    # preserved and the flow returns straight to the summary once items are chosen
+    # (task spec §16 — a targeted edit never re-asks the address etc.).
+    cleared = _with(booking, service_id=category_code, line_items=None,
+                    browse_service_code=None, pending_item_code=None)
+    reply = _enter_category(cleared, category_code)
+    reply.updates = {
+        **(reply.updates or {}),
+        "line_items": None, "browse_service_code": reply.updates.get("browse_service_code"),
+        "pending_item_code": None, "subtotal_amount": None, "vat_amount": None,
+        "estimated_total": None, "amount": None, "pricing_is_estimated": None,
     }
-    updated = _with(booking, service_id=service_id, service_name_snapshot=label)
-    # Revalidate the slot only if the new service changes availability.
-    if booking.pickup_date and booking.pickup_slot_id:
-        slots = await available_slots(booking.pickup_date, booking.pickup_area, service_id)
-        if booking.pickup_slot_id not in {s["slot_id"] for s in slots}:
-            prompt = _edit_slot_prompt(
-                slots, _format_date(booking.pickup_date),
-                note="That service isn't available at your selected time. Please choose a new time:")
-            prompt.updates = {**updates, "pickup_slot_id": None, "pickup_slot": None,
-                              "pickup_start_time": None, "pickup_end_time": None}
-            prompt.log_event = "edit_service_slot_revalidate"
-            return prompt
-    return _back_to_review(updated, updates, log="edit_service_saved")
+    reply.log_event = "edit_service_reset_items"
+    return reply
 
 
 async def _on_edit_date(booking, inbound, today, available_slots) -> BookingReply:

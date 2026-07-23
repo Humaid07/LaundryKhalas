@@ -17,7 +17,7 @@ import { SectionCard, Field, FieldGrid, Chip } from "./primitives";
 import {
   customerType, customerStats, pendingAmount, qcStatus, deliverySlotLabel,
   relatedConversation, relatedIssues, orderEvents, seedNotes, isFlagged,
-  type InternalNote,
+  type InternalNote, type OrderWithPricing,
 } from "./data";
 
 /* ------------------------------- Order overview ----------------------------- */
@@ -99,19 +99,37 @@ export function CustomerSnapshotCard({ order }: { order: Order }) {
 
 /* ------------------------------ Payment snapshot ---------------------------- */
 
-export function PaymentSnapshotCard({ order }: { order: Order }) {
+export function PaymentSnapshotCard({ order }: { order: OrderWithPricing }) {
   const pending = pendingAmount(order);
   const refundRelevant = order.payment === "Refunded" || order.status === "Concern Raised";
+  // Catalogue pricing (when present) drives the total + its label so an estimate
+  // is never shown as a firm, VAT-exclusive figure. Falls back to `amount`.
+  const pricing = order.pricing;
+  const totalLabel = pricing ? (pricing.is_estimated ? "Estimated total (incl. VAT)" : "Total (incl. VAT)") : "Total amount";
+  const totalValue =
+    pricing?.estimated_total_including_vat != null
+      ? formatCurrency(pricing.estimated_total_including_vat, pricing.currency)
+      : formatCurrency(order.amount);
+  const vatPct = pricing ? Math.round(pricing.vat_rate * 100) : 5;
   return (
     <SectionCard title="Payment" icon={CreditCard}>
       <FieldGrid>
         <Field label="Status" value={<StatusBadge tone={paymentTone[order.payment]}>{order.payment}</StatusBadge>} />
         <Field label="Method" value={order.channel === "B2B" ? "Invoice" : "Card / Pay on delivery"} />
-        <Field label="Total amount" value={<span className="text-base font-semibold">{formatCurrency(order.amount)}</span>} />
+        {pricing && (
+          <>
+            <Field label="Subtotal (excl. VAT)" value={pricing.subtotal_excluding_vat != null ? formatCurrency(pricing.subtotal_excluding_vat, pricing.currency) : "—"} />
+            <Field label={`VAT (${vatPct}%)`} value={pricing.vat_amount != null ? formatCurrency(pricing.vat_amount, pricing.currency) : "—"} />
+          </>
+        )}
+        <Field label={totalLabel} value={<span className="text-base font-semibold">{totalValue}</span>} />
         <Field label="Pending" value={pending > 0 ? formatCurrency(pending) : "None"} />
         {order.channel === "B2B" && <Field label="Invoice" value={order.payment === "Paid" ? "Settled" : "Sent — awaiting payment"} />}
         {refundRelevant && <Field label="Refund" value={order.payment === "Refunded" ? "Refund issued" : "Under review"} />}
       </FieldGrid>
+      {pricing?.has_pending_inspection && (
+        <p className="mt-3 text-xxs text-ink-muted">Final price pending inspection</p>
+      )}
       <p className="mt-3 text-xxs text-ink-faint">Refunds and adjustments require approval before they take effect.</p>
     </SectionCard>
   );

@@ -7,9 +7,14 @@ channel's HTTP call is stubbed, so no network/DB is touched.
 import asyncio
 
 from channels.evolution_whatsapp import EvolutionWhatsAppChannel
-from rules import active_service_catalog
 from services import booking_flow as bf
+from services import catalogue
 from services.booking_flow import Booking, Inbound
+
+# Step 1 of the booking flow is now the 9 real price-list categories (Clean &
+# Press, Press Only, …). Selecting one leads to item collection (a sub-category
+# list for big categories, else the item list).
+_COLLECT_NEXT = (bf.WAITING_FOR_SUBCATEGORY, bf.WAITING_FOR_ITEM)
 
 TODAY_SLOTS = [{"slot_id": "morning_08_11", "label": "8–11 AM",
                 "start_time": __import__("datetime").time(8),
@@ -25,12 +30,12 @@ def _advance(b, inbound):
     return asyncio.run(bf.advance(b, inbound, today=_dt.date(2026, 7, 22), available_slots=_slots))
 
 
-# 1 — active services are loaded from the DB catalogue, not hardcoded -----------
-def test_service_options_come_from_active_catalogue():
-    catalog_ids = [s.get("service_id", s.get("key")) for s in active_service_catalog()]
+# 1 — step-1 options are the real price-list categories, not hardcoded ----------
+def test_service_options_come_from_catalogue_categories():
+    cat_codes = [c["code"] for c in catalogue.categories()]
     opt_ids = [o.id.split(":", 1)[1] for o in bf._service_options()]
-    assert opt_ids == catalog_ids
-    assert len(opt_ids) >= 5
+    assert opt_ids == cat_codes
+    assert len(opt_ids) == 9
 
 
 # 2 — the interactive LIST payload carries the correct service row ids ----------
@@ -55,11 +60,11 @@ def test_list_payload_has_service_ids_and_nonempty_descriptions():
     assert all(r["description"].strip() for r in sent_rows)
 
 
-# 3 — a selected row id resolves to the correct service ------------------------
+# 3 — a selected row id resolves to the correct category -----------------------
 def test_selected_row_id_resolves_to_service():
-    sid = active_service_catalog()[2]["service_id"]
-    got, reason = bf.resolve_service(Inbound(selection_id=f"service:{sid}"))
-    assert reason == "ok" and got == sid
+    code = catalogue.categories()[2]["code"]
+    got, reason = bf.resolve_service(Inbound(selection_id=f"service:{code}"))
+    assert reason == "ok" and got == code
 
 
 # 4/5 — disabled/unknown row ids are rejected safely (never resolve) -----------
@@ -89,19 +94,19 @@ def test_numbered_fallback_lists_all_services():
     assert "Reply with the number" in fallback
 
 
-# 9 — selecting a service progresses the SAME booking (never restarts) ---------
+# 9 — selecting a category progresses the SAME booking (never restarts) --------
 def test_service_selection_progresses_without_restart():
-    sid = active_service_catalog()[0]["service_id"]
+    code = catalogue.categories()[0]["code"]           # Clean & Press -> sub-category next
     reply = _advance(Booking(conversation_state=bf.WAITING_FOR_SERVICE),
-                     Inbound(selection_id=f"service:{sid}", text="Premium Wash & Fold"))
-    assert reply.state == bf.WAITING_FOR_NAME                 # forward (name next), not back to start
-    assert reply.updates["service_id"] == sid
+                     Inbound(selection_id=f"service:{code}", text="Clean & Press"))
+    assert reply.state in _COLLECT_NEXT                # forward to item collection, not back
+    assert reply.updates["service_id"] == code
 
 
-# 10 — two numbers select different services with no shared state --------------
+# 10 — two numbers select different categories with no shared state ------------
 def test_two_numbers_select_different_services_independently():
-    s0 = active_service_catalog()[0]["service_id"]
-    s1 = active_service_catalog()[1]["service_id"]
+    s0 = catalogue.categories()[0]["code"]
+    s1 = catalogue.categories()[1]["code"]
     a = _advance(Booking(conversation_state=bf.WAITING_FOR_SERVICE),
                  Inbound(selection_id=f"service:{s0}"))
     b = _advance(Booking(conversation_state=bf.WAITING_FOR_SERVICE),

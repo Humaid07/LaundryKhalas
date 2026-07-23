@@ -30,6 +30,37 @@ def _item_label(item) -> str:
     return str(item)
 
 
+def _pricing_block(row: dict) -> dict | None:
+    """The VAT-aware pricing summary for an order (task spec §9/§17), or None on
+    legacy/no-pricing orders. ``estimated_total_including_vat`` never shows a
+    VAT-exclusive number as the payable amount; ``is_estimated`` tells the UI to
+    label it 'Estimated' when any starting/measured line is present."""
+    line_items = row.get("line_items")
+    if not line_items and row.get("subtotal_amount") is None:
+        return None
+
+    def _f(key):
+        v = row.get(key)
+        return float(v) if v is not None else None
+
+    total = _f("estimated_total")
+    if total is None:
+        total = _f("amount")
+    return {
+        "currency": "AED",
+        "vat_rate": _f("vat_rate") if row.get("vat_rate") is not None else 0.05,
+        "prices_include_vat": False,
+        "subtotal_excluding_vat": _f("subtotal_amount"),
+        "vat_amount": _f("vat_amount"),
+        "estimated_total_including_vat": total,
+        "is_estimated": bool(row.get("pricing_is_estimated")),
+        "has_pending_inspection": any(
+            (li or {}).get("line_kind") == "pending" for li in (line_items or [])
+        ),
+        "disclaimer": "Prices may vary depending on item condition, material and brand.",
+    }
+
+
 def to_read(row: dict, *, include_address: bool = False) -> dict:
     """Map a Supabase orders row to the OrderRead schema shape.
 
@@ -68,6 +99,10 @@ def to_read(row: dict, *, include_address: bool = False) -> dict:
         "change_request": row.get("change_request"),
         "amount": float(row["amount"]) if row.get("amount") is not None else None,
         "currency": "AED",
+        # Item-level catalogue pricing (task spec §8-10/§17). None on legacy orders.
+        "line_items": row.get("line_items") or None,
+        "catalogue_category": row.get("catalogue_category_name"),
+        "pricing": _pricing_block(row),
         "facility": row.get("facility"),
         "driver": row.get("driver"),
         "payment": row.get("payment_status"),
@@ -474,7 +509,14 @@ _BOOKING_COLS = frozenset({
     "pickup_slot", "pickup_start_time", "pickup_end_time", "pickup_address",
     "pickup_area", "area", "pickup_emirate", "pickup_latitude", "pickup_longitude",
     "address_source", "pickup_instruction_code", "pickup_instruction_text",
+    # Item-level catalogue + VAT-aware pricing snapshot (task spec §8-10).
+    "line_items", "browse_service_code", "pending_item_code",
+    "catalogue_category_code", "catalogue_category_name",
+    "subtotal_amount", "vat_rate", "vat_amount", "estimated_total", "amount",
+    "pricing_is_estimated",
 })
+# Columns written by the FSM that are jsonb and need an explicit cast.
+_JSONB_BOOKING_COLS = frozenset({"line_items"})
 _BOOKING_CONFIRMED = "booking_confirmed"
 _BOOKING_CANCELLED = "booking_cancelled"
 
@@ -581,7 +623,8 @@ async def apply_booking_updates(order_uuid: str, updates: dict, state: str) -> d
     for col, val in data.items():
         if col in _BOOKING_COLS:
             values.append(val)
-            sets.append(f"{col} = ${len(values)}")
+            cast = "::jsonb" if col in _JSONB_BOOKING_COLS else ""
+            sets.append(f"{col} = ${len(values)}{cast}")
     if touch_service:
         sets.append("service_selected_at = now()")
 

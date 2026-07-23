@@ -1,0 +1,388 @@
+{
+  "_note": "REVIEWED STRUCTURED SEED/IMPORT DATA for the Laundry Khalas item-level catalogue, transcribed and visually verified against the approved Laundry Khalas price-list image (source of truth: the business, not the live marketing site). This file is IMPORT-TIME data only: scripts/seed_service_catalogue.py upserts it into PostgreSQL/Supabase (service_categories / services / service_items / service_aliases), and the DATABASE is the runtime source of truth for the agent, pricing APIs and dashboard. Pricing interpretation: the bold price on the image is `current_price` (active selling price); a smaller crossed-out price is stored as `regular_price` (previous/regular). 'From' prices set is_starting_price=true and MUST NEVER produce a guaranteed total. Prices are in AED and EXCLUDE 5% VAT. Prices may vary by item condition, material and brand. Stable `code`s are the identity used for idempotent upsert and interactive-list rowIds (never use display labels as identifiers).",
+  "meta": {
+    "catalogue": "Laundry Khalas UAE",
+    "currency": "AED",
+    "vat_rate": 0.05,
+    "prices_include_vat": false,
+    "source": "Approved Laundry Khalas price-list image",
+    "verified_at": "2026-07-23",
+    "business": {
+      "whatsapp": "+971 50 384 1660",
+      "email": "enquiries@laundrykhalas.com",
+      "website": "laundrykhalas.com",
+      "availability": "24/7",
+      "pickup_delivery": "Free pickup & delivery across the UAE",
+      "turnaround": "Back in 24 hours (standard advertised; specialty, restoration, alterations, bags, shoes and inspection-based items may need a different or confirmed turnaround)",
+      "pricing_disclaimer": "Prices may vary depending on item condition, material and brand."
+    }
+  },
+  "categories": [
+    {
+      "code": "CLEAN_PRESS",
+      "name": "Clean & Press",
+      "description": "Wash / dry-clean and iron",
+      "sort_order": 1,
+      "default_pricing_type": "FIXED_PER_ITEM",
+      "default_pricing_unit": "ITEM",
+      "aliases": ["clean and press", "clean & press", "wash and iron", "wash & iron", "wash and press", "dry clean", "dry-clean", "dryclean", "dry cleaning"],
+      "services": [
+        {
+          "code": "CLEAN_PRESS_EVERYDAY",
+          "name": "Everyday Wear",
+          "sort_order": 1,
+          "items": [
+            {"code": "CLEAN_PRESS_SHIRT", "name": "Shirt", "current_price": 9, "regular_price": 12, "aliases": ["shirt", "shirts"]},
+            {"code": "CLEAN_PRESS_POLO_SHIRT", "name": "Polo Shirt", "current_price": 9, "regular_price": 12, "aliases": ["polo", "polo shirt", "polo shirts"]},
+            {"code": "CLEAN_PRESS_TOP_BLOUSE", "name": "Top / Blouse", "current_price": 15, "aliases": ["top", "tops", "blouse", "blouses"]},
+            {"code": "CLEAN_PRESS_SHORTS", "name": "Shorts", "current_price": 12, "aliases": ["shorts"]},
+            {"code": "CLEAN_PRESS_TROUSERS", "name": "Trousers / Jeans", "current_price": 11, "regular_price": 14, "aliases": ["trousers", "trouser", "jeans", "pants", "pant"]},
+            {"code": "CLEAN_PRESS_SKIRT", "name": "Skirt", "current_price": 21, "aliases": ["skirt", "skirts"]},
+            {"code": "CLEAN_PRESS_PULLOVER", "name": "Pullover", "current_price": 24, "aliases": ["pullover", "sweater", "jumper"]},
+            {"code": "CLEAN_PRESS_CARDIGAN", "name": "Cardigan", "current_price": 18, "aliases": ["cardigan"]},
+            {"code": "CLEAN_PRESS_JACKET_BLAZER", "name": "Jacket / Blazer", "current_price": 40, "aliases": ["jacket", "blazer", "blazers", "jackets"]},
+            {"code": "CLEAN_PRESS_WAISTCOAT", "name": "Waistcoat", "current_price": 15, "aliases": ["waistcoat", "vest"]},
+            {"code": "CLEAN_PRESS_OVERCOAT_RAINCOAT", "name": "Overcoat / Raincoat", "current_price": 45, "aliases": ["overcoat", "raincoat", "coat"]}
+          ]
+        },
+        {
+          "code": "CLEAN_PRESS_FORMAL",
+          "name": "Formal & Occasion",
+          "sort_order": 2,
+          "items": [
+            {"code": "CLEAN_PRESS_SUIT_2PC", "name": "2-Piece Suit", "current_price": 45, "aliases": ["2 piece suit", "2-piece suit", "two piece suit", "suit"]},
+            {"code": "CLEAN_PRESS_SUIT_3PC", "name": "3-Piece Suit", "current_price": 55, "aliases": ["3 piece suit", "3-piece suit", "three piece suit"]},
+            {"code": "CLEAN_PRESS_DRESS_NORMAL", "name": "Dress — Normal", "current_price": 40, "aliases": ["dress", "normal dress"]},
+            {"code": "CLEAN_PRESS_DRESS_EVENING", "name": "Evening Dress", "current_price": 100, "aliases": ["evening dress", "gown", "ball gown"]},
+            {"code": "CLEAN_PRESS_JUMPSUIT", "name": "Jumpsuit", "current_price": 40, "aliases": ["jumpsuit"]},
+            {"code": "CLEAN_PRESS_SAREE", "name": "Saree", "current_price": 40, "aliases": ["saree", "sari"]}
+          ]
+        },
+        {
+          "code": "CLEAN_PRESS_TRADITIONAL",
+          "name": "Traditional Wear",
+          "sort_order": 3,
+          "items": [
+            {"code": "CLEAN_PRESS_ABAYA", "name": "Abaya", "current_price": 25, "aliases": ["abaya", "abayas"]},
+            {"code": "CLEAN_PRESS_KANDURA", "name": "Kandura / Dishdasha", "current_price": 20, "aliases": ["kandura", "dishdasha", "kandoora"]},
+            {"code": "CLEAN_PRESS_SHALWAR_KURTA", "name": "Shalwar / Kurta", "current_price": 28, "aliases": ["shalwar", "kurta", "shalwar kameez"]},
+            {"code": "CLEAN_PRESS_LUNGI", "name": "Lungi", "current_price": 10, "aliases": ["lungi"]},
+            {"code": "CLEAN_PRESS_DUPATTA", "name": "Dupatta", "current_price": 8, "aliases": ["dupatta"]},
+            {"code": "CLEAN_PRESS_GHUTRA", "name": "Ghutra", "current_price": 8, "aliases": ["ghutra"]}
+          ]
+        },
+        {
+          "code": "CLEAN_PRESS_SMALL_INTIMATE",
+          "name": "Small & Intimate",
+          "sort_order": 4,
+          "items": [
+            {"code": "CLEAN_PRESS_SOCKS_PAIR", "name": "Socks — Pair", "pricing_type": "FIXED_PER_ITEM", "pricing_unit": "PAIR", "current_price": 6, "aliases": ["socks", "sock"]},
+            {"code": "CLEAN_PRESS_BRA", "name": "Bra", "current_price": 7, "aliases": ["bra"]},
+            {"code": "CLEAN_PRESS_UNDERWEAR", "name": "Underwear", "current_price": 7, "aliases": ["underwear", "undergarment", "briefs"]},
+            {"code": "CLEAN_PRESS_SCARF", "name": "Scarf", "current_price": 9, "aliases": ["scarf", "scarves"]},
+            {"code": "CLEAN_PRESS_CAP", "name": "Cap", "current_price": 15, "aliases": ["cap", "hat"]},
+            {"code": "CLEAN_PRESS_TIE", "name": "Tie", "current_price": 15, "aliases": ["tie", "necktie"]}
+          ]
+        },
+        {
+          "code": "CLEAN_PRESS_BED_BATH",
+          "name": "Bed & Bath",
+          "sort_order": 5,
+          "items": [
+            {"code": "CLEAN_PRESS_BATH_MAT", "name": "Bath Mat", "current_price": 10, "aliases": ["bath mat"]},
+            {"code": "CLEAN_PRESS_BATH_ROBE", "name": "Bath Robe", "current_price": 18, "aliases": ["bath robe", "bathrobe"]},
+            {"code": "CLEAN_PRESS_BATH_TOWEL", "name": "Bath Towel", "current_price": 8, "aliases": ["bath towel"]},
+            {"code": "CLEAN_PRESS_FACE_TOWEL", "name": "Face Towel", "current_price": 8, "aliases": ["face towel"]},
+            {"code": "CLEAN_PRESS_HAND_TOWEL", "name": "Hand Towel", "current_price": 4, "aliases": ["hand towel"]},
+            {"code": "CLEAN_PRESS_BEACH_TOWEL", "name": "Beach / Pool Towel", "current_price": 8, "aliases": ["beach towel", "pool towel"]}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "PRESS_ONLY",
+      "name": "Press Only",
+      "description": "Steam press for already washed items",
+      "sort_order": 2,
+      "default_pricing_type": "FIXED_PER_ITEM",
+      "default_pricing_unit": "ITEM",
+      "aliases": ["press only", "pressing only", "steam press", "iron only", "ironing only", "just iron", "just press", "already washed"],
+      "services": [
+        {
+          "code": "PRESS_ONLY_TOPS_BOTTOMS",
+          "name": "Tops & Bottoms",
+          "sort_order": 1,
+          "items": [
+            {"code": "PRESS_ONLY_SHIRT_HANGER", "name": "Shirt on Hanger", "current_price": 9, "regular_price": 12, "aliases": ["shirt on hanger", "shirt"]},
+            {"code": "PRESS_ONLY_TSHIRT_HANGER", "name": "T-Shirt on Hanger", "current_price": 9, "regular_price": 12, "aliases": ["t-shirt on hanger", "tshirt", "t shirt", "t-shirt"]},
+            {"code": "PRESS_ONLY_POLO_HANGER", "name": "Polo Shirt on Hanger", "current_price": 9, "regular_price": 12, "aliases": ["polo shirt on hanger", "polo"]},
+            {"code": "PRESS_ONLY_PULLOVER", "name": "Pullover", "current_price": 13.5, "aliases": ["pullover", "sweater", "jumper"]},
+            {"code": "PRESS_ONLY_TOP_BLOUSE", "name": "Top / Blouse", "current_price": 10, "aliases": ["top", "blouse"]},
+            {"code": "PRESS_ONLY_SHORTS", "name": "Shorts", "current_price": 5, "aliases": ["shorts"]},
+            {"code": "PRESS_ONLY_SKIRT", "name": "Skirt", "current_price": 13.5, "aliases": ["skirt"]},
+            {"code": "PRESS_ONLY_SKIRT_DELICATE", "name": "Skirt — Delicate", "current_price": 15, "aliases": ["delicate skirt", "skirt delicate"]},
+            {"code": "PRESS_ONLY_TROUSERS", "name": "Trousers / Jeans", "current_price": 11, "regular_price": 14, "aliases": ["trousers", "jeans", "pants"]}
+          ]
+        },
+        {
+          "code": "PRESS_ONLY_DRESSES",
+          "name": "Dresses",
+          "sort_order": 2,
+          "items": [
+            {"code": "PRESS_ONLY_DRESS", "name": "Dress", "current_price": 15, "aliases": ["dress"]},
+            {"code": "PRESS_ONLY_DRESS_EVENING", "name": "Dress — Evening", "current_price": 22, "aliases": ["evening dress", "gown"]}
+          ]
+        },
+        {
+          "code": "PRESS_ONLY_TRADITIONAL",
+          "name": "Traditional Items",
+          "sort_order": 3,
+          "items": [
+            {"code": "PRESS_ONLY_ABAYA", "name": "Abaya", "current_price": 12, "aliases": ["abaya"]},
+            {"code": "PRESS_ONLY_BISHT", "name": "Bisht", "current_price": 30, "aliases": ["bisht"]},
+            {"code": "PRESS_ONLY_DARAA_GALABIEH", "name": "Daraa / Galabieh", "current_price": 20, "aliases": ["daraa", "galabieh"]},
+            {"code": "PRESS_ONLY_DUPATTA_SHILA", "name": "Dupatta / Shila", "current_price": 6, "aliases": ["dupatta", "shila"]},
+            {"code": "PRESS_ONLY_GAHFIA", "name": "Gahfia", "current_price": 2, "aliases": ["gahfia"]},
+            {"code": "PRESS_ONLY_GHUTRA", "name": "Ghutra", "current_price": 6, "aliases": ["ghutra"]},
+            {"code": "PRESS_ONLY_HIJAB", "name": "Hijab", "current_price": 10, "aliases": ["hijab"]},
+            {"code": "PRESS_ONLY_JALABIYA", "name": "Jalabiya", "current_price": 12, "aliases": ["jalabiya"]},
+            {"code": "PRESS_ONLY_KANDURA_THOBE", "name": "Kandura / Thobe", "current_price": 12, "aliases": ["kandura", "thobe", "dishdasha"]},
+            {"code": "PRESS_ONLY_LUNGI", "name": "Lungi", "current_price": 6, "aliases": ["lungi"]},
+            {"code": "PRESS_ONLY_NIQAB", "name": "Niqab", "current_price": 6, "aliases": ["niqab"]},
+            {"code": "PRESS_ONLY_SALWAR_3PC", "name": "Salwar 3-Piece", "current_price": 15, "aliases": ["salwar 3 piece", "salwar", "salwar three piece"]},
+            {"code": "PRESS_ONLY_SAREE", "name": "Saree", "current_price": 20, "aliases": ["saree", "sari"]},
+            {"code": "PRESS_ONLY_SARWAL_THAWB", "name": "Sarwal Thawb", "current_price": 4, "aliases": ["sarwal thawb", "sarwal"]},
+            {"code": "PRESS_ONLY_SHALWAR_KURTA", "name": "Shalwar / Kurta", "current_price": 15, "aliases": ["shalwar", "kurta"]},
+            {"code": "PRESS_ONLY_SHIMAGH", "name": "Shimagh", "current_price": 10, "aliases": ["shimagh"]},
+            {"code": "PRESS_ONLY_WIZAR", "name": "Wizar", "current_price": 4, "aliases": ["wizar"]}
+          ]
+        },
+        {
+          "code": "PRESS_ONLY_OUTERWEAR",
+          "name": "Outerwear",
+          "sort_order": 4,
+          "items": [
+            {"code": "PRESS_ONLY_JACKET_BLAZER", "name": "Jacket / Blazer", "current_price": 12, "aliases": ["jacket", "blazer"]},
+            {"code": "PRESS_ONLY_WAISTCOAT", "name": "Waistcoat", "current_price": 9, "aliases": ["waistcoat", "vest"]}
+          ]
+        },
+        {
+          "code": "PRESS_ONLY_BED_HOME",
+          "name": "Bed & Home",
+          "sort_order": 5,
+          "items": [
+            {"code": "PRESS_ONLY_BED_SHEET", "name": "Bed Sheet — All Sizes", "current_price": 10, "aliases": ["bed sheet", "bedsheet"]},
+            {"code": "PRESS_ONLY_DUVET_COVER", "name": "Duvet Cover — All Sizes", "current_price": 12, "aliases": ["duvet cover"]},
+            {"code": "PRESS_ONLY_PILLOW_CASE", "name": "Pillow Case", "current_price": 4, "aliases": ["pillow case", "pillowcase"]}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "HOME_CARE",
+      "name": "Home & Care",
+      "description": "Linen, sofas, carpets and household items",
+      "sort_order": 3,
+      "default_pricing_type": "FIXED_PER_ITEM",
+      "default_pricing_unit": "ITEM",
+      "aliases": ["home and care", "home & care", "linen", "household", "sofa", "cushions"],
+      "services": [
+        {
+          "code": "HOME_CARE_BEDDING",
+          "name": "Bedding & Covers",
+          "sort_order": 1,
+          "items": [
+            {"code": "HOME_CARE_COMFORTER_COVER", "name": "Comforter Cover", "current_price": 24, "aliases": ["comforter cover"]},
+            {"code": "HOME_CARE_COMFORTER", "name": "Comforter", "current_price": 42, "aliases": ["comforter"]},
+            {"code": "HOME_CARE_DUVET", "name": "Duvet", "current_price": 42, "aliases": ["duvet"]},
+            {"code": "HOME_CARE_BEDCOVER", "name": "Bedcover", "current_price": 21, "aliases": ["bedcover", "bed cover"]},
+            {"code": "HOME_CARE_MATTRESS_PROTECTOR", "name": "Mattress Protector", "current_price": 35, "aliases": ["mattress protector"]},
+            {"code": "HOME_CARE_BLANKET", "name": "Blanket", "current_price": 35, "aliases": ["blanket"]},
+            {"code": "HOME_CARE_BLANKET_LARGE", "name": "Blanket — Large", "current_price": 45, "aliases": ["large blanket", "blanket large"]}
+          ]
+        },
+        {
+          "code": "HOME_CARE_SOFA_CURTAINS",
+          "name": "Sofa, Cushions & Curtains",
+          "sort_order": 2,
+          "items": [
+            {"code": "HOME_CARE_SOFA_COVER_REGULAR", "name": "Sofa Cover — Regular", "current_price": 46, "aliases": ["sofa cover", "sofa cover regular"]},
+            {"code": "HOME_CARE_SOFA_COVER_LARGE", "name": "Sofa Cover — Large", "current_price": 56, "aliases": ["large sofa cover", "sofa cover large"]},
+            {"code": "HOME_CARE_CUSHION_COVER_SMALL", "name": "Cushion Cover — Small", "current_price": 13, "aliases": ["cushion cover small", "small cushion cover"]},
+            {"code": "HOME_CARE_CUSHION_COVER_MEDIUM", "name": "Cushion Cover — Medium", "current_price": 15, "aliases": ["cushion cover medium", "medium cushion cover", "cushion cover"]},
+            {"code": "HOME_CARE_CURTAIN_SQM", "name": "Curtain", "pricing_type": "PER_SQM", "pricing_unit": "SQM", "current_price": 20, "regular_price": 25, "requires_measurement": true, "aliases": ["curtain", "curtains"]}
+          ]
+        },
+        {
+          "code": "HOME_CARE_TABLE_KITCHEN",
+          "name": "Table & Kitchen",
+          "sort_order": 3,
+          "items": [
+            {"code": "HOME_CARE_TABLE_CLOTH", "name": "Table Cloth", "current_price": 19, "aliases": ["table cloth", "tablecloth"]},
+            {"code": "HOME_CARE_TABLE_MAT", "name": "Table Mat", "current_price": 10, "aliases": ["table mat"]},
+            {"code": "HOME_CARE_APRON", "name": "Apron", "current_price": 16, "aliases": ["apron"]},
+            {"code": "HOME_CARE_HANDKERCHIEF", "name": "Handkerchief", "current_price": 6, "aliases": ["handkerchief"]}
+          ]
+        },
+        {
+          "code": "HOME_CARE_BATHROOM",
+          "name": "Bathroom Items",
+          "sort_order": 4,
+          "items": [
+            {"code": "HOME_CARE_BATHROBE", "name": "Bathrobe", "current_price": 18, "aliases": ["bathrobe", "bath robe"]},
+            {"code": "HOME_CARE_TOWEL", "name": "Towel", "current_price": 8, "aliases": ["towel"]},
+            {"code": "HOME_CARE_FLOOR_MAT", "name": "Floor Mat", "current_price": 10, "aliases": ["floor mat"]}
+          ]
+        },
+        {
+          "code": "HOME_CARE_CARPET_RUG",
+          "name": "Carpet & Rug Care",
+          "sort_order": 5,
+          "items": [
+            {"code": "HOME_CARE_CARPET_REGULAR_SQM", "name": "Carpet — Regular", "pricing_type": "PER_SQM", "pricing_unit": "SQM", "current_price": 20, "regular_price": 36, "requires_measurement": true, "aliases": ["carpet", "regular carpet", "carpet regular", "rug"]},
+            {"code": "HOME_CARE_CARPET_WOOL_SQM", "name": "Carpet — Wool", "pricing_type": "PER_SQM", "pricing_unit": "SQM", "current_price": 20, "regular_price": 36, "requires_measurement": true, "aliases": ["wool carpet", "carpet wool"]}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "WASH_FOLD",
+      "name": "Wash & Fold",
+      "description": "Priced per bag and weighed at pickup",
+      "sort_order": 4,
+      "default_pricing_type": "PER_BAG",
+      "default_pricing_unit": "BAG",
+      "aliases": ["wash and fold", "wash & fold", "wash fold", "weekly laundry", "bag of clothes", "regular laundry", "wash my clothes"],
+      "services": [
+        {
+          "code": "WASH_FOLD_BAGS",
+          "name": "Wash & Fold Bags",
+          "sort_order": 1,
+          "items": [
+            {"code": "WASH_FOLD_6KG", "name": "6 kg Bag", "pricing_type": "PER_BAG", "pricing_unit": "BAG", "current_price": 60, "bag_limit_kg": 6, "aliases": ["6 kg bag", "6kg bag", "6 kg", "small bag"]},
+            {"code": "WASH_FOLD_12KG", "name": "Up to 12 kg Bag", "pricing_type": "PER_BAG", "pricing_unit": "BAG", "current_price": 80, "bag_limit_kg": 12, "aliases": ["12 kg bag", "12kg bag", "up to 12 kg", "large bag", "big bag"]},
+            {"code": "WASH_FOLD_ADDITIONAL_KG", "name": "Additional Weight", "pricing_type": "PER_KG", "pricing_unit": "KG", "current_price": 7, "aliases": ["additional weight", "extra weight", "excess weight", "per kg"], "note": "Charged after the selected bag weight limit is reached, weighed at pickup."}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "SHOE_CARE",
+      "name": "Shoe Care",
+      "description": "Per pair, starting from",
+      "sort_order": 5,
+      "default_pricing_type": "STARTING_FROM",
+      "default_pricing_unit": "PAIR",
+      "aliases": ["shoe", "shoes", "shoe cleaning", "shoe care", "sneaker cleaning", "footwear"],
+      "services": [
+        {
+          "code": "SHOE_CARE_ALL",
+          "name": "Shoe Cleaning",
+          "sort_order": 1,
+          "items": [
+            {"code": "SHOE_CARE_FORMAL_SHOES", "name": "Formal Shoes", "is_starting_price": true, "requires_inspection": true, "current_price": 55, "regular_price": 110, "aliases": ["formal shoes", "formal shoe", "dress shoes", "leather shoes"]},
+            {"code": "SHOE_CARE_SPORTS_SNEAKERS", "name": "Sports Sneakers", "is_starting_price": true, "requires_inspection": true, "current_price": 50, "regular_price": 95, "aliases": ["sports sneakers", "sneakers", "sneaker", "trainers", "sports shoes"]},
+            {"code": "SHOE_CARE_DESIGNER_SNEAKERS", "name": "Designer Sneakers", "is_starting_price": true, "requires_inspection": true, "current_price": 50, "regular_price": 95, "aliases": ["designer sneakers", "designer sneaker"]},
+            {"code": "SHOE_CARE_DESIGNER_FORMAL_SHOES", "name": "Designer Formal Shoes", "is_starting_price": true, "requires_inspection": true, "current_price": 55, "regular_price": 110, "aliases": ["designer formal shoes"]},
+            {"code": "SHOE_CARE_BOOTS", "name": "Boots", "is_starting_price": true, "requires_inspection": true, "current_price": 170, "aliases": ["boots", "boot"]},
+            {"code": "SHOE_CARE_SANDALS", "name": "Sandals", "is_starting_price": true, "requires_inspection": true, "current_price": 85, "aliases": ["sandals", "sandal"]},
+            {"code": "SHOE_CARE_ESPADRILLES", "name": "Espadrilles", "is_starting_price": true, "requires_inspection": true, "current_price": 90, "aliases": ["espadrilles"]},
+            {"code": "SHOE_CARE_DESIGNER_SANDALS", "name": "Designer Sandals", "is_starting_price": true, "requires_inspection": true, "current_price": 140, "aliases": ["designer sandals"]},
+            {"code": "SHOE_CARE_DESIGNER_ESPADRILLES", "name": "Designer Espadrilles", "is_starting_price": true, "requires_inspection": true, "current_price": 140, "aliases": ["designer espadrilles"]},
+            {"code": "SHOE_CARE_KIDS_SHOES", "name": "Kids Shoes", "is_starting_price": true, "requires_inspection": true, "current_price": 55, "regular_price": 110, "aliases": ["kids shoes", "children shoes", "kid shoes"]}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BAG_CARE",
+      "name": "Bag Care",
+      "description": "Repair and clean",
+      "sort_order": 6,
+      "default_pricing_type": "STARTING_FROM",
+      "default_pricing_unit": "ITEM",
+      "aliases": ["bag care", "bag cleaning", "bag restoration", "handbag cleaning", "handbag", "purse", "leather bag"],
+      "services": [
+        {
+          "code": "BAG_CARE_ALL",
+          "name": "Bag Repair & Clean",
+          "sort_order": 1,
+          "items": [
+            {"code": "BAG_CARE_CLUTCH_PURSE", "name": "Clutch / Purse", "is_starting_price": true, "requires_inspection": true, "current_price": 110, "aliases": ["clutch", "purse"]},
+            {"code": "BAG_CARE_WALLET", "name": "Wallet", "is_starting_price": true, "requires_inspection": true, "current_price": 200, "aliases": ["wallet"]},
+            {"code": "BAG_CARE_BELT", "name": "Belt", "is_starting_price": true, "requires_inspection": true, "current_price": 100, "aliases": ["belt"]},
+            {"code": "BAG_CARE_BACKPACK", "name": "Backpack", "is_starting_price": true, "requires_inspection": true, "current_price": 250, "aliases": ["backpack", "back pack", "rucksack"]},
+            {"code": "BAG_CARE_BRIEFCASE", "name": "Briefcase", "is_starting_price": true, "requires_inspection": true, "current_price": 325, "aliases": ["briefcase"]},
+            {"code": "BAG_CARE_STANDARD_HANDBAG", "name": "Standard Handbag", "is_starting_price": true, "requires_inspection": true, "current_price": 325, "aliases": ["standard handbag", "handbag", "hand bag"]},
+            {"code": "BAG_CARE_SUITCASE", "name": "Suitcase", "is_starting_price": true, "requires_inspection": true, "current_price": 350, "aliases": ["suitcase", "luggage"]},
+            {"code": "BAG_CARE_OVERSIZED_HANDBAG", "name": "Oversized Handbag", "is_starting_price": true, "requires_inspection": true, "current_price": 450, "aliases": ["oversized handbag", "large handbag"]}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "SOFT_TOY",
+      "name": "Soft Toys & Mascot Cleaning",
+      "description": "Specialty care for soft toys and mascots",
+      "sort_order": 7,
+      "default_pricing_type": "FIXED_PER_ITEM",
+      "default_pricing_unit": "ITEM",
+      "aliases": ["soft toy", "soft toys", "soft toy cleaning", "teddy", "stuffed toy", "mascot", "mascot cleaning"],
+      "services": [
+        {
+          "code": "SOFT_TOY_ALL",
+          "name": "Soft Toys & Mascots",
+          "sort_order": 1,
+          "items": [
+            {"code": "SOFT_TOY_SMALL", "name": "Soft Toy — Small", "current_price": 49, "aliases": ["small soft toy", "soft toy small", "small teddy"]},
+            {"code": "SOFT_TOY_MEDIUM", "name": "Soft Toy — Medium", "current_price": 49, "aliases": ["medium soft toy", "soft toy medium"]},
+            {"code": "SOFT_TOY_LARGE", "name": "Soft Toy — Large", "current_price": 84, "aliases": ["large soft toy", "soft toy large", "big teddy"]},
+            {"code": "SOFT_TOY_MASCOT", "name": "Mascot Cleaning — Full Body & Head", "current_price": 161, "aliases": ["mascot", "mascot cleaning", "mascot full body"]}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "RESTORATION",
+      "name": "Restoration & Add-ons",
+      "description": "Shoe and leather specialty repair",
+      "sort_order": 8,
+      "default_pricing_type": "STARTING_FROM",
+      "default_pricing_unit": "ITEM",
+      "aliases": ["restoration", "add-ons", "add ons", "leather repair", "shoe repair", "sole"],
+      "services": [
+        {
+          "code": "RESTORATION_ALL",
+          "name": "Restoration & Add-ons",
+          "sort_order": 1,
+          "items": [
+            {"code": "RESTORATION_LIGHT", "name": "Light Restoration", "is_starting_price": true, "requires_inspection": true, "current_price": 50, "description": "Minor color repairs, stitching, gluing + free stain protection", "aliases": ["light restoration"]},
+            {"code": "RESTORATION_HEAVY", "name": "Heavy Restoration", "is_starting_price": true, "requires_inspection": true, "current_price": 170, "description": "Full color rework, leather edging, glue/stitching & sole icing + stain protection", "aliases": ["heavy restoration"]},
+            {"code": "RESTORATION_ICING_SOLES", "name": "Icing Soles", "is_starting_price": true, "requires_inspection": true, "current_price": 35, "description": "De-yellow sole treatment using hydrogen peroxide + UV light", "aliases": ["icing soles", "icing sole", "de-yellow soles"]},
+            {"code": "RESTORATION_STAIN_PROTECTION", "name": "Stain Protection", "is_starting_price": true, "requires_inspection": true, "current_price": 20, "description": "Water-repellent coating", "aliases": ["stain protection", "stain proofing"]},
+            {"code": "RESTORATION_SOLE_REPLACEMENT", "name": "Sole Replacement", "is_starting_price": true, "requires_inspection": true, "current_price": 550, "description": "Complete replacement of worn-out soles to restore grip, structure & longevity", "aliases": ["sole replacement", "replace soles"]}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "ALTERATIONS",
+      "name": "Alterations",
+      "description": "Tailoring and alterations (hemming, resizing, strap & buckle adjustments, elastic replacement)",
+      "sort_order": 9,
+      "default_pricing_type": "STARTING_FROM",
+      "default_pricing_unit": "ITEM",
+      "aliases": ["alteration", "alterations", "alter", "tailoring", "tailor", "hemming", "resize", "resizing", "stitching", "fix my"],
+      "services": [
+        {
+          "code": "ALTERATIONS_ALL",
+          "name": "Alterations",
+          "sort_order": 1,
+          "items": [
+            {"code": "ALTERATIONS_GENERAL", "name": "Alterations", "is_starting_price": true, "requires_inspection": true, "current_price": 30, "description": "Hemming, resizing, strap & buckle adjustments, elastic replacement", "aliases": ["alteration", "alterations", "hemming", "hem", "resize", "resizing", "strap adjustment", "buckle adjustment", "elastic replacement", "tailor", "tailoring"]}
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -5,7 +5,20 @@
  * exists only to exercise the detail UI. Nothing is invented about a real order.
  */
 import type { Order, OrderStatus, Tone } from "@/lib/dashboard/types";
+import type { LineItemDTO, OrderPricingDTO } from "@/lib/dashboard/whatsapp-agent-api";
 import { orders, conversations } from "@/lib/dashboard/mock-data";
+
+/**
+ * The order shape the detail page renders. It is the mock `Order` optionally
+ * carrying the backend's item-level catalogue pricing. Every pricing field is
+ * optional, so a plain `Order` (no pricing) is assignable here and the detail
+ * components fall back to the single-`amount` display for older orders.
+ */
+export type OrderWithPricing = Order & {
+  line_items?: LineItemDTO[];
+  catalogue_category?: string | null;
+  pricing?: OrderPricingDTO;
+};
 import { MOCK_NOW } from "@/lib/dashboard/formatters";
 import {
   facilityOrders, orderIssues, nextStepByStatus, orderSla,

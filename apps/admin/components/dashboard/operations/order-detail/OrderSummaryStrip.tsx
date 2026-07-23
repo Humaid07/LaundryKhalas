@@ -5,8 +5,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/dashboard/formatters";
-import type { Order } from "@/lib/dashboard/types";
-import { deliverySlotLabel } from "./data";
+import { deliverySlotLabel, type OrderWithPricing } from "./data";
 
 /**
  * A clean, scannable row of summary pills — the at-a-glance strip below the
@@ -26,7 +25,16 @@ function Pill({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
   );
 }
 
-export function OrderSummaryStrip({ order }: { order: Order }) {
+export function OrderSummaryStrip({ order }: { order: OrderWithPricing }) {
+  // Prefer the catalogue-priced total when present; label it "Est. total" so an
+  // estimate is never read as a guaranteed amount. Falls back to `amount`.
+  const pricing = order.pricing;
+  const amountValue =
+    pricing?.estimated_total_including_vat != null
+      ? formatCurrency(pricing.estimated_total_including_vat, pricing.currency)
+      : formatCurrency(order.amount);
+  const amountLabel = pricing?.is_estimated ? "Est. total" : "Amount";
+
   const pills: { icon: LucideIcon; label: string; value: string }[] = [
     { icon: User, label: "Customer", value: order.customer },
     { icon: Sparkles, label: "Service", value: order.service },
@@ -34,7 +42,7 @@ export function OrderSummaryStrip({ order }: { order: Order }) {
     { icon: Truck, label: "Delivery slot", value: deliverySlotLabel(order) },
     { icon: CreditCard, label: "Payment", value: order.payment },
     { icon: Wallet, label: "Method", value: order.channel === "B2B" ? "Invoice" : "Card / POD" },
-    { icon: Coins, label: "Amount", value: formatCurrency(order.amount) },
+    { icon: Coins, label: amountLabel, value: amountValue },
     { icon: Truck, label: "Driver", value: order.driver ?? "Unassigned" },
     { icon: Building2, label: "Facility", value: order.facility || "Unassigned" },
     { icon: Radio, label: "Source", value: order.channel },

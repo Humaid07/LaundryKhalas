@@ -104,6 +104,37 @@ export interface AgentFlagDTO {
   resolved_at: string | null;
 }
 
+/**
+ * A single priced line on an order (from the backend catalogue-pricing layer).
+ * All money is in `pricing.currency` (AED) and EXCLUDES VAT. Optional/nullable
+ * throughout so older payloads without item-level pricing still type-check.
+ */
+export interface LineItemDTO {
+  item_code: string;
+  name: string;                 // canonical item name, e.g. "Shirt"
+  quantity: number;
+  pricing_unit: string;         // "ITEM" | "PAIR" | "BAG" | "KG" | "SQM"
+  unit_price: number | null;    // AED, excludes VAT
+  is_starting_price: boolean;   // true = "From" price, not a guaranteed total
+  requires_inspection: boolean;
+  regular_price: number | null; // crossed-out earlier price, if any
+  line_total: number | null;    // null when pending inspection / no firm total
+  line_kind: "exact" | "estimate" | "pending";
+}
+
+/** Order-level pricing roll-up returned alongside `line_items`. */
+export interface OrderPricingDTO {
+  currency: string;                          // "AED"
+  vat_rate: number;                          // 0.05
+  prices_include_vat: boolean;               // false
+  subtotal_excluding_vat: number | null;
+  vat_amount: number | null;
+  estimated_total_including_vat: number | null;
+  is_estimated: boolean;                     // true => label total as "Estimated"
+  has_pending_inspection: boolean;
+  disclaimer: string;                        // e.g. "Prices may vary depending on item condition, material and brand."
+}
+
 export interface OrderDTO {
   id: string;
   order_id: string;
@@ -127,6 +158,11 @@ export interface OrderDTO {
   pickup_address: string | null;
   amount: number | null;
   currency: string;
+  // Item-level catalogue pricing (optional — only orders priced against the
+  // catalogue carry these; `amount` == `pricing.estimated_total_including_vat`).
+  line_items?: LineItemDTO[];
+  catalogue_category?: string | null;   // e.g. "Clean & Press"
+  pricing?: OrderPricingDTO;
   payment: string | null;
   is_demo: boolean;
   // Order↔conversation link + dashboard-only fields (from /api/orders/search).

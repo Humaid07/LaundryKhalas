@@ -170,3 +170,34 @@ did not block the work.
 3. Wire detail-page `ActionMenu` items to real (still-gated) approval mutations.
 4. Optional: add bespoke detail routes for cancellations/follow-ups if operators want them.
 5. Add a first automated frontend smoke/render test to lock in the redesign.
+
+---
+
+## Addendum (2026-07-23) — Real item catalogue, pricing engine & agent item collection
+
+**What shipped:** the placeholder service list was replaced (for the booking/
+pricing/orders path) with the **real Laundry Khalas price list** transcribed and
+verified from the approved image — **9 categories, 120 priced items** — imported
+into new Supabase tables (`service_categories/services/service_items/
+service_aliases/service_price_versions`, migration `20260723_000007`, seeded live;
+DB↔JSON parity check = in sync). A **VAT-aware pricing engine** turns items +
+quantities into a quote (5% VAT on the firm portion; "From"/inspection prices are
+never presented as guaranteed totals). New **catalogue/quote APIs** (`/api/catalogue/*`).
+The **WhatsApp agent** now collects category → item → quantity and shows a priced,
+VAT-inclusive confirmation summary, then continues the existing proven
+name→date→slot→address→instructions→confirm path. Orders now carry a **frozen
+line-item pricing snapshot**, surfaced on the dashboard order detail.
+
+**Testing:** 372 backend tests pass (was 362; +41 new incl. all 24 required
+pricing scenarios), ruff clean, dashboard `tsc` clean, catalogue endpoints
+verified against live Supabase.
+
+**Deviations / honest gaps:** the informational Q&A / SEO / dashboard
+`service-catalog.ts` mirror still use the older 8-service marketing taxonomy
+(untouched, still green) — only the booking/pricing/orders path uses the new
+catalogue. Native WhatsApp lists cap ~10 rows (two sub-categories overflow; the
+numbered-text fallback handles it). See build report
+`2026-07-23-service-catalogue-pricing.md`.
+
+**Next:** align the informational/SEO taxonomy to the 9 categories; live
+two-number WhatsApp manual test.

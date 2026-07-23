@@ -32,10 +32,15 @@ def advance(booking, inbound):
     return asyncio.run(bf.advance(booking, inbound, today=TODAY, available_slots=slots_fake))
 
 
-# --- helper: a valid, active service id from the real catalogue -------------
+# Step 1 = the 9 real price-list categories; selecting one leads to item
+# collection (a sub-category list for big categories, else the item list).
+_COLLECT_NEXT = (bf.WAITING_FOR_SUBCATEGORY, bf.WAITING_FOR_ITEM)
+
+
+# --- helper: a valid, active category code (= the FSM's "service_id") --------
 def _a_service_id():
-    from rules import active_service_catalog
-    return active_service_catalog()[0]["service_id"]
+    from services import catalogue
+    return catalogue.categories()[0]["code"]
 
 
 # Test 1 — "I need a laundry pickup" only detects intent, assumes nothing ------
@@ -51,12 +56,12 @@ def test_booking_intent_assumes_nothing_and_asks_for_service():
     assert reply.confirm_now is False
 
 
-# Test 2 — selecting a service stores the id + snapshot, moves to date ---------
+# Test 2 — selecting a category stores the id + snapshot, moves to item collection
 def test_service_selection_stores_id_and_snapshot():
     sid = _a_service_id()
     b = Booking(conversation_state=bf.WAITING_FOR_SERVICE)
-    reply = advance(b, Inbound(selection_id=f"service:{sid}", text="Premium Wash & Fold"))
-    assert reply.state == bf.WAITING_FOR_NAME          # no name yet -> ask for it next
+    reply = advance(b, Inbound(selection_id=f"service:{sid}", text="Clean & Press"))
+    assert reply.state in _COLLECT_NEXT                # collect the item(s) next
     assert reply.updates["service_id"] == sid
     assert reply.updates["service_name_snapshot"]
     assert reply.updates.get("_touch_service_selected_at") is True
@@ -194,22 +199,20 @@ def test_numbered_fallback_maps_back_to_service_id():
     start = bf.begin()
     fallback = bf.numbered_fallback(start.interactive)
     assert "1. " in fallback and "Reply with the number" in fallback
-    # customer replies "2" -> resolves to the 2nd active service, deterministically
+    # customer replies "2" -> resolves to the 2nd category, deterministically
     b = Booking(conversation_state=bf.WAITING_FOR_SERVICE)
     reply = advance(b, Inbound(text="2"))
-    from rules import active_service_catalog
-    assert reply.updates["service_id"] == active_service_catalog()[1]["service_id"]
-    assert reply.state == bf.WAITING_FOR_NAME
+    from services import catalogue
+    assert reply.updates["service_id"] == catalogue.categories()[1]["code"]
+    assert reply.state in _COLLECT_NEXT
 
 
 # Test 12 — free-text "Wash and fold" resolves only on a unique match ----------
 def test_free_text_service_unique_match():
     b = Booking(conversation_state=bf.WAITING_FOR_SERVICE)
     reply = advance(b, Inbound(text="wash and fold please"))
-    assert reply.state == bf.WAITING_FOR_NAME
-    svc = reply.updates["service_id"]
-    from rules import service_by_id
-    assert "wash" in (service_by_id(svc)["display_name"].lower())
+    assert reply.state in _COLLECT_NEXT
+    assert reply.updates["service_id"] == "WASH_FOLD"
 
 
 def test_free_text_service_ambiguous_asks_to_pick():
@@ -230,13 +233,13 @@ def test_free_text_service_ambiguous_asks_to_pick():
 # field, preserve everything else, and return straight to the review.
 # ===========================================================================
 def _svc(i=0):
-    from rules import active_service_catalog
-    return active_service_catalog()[i]["service_id"]
+    from services import catalogue
+    return catalogue.categories()[i]["code"]
 
 
 def _svc_label(sid):
-    from rules import service_by_id
-    return service_by_id(sid)["display_name"]
+    from services import catalogue
+    return (catalogue.category_by_code(sid) or {}).get("name") or sid
 
 
 def _full_booking(state=bf.WAITING_FOR_CONFIRMATION, **overrides):
@@ -296,16 +299,17 @@ def test_edit_instructions_preserves_everything_else():
     assert "5:00 PM – 8:00 PM" in reply.text
 
 
-# 6 — change service preserves address (and other pickup details) -------------
+# 6 — change service (category) re-collects items but preserves address/date/slot
 def test_edit_service_preserves_address_and_pickup():
     b = _full_booking(state=bf.EDITING_SERVICE)
-    new_sid = _svc(1)
+    new_sid = _svc(1)                                   # a different category
     reply = advance(b, Inbound(selection_id=f"service:{new_sid}"))
-    assert reply.state == bf.WAITING_FOR_CONFIRMATION
+    # A new category invalidates the old items, so we re-collect them (item-only),
+    # but the address/date/slot are preserved (never cleared or re-asked, §16).
+    assert reply.state in _COLLECT_NEXT
     assert reply.updates["service_id"] == new_sid
-    assert "pickup_address" not in reply.updates
-    assert "Marina Heights, Dubai Marina" in reply.text
-    assert _svc_label(new_sid) in reply.text
+    assert reply.updates["line_items"] is None         # old items cleared
+    assert "pickup_address" not in reply.updates       # address NOT touched
 
 
 # 7 — changing one field returns directly to review ---------------------------

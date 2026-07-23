@@ -64,8 +64,10 @@ _ESCALATION_FLAG: dict[str, tuple[str, str, str]] = {
 }
 _DEFAULT_FLAG = ("handoff", "high", "Customer Facing")
 
-_BOOKING_SELECTION_PREFIXES = ("service:", "slot:", "instruction:", "date:", "change:")
-_BOOKING_SELECTION_IDS = {"confirm_booking", "change_details", "cancel_booking"}
+_BOOKING_SELECTION_PREFIXES = ("service:", "sub:", "item:", "slot:", "instruction:",
+                               "date:", "change:")
+_BOOKING_SELECTION_IDS = {"confirm_booking", "change_details", "cancel_booking",
+                          "add_item", "items_done"}
 
 
 def _today() -> _dt.date:
@@ -87,6 +89,9 @@ def _booking_from_row(row: dict, *, profile_name: str | None = None,
         customer_name=row.get("customer_name"),
         service_id=row.get("service_id"),
         service_name_snapshot=row.get("service_name_snapshot") or row.get("service"),
+        line_items=row.get("line_items"),
+        browse_service_code=row.get("browse_service_code"),
+        pending_item_code=row.get("pending_item_code"),
         pickup_date=row.get("pickup_date"),
         pickup_slot_id=row.get("pickup_slot_id"),
         pickup_slot_label=row.get("pickup_slot"),
@@ -108,6 +113,12 @@ def _final_confirmation_text(row: dict) -> str:
         "✅ Booking confirmed! Thank you.",
         f"Order {row.get('order_id')}",
         f"Service: {row.get('service_display_name') or row.get('service') or '—'}",
+    ]
+    total = row.get("estimated_total")
+    if total is not None:
+        label = "Estimated total" if row.get("pricing_is_estimated") else "Total"
+        lines.append(f"{label} (incl. VAT): AED {float(total):g}")
+    lines += [
         f"Pickup date: {date_str}",
         f"Pickup time: {row.get('pickup_slot') or '—'}",
         f"Address: {row.get('pickup_address') or '—'}",
