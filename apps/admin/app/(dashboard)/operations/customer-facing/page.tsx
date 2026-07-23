@@ -18,7 +18,11 @@ export default function CustomerFacingPage() {
       </Suspense>
       {/* Live WhatsApp inbox + open flags (renders only when the live flag is on). */}
       <LiveWhatsAppConversations />
-      <CustomerFacing />
+      {/* CustomerFacing reads the active tab from ?tab= (useSearchParams) so back
+          navigation from a ticket detail restores the exact view. */}
+      <Suspense fallback={null}>
+        <CustomerFacing />
+      </Suspense>
     </div>
   );
 }

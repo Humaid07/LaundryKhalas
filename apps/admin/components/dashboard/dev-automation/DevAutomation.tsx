@@ -1,38 +1,21 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { Bot, Boxes, Plug, ScrollText, Server, AlertTriangle, Gauge, Rocket, ShieldCheck } from "lucide-react";
 import {
-  Activity,
-  Bot,
-  Globe,
-  Plug,
-  SearchX,
-  ShieldCheck,
-  Eye,
-  RotateCw,
-  Pause,
-  Play,
-  Settings2,
-  UserPlus,
-  CirclePlus,
-} from "lucide-react";
-import { StatGrid } from "@/components/dashboard/ui/StatCard";
-import { ChartCard } from "@/components/dashboard/ui/ChartCard";
-import { Panel, PanelHeader, StatusBadge } from "@/components/dashboard/ui/primitives";
-import { Button } from "@/components/dashboard/ui/Button";
-import { DataTable, type Column } from "@/components/dashboard/ui/DataTable";
-import { EmptyState, SnapshotBadge } from "@/components/dashboard/ui/states";
-import { ActivityTimeline, ConnectedAppRow, MiniMetric } from "@/components/dashboard/widgets";
-import { LocalFilterBar, useLocalFilters, matchesLocal, type LocalFilterDef } from "@/components/dashboard/ui/LocalFilters";
+  MinimalKpiStrip, WorkflowTabs, CompactRecordCard, RecordList, DataPreviewTable,
+  EmptyState, StatusBadge, SnapshotBadge,
+  type MinimalKpi, type WorkflowTab, type PreviewColumn,
+} from "@/components/dashboard/minimal";
 import { useFilters } from "@/components/dashboard/shell/FiltersProvider";
 import { applyGlobalFilters, activeFilterCount } from "@/lib/dashboard/filters";
-import { AreaTrend, BarSeries, DonutChart } from "@/components/dashboard/charts";
-import { CHART } from "@/lib/dashboard/chart-theme";
 import { formatCurrency, formatRelativeTime } from "@/lib/dashboard/formatters";
-import { cn } from "@/lib/utils";
 import {
-  devKpis,
   agentHealth,
   agentStatusToneD,
+  agentSlug,
+  agentNeedsAttention,
   techIssues,
   severityTone,
   issueStatusTone,
@@ -43,403 +26,517 @@ import {
   llmUsage,
   deployments,
   deployStatusTone,
-  buildStatusTone,
   integrations,
   integrationStatusTone,
   logs,
   logSeverityTone,
-  liveVsMock,
-  issuesByCategory,
-  apiLatencyOverTime,
-  failedJobsTrend,
-  llmCallsByAgent,
-  costByAgent,
-  uptimeTrend,
-  integrationBreakdown,
-  devActivity,
-  AGENT_CATEGORIES,
-  AGENT_STATUSES,
-  AGENT_MODES,
-  AGENT_OWNERS,
-  AGENT_ACTIONS,
   type AgentHealth,
   type TechIssue,
   type ApiHealth,
   type JobRow,
   type LlmUsageRow,
   type DeployRow,
+  type IntegrationRow,
   type LogRow,
 } from "@/lib/dashboard/dev-automation-data";
 
-const noMatch = <EmptyState icon={Bot} title="No matches" description="No records match the active filters." />;
-const filteredEmpty = (
-  <EmptyState icon={SearchX} title="No records match the selected filters" description="Try clearing a filter to see more." />
-);
-const donutColors = [CHART.rose, CHART.plum, CHART.teal, CHART.amber, CHART.sky, CHART.slate];
+/* ============================================================================
+ * Dev & Automation — minimal, progressive-disclosure surfaces.
+ *
+ * Main pages stay light: a curated KPI strip, optional workflow/status tabs, and
+ * a single-column list (or a calm preview table for metric/log-heavy views). No
+ * record actions live here — the primary records (agents, jobs) click through to
+ * a full detail page where all actions live behind an ActionMenu. Non-primary
+ * views are consistent read-only previews. Global filters are preserved via
+ * applyGlobalFilters; the SubsectionShell renders the header + FilterBar.
+ * ========================================================================== */
 
-/**
- * Honest note for the mostly-technical subsections: their rows are tagged
- * `scope: "global"`, so geo filters (Region/Market/City) never hide them. Only
- * the few market/channel-tagged rows respond to the global filter bar.
- */
-const globalHint = (
-  <p className="flex items-center gap-1.5 border-t border-border px-4 py-2.5 text-xxs text-ink-faint">
-    <Globe className="h-3 w-3 shrink-0" /> Global · not geo-filtered — technical items stay visible under geo filters; only market/channel-tagged rows respond.
-  </p>
-);
+const fmtTime = (iso: string) => (iso === "—" ? "—" : formatRelativeTime(iso));
 
-/** Header row flagging global/technical Dev views that geo filters don't narrow. */
-function SnapshotRow({ label }: { label: string }) {
-  const { filters } = useFilters();
+/** A small right-aligned row that mirrors global-filter awareness. */
+function FilterAwareRow({ tabs, value, onChange, active }: {
+  tabs?: WorkflowTab[];
+  value?: string;
+  onChange?: (id: string) => void;
+  active: boolean;
+}) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">{label}</p>
-      <SnapshotBadge active={activeFilterCount(filters) > 0} label="Global / technical" />
-    </div>
-  );
-}
-
-/* ---------------------------- Automation overview --------------------------- */
-
-function AutomationOverviewTab() {
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MiniMetric label="Live agents" value="1" tone="success" />
-        <MiniMetric label="Staged agents" value="18" tone="info" />
-        <MiniMetric label="Active automations" value="11" delta={10} tone="rose" />
-        <MiniMetric label="Failed automations" value="4" delta={-2} tone="danger" />
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Live vs staged agents" subtitle="Agent status split">
-          <BarSeries data={liveVsMock} colorByIndex height={200} />
-        </ChartCard>
-        <ChartCard title="Agent issues by category" subtitle="Open issues">
-          <BarSeries data={issuesByCategory} color={CHART.amber} height={200} />
-        </ChartCard>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Failed jobs trend" subtitle="Last 7 days">
-          <AreaTrend data={failedJobsTrend} series={[{ key: "value", name: "Failed jobs", color: CHART.danger }]} height={180} />
-        </ChartCard>
-        <ChartCard title="Uptime trend" subtitle="Last 7 days · %">
-          <AreaTrend data={uptimeTrend} series={[{ key: "value", name: "Uptime", color: CHART.teal }]} height={180} />
-        </ChartCard>
-      </div>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      {tabs && value && onChange ? <WorkflowTabs tabs={tabs} value={value} onChange={onChange} /> : <span />}
+      <SnapshotBadge active={active} />
     </div>
   );
 }
 
 /* ------------------------------- Agent health ------------------------------- */
 
-const agentCols: Column<AgentHealth>[] = [
-  { key: "name", header: "Agent", primary: true, cell: (a) => <span className="whitespace-nowrap font-medium text-ink">{a.name}</span> },
-  { key: "category", header: "Category", cell: (a) => <span className="text-xs text-ink-muted">{a.category}</span> },
-  { key: "status", header: "Status", cell: (a) => <StatusBadge tone={agentStatusToneD[a.status]}>{a.status}</StatusBadge> },
-  { key: "mode", header: "Mode", cell: (a) => <StatusBadge tone="neutral" dot={false}>{a.mode}</StatusBadge> },
-  { key: "lastRun", header: "Last Run", cell: (a) => <span className="whitespace-nowrap text-xs text-ink-muted">{a.lastRun === "—" ? "—" : formatRelativeTime(a.lastRun)}</span> },
-  { key: "nextRun", header: "Next Run", cell: (a) => <span className="whitespace-nowrap text-xs text-ink-muted">{a.nextRun === "—" ? "—" : formatRelativeTime(a.nextRun)}</span> },
-  { key: "success", header: "Success", align: "right", cell: (a) => <span className="font-mono text-xs text-ink tnum">{a.successRate ? `${a.successRate}%` : "—"}</span> },
-  { key: "latency", header: "Avg Latency", align: "right", cell: (a) => <span className="font-mono text-xs text-ink-muted tnum">{a.avgLatency}</span> },
-  { key: "cost", header: "Cost Today", align: "right", cell: (a) => <span className="font-mono text-xs text-ink-muted tnum">{a.costToday ? formatCurrency(a.costToday) : "—"}</span> },
-  { key: "issues", header: "Issues", align: "right", cell: (a) => <span className={cn("font-mono text-sm tnum", a.issues > 0 ? "text-warning" : "text-ink-faint")}>{a.issues}</span> },
-  { key: "owner", header: "Owner", cell: (a) => <span className="whitespace-nowrap text-xs text-ink-muted">{a.owner}</span> },
-  { key: "actions", header: "", align: "right", cell: () => <Button size="sm" variant="secondary"><Eye className="h-3.5 w-3.5" /> Logs</Button> },
+type AgentTabId = "all" | "live" | "staged" | "attention";
+
+const AGENT_TABS: { id: AgentTabId; label: string; test: (a: AgentHealth) => boolean }[] = [
+  { id: "all", label: "All", test: () => true },
+  { id: "live", label: "Live", test: (a) => a.status === "Live" },
+  { id: "staged", label: "Staged", test: (a) => a.status === "Staged" || a.status === "Scheduled" },
+  { id: "attention", label: "Needs attention", test: agentNeedsAttention },
 ];
 
 function AgentHealthTab() {
-  const filterDefs: LocalFilterDef[] = [
-    { key: "status", label: "Status", options: AGENT_STATUSES },
-    { key: "category", label: "Category", options: AGENT_CATEGORIES },
-    { key: "mode", label: "Mode", options: AGENT_MODES },
-    { key: "owner", label: "Owner", options: AGENT_OWNERS },
+  const { filters } = useFilters();
+  const [tab, setTab] = useState<AgentTabId>("all");
+  const base = useMemo(() => applyGlobalFilters(agentHealth, filters), [filters]);
+  const isFiltered = activeFilterCount(filters) > 0;
+
+  const kpis: MinimalKpi[] = [
+    { label: "Total agents", value: String(base.length) },
+    { label: "Live", value: String(base.filter((a) => a.status === "Live").length), tone: "success" },
+    { label: "Staged", value: String(base.filter((a) => a.status === "Staged" || a.status === "Scheduled").length) },
+    { label: "Needs attention", value: String(base.filter(agentNeedsAttention).length), tone: "warning" },
   ];
-  const lf = useLocalFilters(filterDefs);
-  const rows = agentHealth.filter((a) => matchesLocal(a, lf.values, (row, key) => (row as unknown as Record<string, string>)[key]));
+
+  const tabs: WorkflowTab[] = AGENT_TABS.map((t) => ({ id: t.id, label: t.label, count: base.filter(t.test).length }));
+  const rows = base.filter(AGENT_TABS.find((t) => t.id === tab)!.test);
 
   return (
-    <Panel padded={false}>
-      <PanelHeader title="Agent health" subtitle={`${rows.length} of ${agentHealth.length} agents · status, mode, success rate & cost`} className="p-4" action={<StatusBadge tone="warning">{agentHealth.filter((a) => a.issues > 0).length} with issues</StatusBadge>} />
-      <div className="border-b border-border px-4 pb-3">
-        <LocalFilterBar defs={filterDefs} values={lf.values} onChange={lf.set} onClear={lf.clear} />
-      </div>
-      <div className="px-4 pb-4 pt-4">
-        <DataTable columns={agentCols} rows={rows} rowKey={(a) => a.name} empty={noMatch} onRowLabel={(a) => <StatusBadge tone={agentStatusToneD[a.status]}>{a.status}</StatusBadge>} />
-      </div>
-      <div className="flex flex-wrap gap-1.5 border-t border-border px-4 py-3">
-        {AGENT_ACTIONS.map((a) => (
-          <span key={a} className="rounded-md border border-border bg-surface-2 px-2 py-1 text-xxs font-medium text-ink-muted">{a}</span>
-        ))}
-      </div>
-    </Panel>
-  );
-}
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <FilterAwareRow tabs={tabs} value={tab} onChange={(id) => setTab(id as AgentTabId)} active={isFiltered} />
 
-/* ------------------------------ Technical issues ---------------------------- */
-
-const issueCols: Column<TechIssue>[] = [
-  { key: "id", header: "Issue", primary: true, cell: (i) => <span className="font-mono text-xs font-semibold text-ink">{i.id}</span> },
-  { key: "title", header: "Title", cell: (i) => <span className="text-ink">{i.title}</span> },
-  { key: "severity", header: "Severity", cell: (i) => <StatusBadge tone={severityTone[i.severity]}>{i.severity}</StatusBadge> },
-  { key: "module", header: "Module", cell: (i) => <span className="whitespace-nowrap text-xs text-ink-muted">{i.module}</span> },
-  { key: "owner", header: "Owner", cell: (i) => <span className="text-xs text-ink-muted">{i.owner}</span> },
-  { key: "status", header: "Status", cell: (i) => <StatusBadge tone={issueStatusTone[i.status]}>{i.status}</StatusBadge> },
-  { key: "created", header: "Created", cell: (i) => <span className="whitespace-nowrap text-xs text-ink-muted">{formatRelativeTime(i.createdAt)}</span> },
-  { key: "updated", header: "Last Update", cell: (i) => <span className="whitespace-nowrap text-xs text-ink-muted">{formatRelativeTime(i.lastUpdate)}</span> },
-  { key: "actions", header: "", align: "right", cell: () => <Button size="sm" variant="secondary">Manage</Button> },
-];
-
-function TechIssuesTab() {
-  const { filters } = useFilters();
-  const rows = applyGlobalFilters(techIssues, filters);
-  return (
-    <Panel padded={false}>
-      <PanelHeader title="Technical issues" subtitle="Known engineering gaps & bugs" className="p-4" action={<StatusBadge tone="warning">{rows.filter((i) => i.status !== "Resolved").length} open</StatusBadge>} />
-      <div className="px-4 pb-4">
-        <DataTable columns={issueCols} rows={rows} rowKey={(i) => i.id} empty={filteredEmpty} onRowLabel={(i) => <StatusBadge tone={severityTone[i.severity]}>{i.severity}</StatusBadge>} />
-      </div>
-      {globalHint}
-    </Panel>
-  );
-}
-
-/* ---------------------------- API & webhook health -------------------------- */
-
-const apiCols: Column<ApiHealth>[] = [
-  { key: "endpoint", header: "Endpoint", primary: true, cell: (a) => <span className="whitespace-nowrap font-medium text-ink">{a.endpoint}</span> },
-  { key: "status", header: "Status", cell: (a) => <StatusBadge tone={apiStatusTone[a.status]}>{a.status}</StatusBadge> },
-  { key: "checked", header: "Last Checked", cell: (a) => <span className="whitespace-nowrap text-xs text-ink-muted">{a.lastChecked === "—" ? "—" : formatRelativeTime(a.lastChecked)}</span> },
-  { key: "latency", header: "Latency", align: "right", cell: (a) => <span className="font-mono text-xs text-ink-muted tnum">{a.latency}</span> },
-  { key: "error", header: "Error Rate", align: "right", cell: (a) => <span className={cn("font-mono text-xs tnum", a.errorRate > 1 ? "text-warning" : "text-ink-muted")}>{a.errorRate.toFixed(1)}%</span> },
-  { key: "uptime", header: "Uptime", align: "right", cell: (a) => <span className="font-mono text-xs text-ink-muted tnum">{a.uptime ? `${a.uptime}%` : "—"}</span> },
-  { key: "lastError", header: "Last Error", cell: (a) => <span className="text-xs text-ink-faint">{a.lastError}</span> },
-];
-
-function ApiHealthTab() {
-  const { filters } = useFilters();
-  const rows = applyGlobalFilters(apiHealth, filters);
-  return (
-    <div className="space-y-4">
-      <Panel padded={false}>
-        <PanelHeader title="API & webhook health" subtitle="Internal endpoints & webhooks · safe summaries only" className="p-4" />
-        <div className="px-4 pb-4">
-          <DataTable columns={apiCols} rows={rows} rowKey={(a) => a.endpoint} empty={filteredEmpty} onRowLabel={(a) => <StatusBadge tone={apiStatusTone[a.status]}>{a.status}</StatusBadge>} />
-        </div>
-        {globalHint}
-      </Panel>
-      <ChartCard title="API latency over time" subtitle="Milliseconds">
-        <AreaTrend data={apiLatencyOverTime} series={[{ key: "value", name: "Latency (ms)", color: CHART.sky }]} height={180} />
-      </ChartCard>
+      {rows.length === 0 ? (
+        <EmptyState icon={Bot} title="No agents in this view" description="No agents match this status and the active filters." />
+      ) : (
+        <RecordList>
+          {rows.map((a) => (
+            <CompactRecordCard
+              key={a.name}
+              title={a.name}
+              status={{ label: a.status, tone: agentStatusToneD[a.status] }}
+              fields={[
+                { label: "Category", value: a.category },
+                { label: "Success", value: a.successRate ? `${a.successRate}%` : "—" },
+                { label: "Last run", value: fmtTime(a.lastRun) },
+              ]}
+              meta={
+                a.issues > 0
+                  ? <StatusBadge tone="danger" dot={false}>{a.issues} issue{a.issues === 1 ? "" : "s"}</StatusBadge>
+                  : <span className="text-xxs text-ink-faint">{a.mode}</span>
+              }
+              href={`/dev-automation/agent-health/${agentSlug(a.name)}?tab=${tab}`}
+            />
+          ))}
+        </RecordList>
+      )}
     </div>
   );
 }
 
 /* --------------------------------- Job queue -------------------------------- */
 
-const jobCols: Column<JobRow>[] = [
-  { key: "name", header: "Job", primary: true, cell: (j) => <span className="whitespace-nowrap font-mono text-xs font-semibold text-ink">{j.name}</span> },
-  { key: "agent", header: "Agent", cell: (j) => <span className="whitespace-nowrap text-xs text-ink-muted">{j.agent}</span> },
-  { key: "status", header: "Status", cell: (j) => <StatusBadge tone={jobStatusTone[j.status]}>{j.status}</StatusBadge> },
-  { key: "queued", header: "Queued At", cell: (j) => <span className="whitespace-nowrap text-xs text-ink-muted">{formatRelativeTime(j.queuedAt)}</span> },
-  { key: "attempts", header: "Attempts", align: "right", cell: (j) => <span className="font-mono text-sm text-ink tnum">{j.attempts}</span> },
-  { key: "retry", header: "Next Retry", cell: (j) => <span className="whitespace-nowrap text-xs text-ink-muted">{j.nextRetry === "—" ? "—" : formatRelativeTime(j.nextRetry)}</span> },
-  { key: "error", header: "Error", cell: (j) => <span className="text-xs text-ink-faint">{j.error}</span> },
-  { key: "actions", header: "", align: "right", cell: (j) => (j.status === "Failed" || j.status === "Retrying" ? <Button size="sm" variant="secondary"><RotateCw className="h-3.5 w-3.5" /> Retry</Button> : <Button size="sm" variant="ghost">View</Button>) },
+type JobTabId = "all" | "queued" | "running" | "retrying" | "failed" | "done";
+
+const JOB_TABS: { id: JobTabId; label: string; test: (j: JobRow) => boolean }[] = [
+  { id: "all", label: "All", test: () => true },
+  { id: "queued", label: "Queued", test: (j) => j.status === "Queued" },
+  { id: "running", label: "Running", test: (j) => j.status === "Running" },
+  { id: "retrying", label: "Retrying", test: (j) => j.status === "Retrying" },
+  { id: "failed", label: "Failed", test: (j) => j.status === "Failed" },
+  { id: "done", label: "Done", test: (j) => j.status === "Done" },
 ];
 
 function JobQueueTab() {
   const { filters } = useFilters();
-  const rows = applyGlobalFilters(jobQueue, filters);
+  const [tab, setTab] = useState<JobTabId>("all");
+  const base = useMemo(() => applyGlobalFilters(jobQueue, filters), [filters]);
+  const isFiltered = activeFilterCount(filters) > 0;
+
+  const kpis: MinimalKpi[] = [
+    { label: "Queued", value: String(base.filter((j) => j.status === "Queued").length) },
+    { label: "Running", value: String(base.filter((j) => j.status === "Running").length), tone: "rose" },
+    { label: "Retrying", value: String(base.filter((j) => j.status === "Retrying").length), tone: "warning" },
+    { label: "Failed", value: String(base.filter((j) => j.status === "Failed").length), tone: "danger" },
+  ];
+
+  const tabs: WorkflowTab[] = JOB_TABS.map((t) => ({ id: t.id, label: t.label, count: base.filter(t.test).length }));
+  const rows = base.filter(JOB_TABS.find((t) => t.id === tab)!.test);
+
   return (
-    <Panel padded={false}>
-      <PanelHeader title="Job queue" subtitle="Background & scheduled jobs · Celery / Redis view" className="p-4" action={<StatusBadge tone="danger">{rows.filter((j) => j.status === "Failed").length} failed</StatusBadge>} />
-      <div className="px-4 pb-4">
-        <DataTable columns={jobCols} rows={rows} rowKey={(j) => j.name} empty={filteredEmpty} onRowLabel={(j) => <StatusBadge tone={jobStatusTone[j.status]}>{j.status}</StatusBadge>} />
-      </div>
-      {globalHint}
-    </Panel>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <FilterAwareRow tabs={tabs} value={tab} onChange={(id) => setTab(id as JobTabId)} active={isFiltered} />
+
+      {rows.length === 0 ? (
+        <EmptyState icon={Boxes} title="No jobs in this view" description="No background jobs match this status and the active filters." />
+      ) : (
+        <RecordList>
+          {rows.map((j) => (
+            <CompactRecordCard
+              key={j.name}
+              title={<span className="font-mono">{j.name}</span>}
+              status={{ label: j.status, tone: jobStatusTone[j.status] }}
+              fields={[
+                { label: "Agent", value: j.agent },
+                { label: "Attempts", value: j.attempts },
+                { label: "Queued", value: fmtTime(j.queuedAt) },
+              ]}
+              meta={
+                j.nextRetry !== "—"
+                  ? <span className="text-xxs text-ink-faint">Retry {fmtTime(j.nextRetry)}</span>
+                  : j.error !== "—"
+                    ? <span className="text-xxs text-danger">{j.error}</span>
+                    : null
+              }
+              href={`/dev-automation/job-queue/${encodeURIComponent(j.name)}?tab=${tab}`}
+            />
+          ))}
+        </RecordList>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------ Technical issues ---------------------------- */
+
+type IssueTabId = "all" | "open" | "in-progress" | "blocked" | "resolved";
+
+const ISSUE_TABS: { id: IssueTabId; label: string; test: (i: TechIssue) => boolean }[] = [
+  { id: "all", label: "All", test: () => true },
+  { id: "open", label: "Open", test: (i) => i.status === "Open" },
+  { id: "in-progress", label: "In progress", test: (i) => i.status === "In Progress" },
+  { id: "blocked", label: "Blocked", test: (i) => i.status === "Blocked" },
+  { id: "resolved", label: "Resolved", test: (i) => i.status === "Resolved" },
+];
+
+function TechIssuesTab() {
+  const { filters } = useFilters();
+  const [tab, setTab] = useState<IssueTabId>("all");
+  const base = useMemo(() => applyGlobalFilters(techIssues, filters), [filters]);
+  const isFiltered = activeFilterCount(filters) > 0;
+
+  const kpis: MinimalKpi[] = [
+    { label: "Open", value: String(base.filter((i) => i.status === "Open").length), tone: "warning" },
+    { label: "In progress", value: String(base.filter((i) => i.status === "In Progress").length) },
+    { label: "Blocked", value: String(base.filter((i) => i.status === "Blocked").length), tone: "danger" },
+    { label: "High severity", value: String(base.filter((i) => i.severity === "High" || i.severity === "Critical").length), tone: "danger" },
+  ];
+
+  const tabs: WorkflowTab[] = ISSUE_TABS.map((t) => ({ id: t.id, label: t.label, count: base.filter(t.test).length }));
+  const rows = base.filter(ISSUE_TABS.find((t) => t.id === tab)!.test);
+
+  return (
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <FilterAwareRow tabs={tabs} value={tab} onChange={(id) => setTab(id as IssueTabId)} active={isFiltered} />
+
+      {rows.length === 0 ? (
+        <EmptyState icon={AlertTriangle} title="No issues in this view" description="No technical issues match this status and the active filters." />
+      ) : (
+        <RecordList>
+          {rows.map((i) => (
+            <CompactRecordCard
+              key={i.id}
+              id={i.id}
+              title={i.title}
+              status={{ label: i.severity, tone: severityTone[i.severity] }}
+              fields={[
+                { label: "Module", value: i.module },
+                { label: "Owner", value: i.owner },
+                { label: "Updated", value: fmtTime(i.lastUpdate) },
+              ]}
+              meta={<StatusBadge tone={issueStatusTone[i.status]} dot={false}>{i.status}</StatusBadge>}
+            />
+          ))}
+        </RecordList>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------- API & webhook health -------------------------- */
+
+const apiColumns: PreviewColumn<ApiHealth>[] = [
+  { key: "endpoint", header: "Endpoint", primary: true, cell: (a) => <span className="font-medium text-ink">{a.endpoint}</span> },
+  { key: "status", header: "Status", cell: (a) => <StatusBadge tone={apiStatusTone[a.status]} dot={false}>{a.status}</StatusBadge> },
+  { key: "latency", header: "Latency", align: "right", cell: (a) => <span className="font-mono text-xs text-ink-muted tnum">{a.latency}</span> },
+  { key: "error", header: "Error rate", align: "right", cell: (a) => <span className={`font-mono text-xs tnum ${a.errorRate > 1 ? "text-warning" : "text-ink-muted"}`}>{a.errorRate.toFixed(1)}%</span> },
+  { key: "uptime", header: "Uptime", align: "right", cell: (a) => <span className="font-mono text-xs text-ink-muted tnum">{a.uptime ? `${a.uptime}%` : "—"}</span> },
+];
+
+function ApiHealthTab() {
+  const { filters } = useFilters();
+  const base = useMemo(() => applyGlobalFilters(apiHealth, filters), [filters]);
+  const isFiltered = activeFilterCount(filters) > 0;
+
+  const kpis: MinimalKpi[] = [
+    { label: "Operational", value: String(base.filter((a) => a.status === "Operational").length), tone: "success" },
+    { label: "Degraded", value: String(base.filter((a) => a.status === "Degraded").length), tone: "warning" },
+    { label: "Standby", value: String(base.filter((a) => a.status === "Standby").length) },
+    { label: "Endpoints", value: String(base.length) },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <FilterAwareRow active={isFiltered} />
+      <DataPreviewTable
+        columns={apiColumns}
+        rows={base}
+        rowKey={(a) => a.endpoint}
+        empty={<EmptyState icon={Server} title="No endpoints" description="No endpoints match the active filters." />}
+      />
+    </div>
   );
 }
 
 /* ------------------------------- LLM / cost usage --------------------------- */
 
-const llmCols: Column<LlmUsageRow>[] = [
-  { key: "agent", header: "Agent", primary: true, cell: (l) => <span className="whitespace-nowrap font-medium text-ink">{l.agent}</span> },
+const llmColumns: PreviewColumn<LlmUsageRow>[] = [
+  { key: "agent", header: "Agent", primary: true, cell: (l) => <span className="font-medium text-ink">{l.agent}</span> },
   { key: "calls", header: "Calls", align: "right", cell: (l) => <span className="font-mono text-sm text-ink tnum">{l.calls.toLocaleString()}</span> },
   { key: "tokens", header: "Tokens", align: "right", cell: (l) => <span className="font-mono text-xs text-ink-muted tnum">{(l.tokens / 1000).toFixed(0)}k</span> },
-  { key: "cost", header: "Est. Cost", align: "right", cell: (l) => <span className="font-mono text-sm text-ink tnum">{formatCurrency(l.estCost)}</span> },
+  { key: "cost", header: "Est. cost", align: "right", cell: (l) => <span className="font-mono text-sm text-ink tnum">{formatCurrency(l.estCost)}</span> },
   { key: "mode", header: "Mode", cell: (l) => <StatusBadge tone={l.mode === "live" ? "success" : "info"} dot={false}>{l.mode}</StatusBadge> },
 ];
 
 function LlmUsageTab() {
+  const { filters } = useFilters();
+  const isFiltered = activeFilterCount(filters) > 0;
+
+  const kpis: MinimalKpi[] = [
+    { label: "Calls today", value: "1,284" },
+    { label: "Est. cost", value: "AED 3.2K", tone: "plum" },
+    { label: "Tokens used", value: "1.9M" },
+    { label: "Mode", value: "Staging" },
+  ];
+
   return (
-    <div className="space-y-4">
-      <SnapshotRow label="LLM cost & usage" />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MiniMetric label="Calls today" value="1,284" delta={12} tone="plum" />
-        <MiniMetric label="Est. cost" value="AED 3.2K" delta={26} tone="plum" />
-        <MiniMetric label="Tokens used" value="1.9M" tone="info" />
-        <MiniMetric label="Mode" value="Staging" tone="info" />
-      </div>
-      <Panel padded={false}>
-        <PanelHeader title="LLM usage by agent" subtitle="Calls, tokens & estimated cost" className="p-4" />
-        <div className="px-4 pb-4">
-          <DataTable columns={llmCols} rows={llmUsage} rowKey={(l) => l.agent} />
-        </div>
-      </Panel>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="LLM calls by agent" subtitle="Today">
-          <BarSeries data={llmCallsByAgent} horizontal colorByIndex height={220} />
-        </ChartCard>
-        <ChartCard title="Estimated cost by agent" subtitle="AED · today">
-          <BarSeries data={costByAgent} horizontal currency color={CHART.plum} height={220} />
-        </ChartCard>
-      </div>
-      <p className="flex items-center gap-1.5 text-xxs text-ink-faint"><ShieldCheck className="h-3 w-3" /> Costs are estimates — no provider keys or tokens are stored or shown.</p>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <FilterAwareRow active={isFiltered} />
+      <DataPreviewTable columns={llmColumns} rows={llmUsage} rowKey={(l) => l.agent} />
+      <PrivacyNote text="Costs are estimates — no provider keys or tokens are stored or shown." />
     </div>
   );
 }
 
 /* -------------------------------- Deployments ------------------------------- */
 
-const deployCols: Column<DeployRow>[] = [
-  { key: "app", header: "App", primary: true, cell: (d) => <span className="whitespace-nowrap font-medium text-ink">{d.app}</span> },
-  { key: "env", header: "Environment", cell: (d) => <StatusBadge tone={d.environment === "Production" ? "rose" : d.environment === "Staging" ? "info" : "neutral"} dot={false}>{d.environment}</StatusBadge> },
-  { key: "version", header: "Version", cell: (d) => <span className="font-mono text-xs text-ink-muted tnum">{d.version}</span> },
-  { key: "last", header: "Last Deploy", cell: (d) => <span className="whitespace-nowrap text-xs text-ink-muted">{d.lastDeploy === "—" ? "—" : formatRelativeTime(d.lastDeploy)}</span> },
-  { key: "deploy", header: "Deploy Status", cell: (d) => <StatusBadge tone={deployStatusTone[d.deployStatus]}>{d.deployStatus}</StatusBadge> },
-  { key: "build", header: "Build", cell: (d) => <StatusBadge tone={buildStatusTone[d.buildStatus]} dot={false}>{d.buildStatus}</StatusBadge> },
-  { key: "owner", header: "Owner", cell: (d) => <span className="text-xs text-ink-muted">{d.owner}</span> },
-  { key: "actions", header: "", align: "right", cell: () => <Button size="sm" variant="secondary">View</Button> },
-];
-
 function DeploymentsTab() {
   const { filters } = useFilters();
-  // Deployments are global/technical (no geo) — they pass through geo filters and
-  // stay visible; the note below states this explicitly.
-  const rows = applyGlobalFilters(deployments, filters);
+  const base = useMemo(() => applyGlobalFilters(deployments, filters), [filters]);
+  const isFiltered = activeFilterCount(filters) > 0;
+
+  const kpis: MinimalKpi[] = [
+    { label: "Deployed", value: String(base.filter((d) => d.deployStatus === "Success").length), tone: "success" },
+    { label: "Building", value: String(base.filter((d) => d.deployStatus === "Building").length) },
+    { label: "Not deployed", value: String(base.filter((d) => d.deployStatus === "Not deployed").length) },
+    { label: "Builds passing", value: String(base.filter((d) => d.buildStatus === "Passing").length), tone: "success" },
+  ];
+
   return (
-    <Panel padded={false}>
-      <PanelHeader title="Deployments" subtitle="App versions & environments" className="p-4" />
-      <div className="px-4 pb-4">
-        <DataTable columns={deployCols} rows={rows} rowKey={(d) => `${d.app}-${d.environment}`} empty={filteredEmpty} onRowLabel={(d) => <StatusBadge tone={deployStatusTone[d.deployStatus]}>{d.deployStatus}</StatusBadge>} />
-      </div>
-      {globalHint}
-    </Panel>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <FilterAwareRow active={isFiltered} />
+      {base.length === 0 ? (
+        <EmptyState icon={Rocket} title="No deployments" description="No deployments match the active filters." />
+      ) : (
+        <RecordList>
+          {base.map((d: DeployRow) => (
+            <CompactRecordCard
+              key={`${d.app}-${d.environment}`}
+              title={d.app}
+              status={{ label: d.deployStatus, tone: deployStatusTone[d.deployStatus] }}
+              fields={[
+                { label: "Environment", value: d.environment },
+                { label: "Version", value: <span className="font-mono">{d.version}</span> },
+                { label: "Last deploy", value: fmtTime(d.lastDeploy) },
+              ]}
+              meta={<span className="text-xxs text-ink-faint">Build: {d.buildStatus}</span>}
+            />
+          ))}
+        </RecordList>
+      )}
+    </div>
   );
 }
 
 /* ------------------------------ Integration status -------------------------- */
 
+type IntegrationTabId = "all" | "standby" | "not-connected";
+
+const INTEGRATION_TABS: { id: IntegrationTabId; label: string; test: (i: IntegrationRow) => boolean }[] = [
+  { id: "all", label: "All", test: () => true },
+  { id: "standby", label: "Standby", test: (i) => i.status === "Standby" },
+  { id: "not-connected", label: "Not connected", test: (i) => i.status === "Not connected" },
+];
+
 function IntegrationsTab() {
   const { filters } = useFilters();
-  const rows = applyGlobalFilters(integrations, filters);
+  const [tab, setTab] = useState<IntegrationTabId>("all");
+  const base = useMemo(() => applyGlobalFilters(integrations, filters), [filters]);
+  const isFiltered = activeFilterCount(filters) > 0;
+
+  const kpis: MinimalKpi[] = [
+    { label: "Connected", value: String(base.filter((i) => i.status === "Connected").length), tone: "success" },
+    { label: "Standby", value: String(base.filter((i) => i.status === "Standby").length), tone: "warning" },
+    { label: "Not connected", value: String(base.filter((i) => i.status === "Not connected").length) },
+    { label: "Total", value: String(base.length) },
+  ];
+
+  const tabs: WorkflowTab[] = INTEGRATION_TABS.map((t) => ({ id: t.id, label: t.label, count: base.filter(t.test).length }));
+  const rows = base.filter(INTEGRATION_TABS.find((t) => t.id === tab)!.test);
+
+  const label = (s: IntegrationRow["status"]) => (s === "Standby" ? "Coming soon" : s);
+
   return (
-    <div className="space-y-4">
-      <Panel>
-        <PanelHeader title="Integration status" subtitle="Connection status across integrations" action={<Plug className="h-4 w-4 text-rose" />} />
-        {rows.length === 0 ? (
-          filteredEmpty
-        ) : (
-          <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-            {rows.map((i) => (
-              <ConnectedAppRow key={i.name} app={{ name: i.name, category: i.category, status: i.status === "Standby" ? "Coming soon" : i.status }} />
-            ))}
-          </div>
-        )}
-        {globalHint}
-      </Panel>
-      <ChartCard title="Integration status breakdown" subtitle="18 integrations">
-        <DonutChart data={integrationBreakdown} colors={[CHART.sky, CHART.amber, "rgb(var(--ink-faint))"]} centerValue="18" centerLabel="Total" height={220} />
-      </ChartCard>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <FilterAwareRow tabs={tabs} value={tab} onChange={(id) => setTab(id as IntegrationTabId)} active={isFiltered} />
+
+      {rows.length === 0 ? (
+        <EmptyState icon={Plug} title="No integrations in this view" description="No integrations match this status and the active filters." />
+      ) : (
+        <RecordList>
+          {rows.map((i) => (
+            <CompactRecordCard
+              key={i.name}
+              title={i.name}
+              status={{ label: label(i.status), tone: integrationStatusTone[i.status] }}
+              fields={[{ label: "Category", value: i.category }]}
+            />
+          ))}
+        </RecordList>
+      )}
     </div>
   );
 }
 
 /* -------------------------------- Logs & audit ------------------------------ */
 
-const logCols: Column<LogRow>[] = [
-  { key: "time", header: "Timestamp", primary: true, cell: (l) => <span className="whitespace-nowrap font-mono text-xs text-ink-muted tnum">{new Date(l.timestamp).toLocaleTimeString("en-GB")}</span> },
-  { key: "module", header: "Module", cell: (l) => <span className="whitespace-nowrap text-xs text-ink-muted">{l.module}</span> },
-  { key: "event", header: "Event", cell: (l) => <span className="whitespace-nowrap font-mono text-xs text-ink">{l.event}</span> },
-  { key: "source", header: "Source", cell: (l) => <span className="whitespace-nowrap text-xs text-ink-muted">{l.source}</span> },
+type LogTabId = "all" | "info" | "warning" | "error" | "debug";
+
+const LOG_TABS: { id: LogTabId; label: string; test: (l: LogRow) => boolean }[] = [
+  { id: "all", label: "All", test: () => true },
+  { id: "info", label: "Info", test: (l) => l.severity === "Info" },
+  { id: "warning", label: "Warning", test: (l) => l.severity === "Warning" },
+  { id: "error", label: "Error", test: (l) => l.severity === "Error" },
+  { id: "debug", label: "Debug", test: (l) => l.severity === "Debug" },
+];
+
+const logColumns: PreviewColumn<LogRow>[] = [
+  { key: "time", header: "Time", primary: true, cell: (l) => <span className="font-mono text-xs text-ink-muted tnum">{new Date(l.timestamp).toLocaleTimeString("en-GB")}</span> },
+  { key: "module", header: "Module", cell: (l) => <span className="text-xs text-ink-muted">{l.module}</span> },
+  { key: "event", header: "Event", cell: (l) => <span className="font-mono text-xs text-ink">{l.event}</span> },
   { key: "severity", header: "Severity", cell: (l) => <StatusBadge tone={logSeverityTone[l.severity]} dot={false}>{l.severity}</StatusBadge> },
   { key: "message", header: "Message", cell: (l) => <span className="text-xs text-ink-faint">{l.message}</span> },
-  { key: "trace", header: "Trace ID", cell: (l) => <span className="font-mono text-xxs text-ink-faint">{l.traceId}</span> },
 ];
 
 function LogsTab() {
   const { filters } = useFilters();
-  const rows = applyGlobalFilters(logs, filters);
+  const [tab, setTab] = useState<LogTabId>("all");
+  const base = useMemo(() => applyGlobalFilters(logs, filters), [filters]);
+  const isFiltered = activeFilterCount(filters) > 0;
+
+  const kpis: MinimalKpi[] = [
+    { label: "Info", value: String(base.filter((l) => l.severity === "Info").length) },
+    { label: "Warning", value: String(base.filter((l) => l.severity === "Warning").length), tone: "warning" },
+    { label: "Error", value: String(base.filter((l) => l.severity === "Error").length), tone: "danger" },
+    { label: "Debug", value: String(base.filter((l) => l.severity === "Debug").length) },
+  ];
+
+  const tabs: WorkflowTab[] = LOG_TABS.map((t) => ({ id: t.id, label: t.label, count: base.filter(t.test).length }));
+  const rows = base.filter(LOG_TABS.find((t) => t.id === tab)!.test);
+
   return (
-    <Panel padded={false}>
-      <PanelHeader title="Logs & audit" subtitle="System events — safe summaries, no secrets or raw payloads" className="p-4" />
-      <div className="px-4 pb-4">
-        <DataTable columns={logCols} rows={rows} rowKey={(l) => l.traceId} empty={filteredEmpty} onRowLabel={(l) => <StatusBadge tone={logSeverityTone[l.severity]} dot={false}>{l.severity}</StatusBadge>} />
-      </div>
-      {globalHint}
-      <p className="flex items-center gap-1.5 border-t border-border px-4 py-3 text-xxs text-ink-faint"><ShieldCheck className="h-3 w-3" /> Logs are safe summaries only — no API keys, tokens, secrets or raw environment values are shown.</p>
-    </Panel>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <FilterAwareRow tabs={tabs} value={tab} onChange={(id) => setTab(id as LogTabId)} active={isFiltered} />
+      <DataPreviewTable
+        columns={logColumns}
+        rows={rows}
+        rowKey={(l) => l.traceId}
+        empty={<EmptyState icon={ScrollText} title="No log events" description="No events match this severity and the active filters." />}
+      />
+      <PrivacyNote text="Logs are safe summaries only — no API keys, tokens, secrets or raw environment values are shown." />
+    </div>
   );
 }
 
 /* --------------------------------- Overview --------------------------------- */
 
-function SafetyBanner() {
+function SectionLabel({ children }: { children: ReactNode }) {
+  return <h2 className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">{children}</h2>;
+}
+
+function PrivacyNote({ text }: { text: string }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-info/25 bg-info/8 p-3">
-      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-info" />
-      <div>
-        <p className="text-xs font-semibold text-ink">No secrets stored</p>
-        <p className="text-xxs text-ink-muted">No API keys, tokens or raw environment values are shown. Errors are safe summaries.</p>
-      </div>
-    </div>
+    <p className="flex items-center gap-1.5 text-xxs text-ink-faint">
+      <ShieldCheck className="h-3 w-3 shrink-0" /> {text}
+    </p>
   );
 }
 
+const overviewLogColumns: PreviewColumn<LogRow>[] = [
+  { key: "time", header: "Time", primary: true, cell: (l) => <span className="font-mono text-xs text-ink-muted tnum">{new Date(l.timestamp).toLocaleTimeString("en-GB")}</span> },
+  { key: "module", header: "Module", cell: (l) => <span className="text-xs text-ink-muted">{l.module}</span> },
+  { key: "event", header: "Event", cell: (l) => <span className="font-mono text-xs text-ink">{l.event}</span> },
+  { key: "severity", header: "Severity", cell: (l) => <StatusBadge tone={logSeverityTone[l.severity]} dot={false}>{l.severity}</StatusBadge> },
+];
+
 function OverviewSection() {
+  const { filters } = useFilters();
+  const agents = useMemo(() => applyGlobalFilters(agentHealth, filters), [filters]);
+  const jobs = useMemo(() => applyGlobalFilters(jobQueue, filters), [filters]);
+  const issues = useMemo(() => applyGlobalFilters(techIssues, filters), [filters]);
+  const recentLogs = useMemo(() => applyGlobalFilters(logs, filters), [filters]);
+  const isFiltered = activeFilterCount(filters) > 0;
+
+  const attention = agents.filter(agentNeedsAttention);
+
+  const kpis: MinimalKpi[] = [
+    { label: "Total agents", value: String(agents.length) },
+    { label: "Live agents", value: String(agents.filter((a) => a.status === "Live").length), tone: "success" },
+    { label: "Failed jobs", value: String(jobs.filter((j) => j.status === "Failed").length), tone: "danger" },
+    { label: "Open issues", value: String(issues.filter((i) => i.status !== "Resolved").length), tone: "warning" },
+  ];
+
   return (
     <div className="space-y-6">
-      <SnapshotRow label="Automation overview" />
-      <StatGrid stats={devKpis} cols="auto" />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="Live vs staged agents" subtitle="Status split">
-          <DonutChart data={liveVsMock} colors={[CHART.teal, CHART.sky, "rgb(var(--ink-faint))", CHART.amber, CHART.rose]} centerValue="22" centerLabel="Agents" height={200} />
-        </ChartCard>
-        <ChartCard title="LLM calls by agent" subtitle="Today" className="lg:col-span-2">
-          <BarSeries data={llmCallsByAgent} horizontal colorByIndex height={200} />
-        </ChartCard>
+      <MinimalKpiStrip kpis={kpis} />
+      <FilterAwareRow active={isFiltered} />
+
+      <div className="space-y-3">
+        <SectionLabel>Needs attention</SectionLabel>
+        {attention.length === 0 ? (
+          <EmptyState icon={Gauge} title="All agents healthy" description="No agents currently need attention." />
+        ) : (
+          <RecordList>
+            {attention.map((a) => (
+              <CompactRecordCard
+                key={a.name}
+                title={a.name}
+                status={{ label: a.status, tone: agentStatusToneD[a.status] }}
+                fields={[
+                  { label: "Category", value: a.category },
+                  { label: "Success", value: a.successRate ? `${a.successRate}%` : "—" },
+                  { label: "Last run", value: fmtTime(a.lastRun) },
+                ]}
+                meta={a.issues > 0 ? <StatusBadge tone="danger" dot={false}>{a.issues} issue{a.issues === 1 ? "" : "s"}</StatusBadge> : undefined}
+                href={`/dev-automation/agent-health/${agentSlug(a.name)}`}
+              />
+            ))}
+          </RecordList>
+        )}
       </div>
-      <div className="grid gap-4 xl:grid-cols-3">
-        <div className="min-w-0 xl:col-span-2"><AutomationOverviewTab /></div>
-        <aside className="space-y-4">
-          <SafetyBanner />
-          <Panel>
-            <PanelHeader title="System activity" subtitle="Latest technical events" />
-            <ActivityTimeline events={devActivity} />
-          </Panel>
-          <Panel>
-            <PanelHeader title="Agent actions" />
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: "View Logs", icon: Eye },
-                { label: "Retry Job", icon: RotateCw },
-                { label: "Pause Agent", icon: Pause },
-                { label: "Resume Agent", icon: Play },
-                { label: "View Config", icon: Settings2 },
-                { label: "Assign Owner", icon: UserPlus },
-                { label: "Create Issue", icon: CirclePlus },
-                { label: "Health Check", icon: Activity },
-              ].map((a) => (
-                <button key={a.label} type="button" className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-left text-xs font-medium text-ink transition-colors hover:border-rose/40">
-                  <a.icon className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
-                  <span className="truncate">{a.label}</span>
-                </button>
-              ))}
-            </div>
-          </Panel>
-        </aside>
+
+      <div className="space-y-3">
+        <SectionLabel>Recent activity</SectionLabel>
+        <DataPreviewTable
+          columns={overviewLogColumns}
+          rows={recentLogs}
+          rowKey={(l) => l.traceId}
+          empty={<EmptyState icon={ScrollText} title="No recent activity" description="No system events match the active filters." />}
+        />
       </div>
+
+      <PrivacyNote text="No secrets stored — no API keys, tokens or raw environment values are shown. Errors are safe summaries." />
     </div>
   );
 }

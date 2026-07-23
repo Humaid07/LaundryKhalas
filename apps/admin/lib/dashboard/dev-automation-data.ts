@@ -99,6 +99,21 @@ export const agentStatusToneD: Record<AgentStatusD, Tone> = {
 
 export const AGENT_ACTIONS = ["View Logs", "Retry Job", "Pause Agent", "Resume Agent", "View Config", "Assign Owner", "Create Issue"];
 
+/** URL-safe slug for an agent name (agent names contain spaces and "/"). */
+export function agentSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+/** Look up a single agent by its URL slug for its detail page. */
+export function getAgentBySlug(slug: string): AgentHealth | undefined {
+  return agentHealth.find((a) => agentSlug(a.name) === slug);
+}
+
+/** True when an agent should surface in the "Needs attention" view. */
+export function agentNeedsAttention(a: AgentHealth): boolean {
+  return a.issues > 0 || a.status === "Degraded" || a.status === "Failed" || a.status === "Needs Review" || a.status === "Paused";
+}
+
 /* ------------------------------ Technical issues ---------------------------- */
 
 export interface TechIssue {
@@ -203,6 +218,14 @@ export const jobStatusTone: Record<JobRow["status"], Tone> = {
   Failed: "danger",
   Done: "success",
 };
+
+/** Ordered lifecycle used to render a job's progress on its detail page. */
+export const JOB_LIFECYCLE: JobRow["status"][] = ["Queued", "Running", "Done"];
+
+/** Look up a single background job by its name (used as the route id). */
+export function getJob(name: string): JobRow | undefined {
+  return jobQueue.find((j) => j.name === name);
+}
 
 /* ------------------------------- LLM / cost usage --------------------------- */
 

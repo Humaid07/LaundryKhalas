@@ -223,6 +223,27 @@ export const partners: Partner[] = [
   { id: "PA-1016", name: "Berlin Mitte Laundry Franchise", type: "Franchise / Expansion Partner", region: "Europe", country: "Germany", city: "Berlin", owner: "Partner Exec — EU / Americas", stage: "Researching", score: 55, lastContact: "2026-07-15T13:00:00Z", nextStep: "Assess franchise model fit", compliance: "Not Started" },
 ];
 
+/** Look up a single partner lead by id for its detail page. */
+export function getPartner(id: string): Partner | undefined {
+  return partners.find((p) => p.id === id);
+}
+
+/** Resolve a partner id from its (unique) display name — used to deep-link
+ *  compliance/meeting rows (which reference partners by name) to the lead detail. */
+export function getPartnerIdByName(name: string): string | undefined {
+  return partners.find((p) => p.name === name)?.id;
+}
+
+/** Compliance record for a partner (by name), if one exists in the queue. */
+export function getComplianceForPartner(name: string): ComplianceRow | undefined {
+  return complianceQueue.find((c) => c.partner === name);
+}
+
+/** Meetings linked to a partner (by name), most-relevant first. */
+export function getMeetingsForPartner(name: string): MeetingRow[] {
+  return meetings.filter((m) => m.partner === name);
+}
+
 export const PARTNER_ACTIONS = [
   "View Partner",
   "Assign Owner",

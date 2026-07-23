@@ -13,8 +13,9 @@
  * PLATFORM (Instagram/TikTok/…) is a marketing-specific axis kept in `platform`
  * and filtered LOCALLY, never forced into the global Channel dimension.
  */
-import type { Tone } from "./types";
+import type { Tone, MarketingApproval } from "./types";
 import type { Filterable } from "./filters";
+import { marketingApprovals } from "./mock-data";
 
 /* Local (marketing-specific) filter option lists — deterministic, mock. */
 export const SOCIAL_PLATFORMS = ["Instagram", "TikTok", "Facebook", "LinkedIn"] as const;
@@ -91,3 +92,31 @@ export const prItems: PrItem[] = [
   { outlet: "Hospitality partners list", type: "Outreach Draft", topic: "B2B laundry partnership intro", status: "Ready to Send", channel: "B2B", service: "Premium Wash & Fold", scope: "global" },
   { outlet: "Property managers list", type: "Outreach Draft", topic: "Building/community laundry program", status: "Draft", channel: "B2B", service: "Premium Wash & Fold", scope: "global" },
 ];
+
+/* -------------------------------------------------------------------------- */
+/* Pure getters + url-safe helpers for the click-through detail pages.        */
+/* Data shapes above are unchanged — these only READ existing mock records.   */
+/* -------------------------------------------------------------------------- */
+
+/** URL-safe href for a campaign detail page (ids are already slug-safe). */
+export const campaignHref = (id: string, tab?: string): string =>
+  `/marketing/campaigns/${encodeURIComponent(id)}${tab ? `?tab=${encodeURIComponent(tab)}` : ""}`;
+
+/** URL-safe href for a marketing approval detail page. */
+export const approvalHref = (id: string): string =>
+  `/marketing/approvals/${encodeURIComponent(id)}`;
+
+/** Look up a single campaign by id for its detail page. */
+export const getCampaign = (id: string): Campaign | undefined =>
+  campaigns.find((c) => c.id === id);
+
+/** Ordered lifecycle used to render campaign progress on the detail page. */
+export const CAMPAIGN_LIFECYCLE: Campaign["status"][] = ["Scheduled", "Active", "Paused", "Ended"];
+
+/** Cost-per-lead derived from spend/leads (mock, display-only). */
+export const campaignCpl = (c: Campaign): string =>
+  c.leads > 0 ? `AED ${Math.round(c.spend / c.leads)}` : "—";
+
+/** Look up a single marketing approval by id for its detail page. */
+export const getMarketingApproval = (id: string): MarketingApproval | undefined =>
+  marketingApprovals.find((m) => m.id === id);

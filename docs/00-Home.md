@@ -46,6 +46,17 @@ Agent Fleet. Architecture: [[seo-agent-system]] · dashboard contract:
 
 ## Latest Build Report
 
+[[2026-07-23-dashboard-minimal-redesign]] —
+`build-reports/2026-07-23-dashboard-minimal-redesign.md` — **Dashboard minimal redesign**:
+every section's main pages made calm and low-density (compact KPI strip → workflow tabs →
+spacious list of ≤3-field cards), full data + all actions moved into **12 new detail-page
+routes** (cramped side drawers removed as the primary detail surface). New shared
+[[minimal-dashboard-design-system]] component library (`components/dashboard/minimal/`).
+Inspired by Linear / Stripe / Vercel. 0 TypeScript errors; all sections render clean.
+Design system: [[minimal-dashboard-design-system]].
+
+## Earlier Build Report
+
 [[2026-07-22-customer-order-detail-redesign]] —
 `build-reports/2026-07-22-customer-order-detail-redesign.md` — Customer Orders
 cards now open a **dedicated full-page order workspace** at

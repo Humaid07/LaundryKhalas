@@ -10,7 +10,8 @@
  * sitewide meta issues, PR/backlink signals) are tagged `scope: "global"` so
  * geo filters do NOT hide them.
  */
-import type { Tone, TimeSeriesPoint } from "./types";
+import type { Tone, TimeSeriesPoint, SeoAgent, SeoTask } from "./types";
+import { seoAgents, seoTasks } from "./mock-data";
 
 /* --------------------------------- GSC pages -------------------------------- */
 
@@ -165,3 +166,34 @@ export const pagesGainingLosing: TimeSeriesPoint[] = [
   { label: "Stable", value: 61 },
   { label: "Losing", value: 12 },
 ];
+
+/* ------------------------- Agent detail getters ----------------------------- */
+
+/**
+ * URL-safe slug for an SEO agent name (used as the detail-route param). Lowercase,
+ * non-alphanumerics collapsed to single hyphens, trimmed. Stable for a given name.
+ */
+export function slugifyAgent(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/** Resolve a single SEO agent by its url-safe slug for the detail page. */
+export function getSeoAgentBySlug(slug: string): SeoAgent | undefined {
+  return seoAgents.find((a) => slugifyAgent(a.name) === slug);
+}
+
+/**
+ * Tasks linked to an agent for its detail page. Matches on the exact agent name
+ * or a shared leading token (mock task/agent names differ slightly), so an
+ * agent's backlog surfaces on its own page rather than a global table.
+ */
+export function seoTasksForAgent(agentName: string): SeoTask[] {
+  const head = agentName.toLowerCase().split(/[^a-z0-9]+/)[0];
+  return seoTasks.filter((t) => {
+    const a = t.agent.toLowerCase();
+    return a === agentName.toLowerCase() || (!!head && a.startsWith(head));
+  });
+}

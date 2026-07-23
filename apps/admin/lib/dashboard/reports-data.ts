@@ -151,3 +151,30 @@ export const reportDetails: Record<string, ReportDetail> = {
     next: ["Decide on Qatar expansion budget", "Approve partner hiring plan"],
   },
 };
+
+/**
+ * Human-readable report titles, mirroring the subsection labels in sections.ts.
+ * Kept as a small local map so reports-data stays decoupled from the icon-heavy
+ * sections module.
+ */
+export const reportTitles: Record<string, string> = {
+  "daily-standup": "Daily Standup",
+  operations: "Operations Report",
+  sales: "Sales Report",
+  "partner-acquisition": "Partner Acquisition Report",
+  seo: "SEO Report",
+  marketing: "Marketing Report",
+  "finance-compliance": "Finance & Compliance Report",
+  "dev-automation": "Dev & Automation Report",
+  "monthly-executive": "Monthly Executive",
+};
+
+/** Pure getter — look up a single report by its slug (used by the detail page). */
+export function getReport(slug: string): ReportDetail | undefined {
+  return reportDetails[slug];
+}
+
+/** Display title for a report slug (falls back to a generic label). */
+export function getReportTitle(slug: string): string {
+  return reportTitles[slug] ?? "Report";
+}

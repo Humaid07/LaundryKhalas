@@ -1,510 +1,453 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  SearchX,
-  CalendarClock,
-  ShieldCheck,
-  Globe2,
-  Gauge,
-  Eye,
-  UserPlus,
-  ArrowRightLeft,
-  Info,
-  StickyNote,
-  CheckCircle2,
-  XCircle,
-  Users,
-  Target,
-  Briefcase,
+  SearchX, Send, CalendarClock, ShieldCheck, Globe2, Gauge, Info, MapPin,
 } from "lucide-react";
-import { StatGrid } from "@/components/dashboard/ui/StatCard";
-import { ChartCard } from "@/components/dashboard/ui/ChartCard";
-import { Panel, PanelHeader, StatusBadge } from "@/components/dashboard/ui/primitives";
-import { Button } from "@/components/dashboard/ui/Button";
-import { DataTable, type Column } from "@/components/dashboard/ui/DataTable";
-import { EmptyState, SnapshotBadge } from "@/components/dashboard/ui/states";
-import { ActivityTimeline } from "@/components/dashboard/widgets";
-import { AreaTrend, BarSeries, DonutChart } from "@/components/dashboard/charts";
-import { LocalFilterBar, useLocalFilters, matchesLocal, type LocalFilterDef } from "@/components/dashboard/ui/LocalFilters";
 import { useFilters } from "@/components/dashboard/shell/FiltersProvider";
-import { applyGlobalFilters, getFilteredSummary, activeFilterCount } from "@/lib/dashboard/filters";
-import { CHART } from "@/lib/dashboard/chart-theme";
+import { applyGlobalFilters, activeFilterCount } from "@/lib/dashboard/filters";
 import { formatRelativeTime } from "@/lib/dashboard/formatters";
-import { cn } from "@/lib/utils";
+import type { Tone } from "@/lib/dashboard/types";
 import {
-  roleCards,
-  roleStatusTone,
-  partnerKpis,
-  partners,
-  stageTone,
-  complianceTone,
-  marketIntel,
-  readinessTone,
+  MinimalKpiStrip, WorkflowTabs, CompactRecordCard, RecordList, DataPreviewTable,
+  EmptyState, StatusBadge, SnapshotBadge,
+  type MinimalKpi, type WorkflowTab, type PreviewColumn,
+} from "@/components/dashboard/minimal";
+import {
+  roleCards, roleStatusTone,
+  partners, stageTone, complianceTone, getPartnerIdByName,
+  marketIntel, readinessTone,
   outreach,
-  meetings,
-  meetingStatusTone,
+  meetings, meetingStatusTone,
   complianceQueue,
-  docStateTone,
-  regionalCoverage,
-  coverageStatusTone,
+  regionalCoverage, coverageStatusTone,
   performancePreview,
-  leadsByRegion,
-  pipelineByStage,
-  scoreDistribution,
-  meetingsOverTime,
-  partnerTypeBreakdown,
-  complianceBreakdown,
-  partnerActivity,
-  PARTNER_TYPES,
-  PIPELINE_STAGES,
-  REGIONS_PA,
-  PARTNER_OWNERS,
-  PARTNER_ACTIONS,
-  type Partner,
-  type MarketRow,
-  type OutreachRow,
-  type MeetingRow,
-  type ComplianceRow,
-  type CoverageRow,
-  type PerformancePreviewRow,
-  type DocState,
+  type Partner, type PipelineStage,
+  type MarketRow, type OutreachRow, type CoverageRow, type PerformancePreviewRow,
 } from "@/lib/dashboard/partner-acquisition-data";
 
-const filteredEmpty = (
-  <EmptyState icon={SearchX} title="No records match the selected filters" description="Try clearing a filter to see more." />
-);
+/* -------------------------------- shared bits ------------------------------- */
 
-const donutColors = [CHART.rose, CHART.plum, CHART.teal, CHART.amber, CHART.sky, CHART.slate, "rgb(var(--ink-faint))", "rgb(var(--c-plum) / 0.6)"];
+function scoreTone(n: number): Tone {
+  return n >= 80 ? "success" : n >= 65 ? "rose" : n >= 45 ? "warning" : "neutral";
+}
 
-/** Header row with an "Overall snapshot" badge for aggregate KPI/chart blocks
- *  that are not recomputed per filter (pipeline/compliance/coverage rollups). */
-function SnapshotRow({ label }: { label: string }) {
+function TabsRow({ tabs, value, onChange }: { tabs: WorkflowTab[]; value: string; onChange: (id: string) => void }) {
   const { filters } = useFilters();
   return (
-    <div className="flex items-center justify-between gap-3">
-      <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">{label}</p>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <WorkflowTabs tabs={tabs} value={value} onChange={onChange} />
       <SnapshotBadge active={activeFilterCount(filters) > 0} />
     </div>
   );
 }
 
-function scoreTone(n: number) {
-  return n >= 80 ? "success" : n >= 65 ? "rose" : n >= 45 ? "warning" : "neutral";
-}
-
-/* --------------------------------- Role cards ------------------------------- */
-
-function RoleCards() {
+function InfoNote({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      {roleCards.map((r) => (
-        <div key={r.role} className="flex flex-col rounded-2xl border border-border bg-surface p-4 shadow-card transition-all duration-300 hover:-translate-y-0.5 hover:shadow-raised">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose/12 font-display text-sm font-bold text-rose">{r.initials}</span>
-              <div className="min-w-0">
-                <h4 className="text-sm font-semibold leading-tight text-ink">{r.role}</h4>
-                <p className="text-xxs text-ink-faint">{r.owner}</p>
-              </div>
-            </div>
-            <StatusBadge tone={roleStatusTone[r.status]} dot={false}>{r.status}</StatusBadge>
-          </div>
-          <div className="mt-3 flex items-start gap-1.5 rounded-lg bg-surface-2 px-2.5 py-1.5">
-            <Globe2 className="mt-0.5 h-3 w-3 shrink-0 text-ink-faint" />
-            <p className="text-xxs leading-snug text-ink-muted">{r.region}</p>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-            <Meta label="Pipeline" value={String(r.pipeline)} />
-            <Meta label="Active tasks" value={String(r.activeTasks)} />
-            <Meta label="Meetings / wk" value={String(r.meetingsThisWeek)} />
-            <Meta label="Target" value={r.targets} />
-          </div>
-          <p className="mt-3 border-t border-border pt-3 text-xxs leading-relaxed text-ink-muted">{r.responsibility}</p>
-        </div>
-      ))}
+    <div className="flex items-start gap-2.5 rounded-xl border border-info/20 bg-info/[0.06] px-3.5 py-2.5">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" />
+      <p className="text-xxs leading-relaxed text-ink-muted">{children}</p>
     </div>
   );
 }
 
-function Meta({ label, value }: { label: string; value: string }) {
+const num = (n: number) => String(n);
+
+/* ------------------------------ Team & ownership ---------------------------- */
+
+function TeamSection() {
+  const totalPipeline = roleCards.reduce((s, r) => s + r.pipeline, 0);
+  const activeTasks = roleCards.reduce((s, r) => s + r.activeTasks, 0);
+  const meetingsWk = roleCards.reduce((s, r) => s + r.meetingsThisWeek, 0);
+  const onTrack = roleCards.filter((r) => r.status !== "At risk").length;
+
+  const kpis: MinimalKpi[] = [
+    { label: "Roles on track", value: `${onTrack} / ${roleCards.length}` },
+    { label: "Total pipeline", value: num(totalPipeline) },
+    { label: "Active tasks", value: num(activeTasks) },
+    { label: "Meetings this week", value: num(meetingsWk) },
+  ];
+
   return (
-    <div className="min-w-0">
-      <p className="text-xxs uppercase tracking-eyebrow text-ink-faint">{label}</p>
-      <p className="mt-0.5 truncate font-mono text-sm font-medium text-ink tnum">{value}</p>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <InfoNote>
+        <span className="font-semibold text-ink">Business data only.</span> No live CRM connected — role cards show
+        ownership and workload, never private personal emails or phone numbers.
+      </InfoNote>
+      <RecordList>
+        {roleCards.map((r) => (
+          <CompactRecordCard
+            key={r.role}
+            title={r.role}
+            status={{ label: r.status, tone: roleStatusTone[r.status] }}
+            fields={[
+              { label: "Owner", value: r.owner },
+              { label: "Region", value: <span className="inline-flex items-center gap-1"><Globe2 className="h-3 w-3 text-ink-faint" />{r.region}</span> },
+              { label: "Target", value: r.targets },
+            ]}
+            meta={
+              <span className="flex flex-col items-end gap-1">
+                <span className="font-mono text-sm text-ink tnum">{r.pipeline}</span>
+                <span className="text-xxs text-ink-faint">in pipeline</span>
+              </span>
+            }
+          />
+        ))}
+      </RecordList>
     </div>
   );
 }
 
 /* ------------------------------ Partner pipeline ---------------------------- */
 
-const pipelineCols: Column<Partner>[] = [
-  { key: "id", header: "Partner ID", primary: true, cell: (p) => <span className="font-mono text-xs font-semibold text-ink">{p.id}</span> },
-  { key: "name", header: "Partner Name", cell: (p) => <span className="whitespace-nowrap font-medium text-ink">{p.name}</span> },
-  { key: "type", header: "Type", cell: (p) => <span className="whitespace-nowrap text-xs text-ink-muted">{p.type}</span> },
-  { key: "region", header: "Region", cell: (p) => <span className="text-xs text-ink-muted">{p.region}</span> },
-  { key: "country", header: "Country", cell: (p) => <span className="whitespace-nowrap text-xs text-ink-muted">{p.country}</span> },
-  { key: "city", header: "City", cell: (p) => <span className="whitespace-nowrap text-xs text-ink-muted">{p.city}</span> },
-  { key: "owner", header: "Owner", cell: (p) => <span className="whitespace-nowrap text-xs text-ink-muted">{p.owner}</span> },
-  { key: "stage", header: "Stage", cell: (p) => <StatusBadge tone={stageTone[p.stage]}>{p.stage}</StatusBadge> },
-  { key: "score", header: "Score", align: "right", cell: (p) => <StatusBadge tone={scoreTone(p.score)} dot={false}>{p.score}</StatusBadge> },
-  { key: "last", header: "Last Contact", cell: (p) => <span className="whitespace-nowrap text-xs text-ink-muted">{p.lastContact === "—" ? "—" : formatRelativeTime(p.lastContact)}</span> },
-  { key: "next", header: "Next Step", cell: (p) => <span className="text-xs text-ink-faint">{p.nextStep}</span> },
-  { key: "compliance", header: "Compliance", cell: (p) => <StatusBadge tone={complianceTone[p.compliance]} dot={false}>{p.compliance}</StatusBadge> },
-  { key: "actions", header: "", align: "right", cell: () => <Button size="sm" variant="secondary"><Eye className="h-3.5 w-3.5" /> View</Button> },
+type PipeTabId = "all" | "new" | "qualified" | "proposal" | "onboarding" | "active" | "rejected";
+
+const STAGE_GROUPS: Record<PipeTabId, (s: PipelineStage) => boolean> = {
+  all: () => true,
+  new: (s) => s === "New Lead" || s === "Researching" || s === "Contacted",
+  qualified: (s) => s === "Qualified" || s === "Meeting Scheduled",
+  proposal: (s) => s === "Proposal Sent" || s === "Contract Sent",
+  onboarding: (s) => s === "Compliance Review" || s === "Onboarding",
+  active: (s) => s === "Active Partner",
+  rejected: (s) => s === "Rejected / Not Fit",
+};
+
+const PIPE_TABS: { id: PipeTabId; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "new", label: "New" },
+  { id: "qualified", label: "Qualifying" },
+  { id: "proposal", label: "Proposal" },
+  { id: "onboarding", label: "Onboarding" },
+  { id: "active", label: "Active" },
+  { id: "rejected", label: "Rejected" },
 ];
 
-function PipelineTab({ rows }: { rows: Partner[] }) {
-  const filterDefs: LocalFilterDef[] = [
-    { key: "region", label: "Region", options: REGIONS_PA },
-    { key: "type", label: "Partner type", options: PARTNER_TYPES },
-    { key: "owner", label: "Owner", options: PARTNER_OWNERS },
-    { key: "stage", label: "Stage", options: PIPELINE_STAGES },
-  ];
+const isPipeTab = (v: string | null): v is PipeTabId => !!v && v in STAGE_GROUPS;
+
+function PipelineSection() {
+  const router = useRouter();
+  const search = useSearchParams();
   const { filters } = useFilters();
-  const lf = useLocalFilters(filterDefs);
-  // Global geo/date filters apply first, then the section's local type/owner/stage filters.
-  const globalRows = applyGlobalFilters(rows, filters);
-  const filtered = globalRows.filter((p) => matchesLocal(p, lf.values, (row, key) => (row as unknown as Record<string, string>)[key]));
+  const initial = search.get("tab");
+  const [tab, setTab] = useState<PipeTabId>(isPipeTab(initial) ? initial : "all");
+
+  const base = useMemo(() => applyGlobalFilters(partners, filters), [filters]);
+  const rows = base.filter((p) => STAGE_GROUPS[tab](p.stage));
+
+  const kpis: MinimalKpi[] = [
+    { label: "Partner leads", value: num(base.length) },
+    { label: "Active partners", value: num(base.filter((p) => STAGE_GROUPS.active(p.stage)).length), tone: "success" },
+    { label: "In onboarding", value: num(base.filter((p) => STAGE_GROUPS.onboarding(p.stage)).length) },
+    { label: "Needs compliance", value: num(base.filter((p) => p.compliance === "Docs Pending" || p.compliance === "Flagged").length), tone: "warning" },
+  ];
+
+  const tabs: WorkflowTab[] = PIPE_TABS.map((t) => ({ id: t.id, label: t.label, count: base.filter((p) => STAGE_GROUPS[t.id](p.stage)).length }));
+  const openLead = (p: Partner) => router.push(`/partner-acquisition/pipeline/${p.id}?tab=${tab}`);
 
   return (
-    <Panel padded={false}>
-      <PanelHeader title="Partner pipeline" subtitle={`${filtered.length} of ${partners.length} partners · all stages`} className="p-4" action={<StatusBadge tone="rose">{filtered.filter((p) => p.stage === "Active Partner").length} active</StatusBadge>} />
-      <div className="border-b border-border px-4 pb-3">
-        <LocalFilterBar defs={filterDefs} values={lf.values} onChange={lf.set} onClear={lf.clear} />
-      </div>
-      <div className="px-4 pb-4 pt-4">
-        <DataTable columns={pipelineCols} rows={filtered} rowKey={(p) => p.id} empty={filteredEmpty} onRowLabel={(p) => <StatusBadge tone={stageTone[p.stage]}>{p.stage}</StatusBadge>} />
-      </div>
-      <div className="flex flex-wrap gap-1.5 border-t border-border px-4 py-3">
-        {PARTNER_ACTIONS.map((a) => (
-          <span key={a} className="rounded-md border border-border bg-surface-2 px-2 py-1 text-xxs font-medium text-ink-muted">{a}</span>
-        ))}
-      </div>
-    </Panel>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <TabsRow tabs={tabs} value={tab} onChange={(id) => setTab(id as PipeTabId)} />
+      {rows.length === 0 ? (
+        <EmptyState icon={SearchX} title="No partners in this view" description="No leads match this stage and the active filters." />
+      ) : (
+        <RecordList>
+          {rows.map((p) => (
+            <CompactRecordCard
+              key={p.id}
+              id={p.id}
+              title={p.name}
+              status={{ label: p.stage, tone: stageTone[p.stage] }}
+              fields={[
+                { label: "Type", value: p.type },
+                { label: "Location", value: <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3 text-ink-faint" />{p.city}, {p.country}</span> },
+                { label: "Owner", value: p.owner },
+              ]}
+              meta={
+                <span className="flex flex-col items-end gap-1">
+                  <StatusBadge tone={scoreTone(p.score)} dot={false}>{p.score}</StatusBadge>
+                  <span className="text-xxs text-ink-faint">score</span>
+                </span>
+              }
+              onClick={() => openLead(p)}
+            />
+          ))}
+        </RecordList>
+      )}
+    </div>
   );
 }
 
 /* ----------------------------- Market intelligence -------------------------- */
 
-const marketCols: Column<MarketRow>[] = [
-  { key: "country", header: "Country", primary: true, cell: (m) => <span className="font-medium text-ink">{m.country}</span> },
-  { key: "city", header: "City", cell: (m) => <span className="whitespace-nowrap text-ink-muted">{m.city}</span> },
-  { key: "opp", header: "Opportunity", cell: (m) => (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-ink/8"><div className={cn("h-full rounded-full", m.opportunity >= 85 ? "bg-success" : m.opportunity >= 70 ? "bg-rose" : "bg-warning")} style={{ width: `${m.opportunity}%` }} /></div>
-      <span className="font-mono text-xs text-ink tnum">{m.opportunity}</span>
-    </div>
-  ) },
-  { key: "demand", header: "Demand", cell: (m) => <span className="whitespace-nowrap text-xs text-ink-muted">{m.demand}</span> },
-  { key: "supply", header: "Supply", cell: (m) => <span className="whitespace-nowrap text-xs text-ink-muted">{m.supply}</span> },
-  { key: "competitors", header: "Competitors", align: "right", cell: (m) => <span className="font-mono text-sm text-ink tnum">{m.competitors}</span> },
-  { key: "category", header: "Suggested Category", cell: (m) => <span className="whitespace-nowrap text-xs text-ink-muted">{m.suggestedCategory}</span> },
-  { key: "readiness", header: "Readiness", cell: (m) => <StatusBadge tone={readinessTone[m.readiness]}>{m.readiness}</StatusBadge> },
-];
-
-function MarketTab() {
+function MarketSection() {
   const { filters } = useFilters();
-  const rows = applyGlobalFilters(marketIntel, filters);
-  const summary = getFilteredSummary(marketIntel, filters);
-  const topCities = [...rows].sort((a, b) => b.opportunity - a.opportunity).slice(0, 5);
-  const readinessData = rows.map((m) => ({ label: m.city, value: m.opportunity }));
+  const rows = useMemo(() => applyGlobalFilters(marketIntel, filters), [filters]);
+  const isFiltered = activeFilterCount(filters) > 0;
+  const priority = rows.filter((m) => m.readiness === "Priority").length;
+  const avg = rows.length ? Math.round(rows.reduce((s, m) => s + m.opportunity, 0) / rows.length) : 0;
+  const top = rows.length ? [...rows].sort((a, b) => b.opportunity - a.opportunity)[0] : undefined;
+
+  const kpis: MinimalKpi[] = [
+    { label: "Cities tracked", value: num(rows.length) },
+    { label: "Priority markets", value: num(priority), tone: priority > 0 ? "rose" : "neutral" },
+    { label: "Avg opportunity", value: num(avg) },
+    { label: "Top city", value: top ? top.city : "—" },
+  ];
+
+  const cols: PreviewColumn<MarketRow>[] = [
+    { key: "country", header: "Country", primary: true, cell: (m) => <span className="font-medium text-ink">{m.country}</span> },
+    { key: "city", header: "City", cell: (m) => <span className="text-ink-muted">{m.city}</span> },
+    { key: "opp", header: "Opportunity", align: "right", cell: (m) => <span className="font-mono text-sm text-ink tnum">{m.opportunity}</span> },
+    { key: "readiness", header: "Readiness", cell: (m) => <StatusBadge tone={readinessTone[m.readiness]} dot={false}>{m.readiness}</StatusBadge> },
+  ];
+
   return (
-    <div className="space-y-4">
-      <Panel padded={false}>
-        <PanelHeader title="Market intelligence" subtitle={`${summary.shown} of ${summary.total} cities · opportunity, demand vs supply and competitor coverage`} className="p-4" />
-        <div className="px-4 pb-4">
-          <DataTable columns={marketCols} rows={rows} rowKey={(m) => m.city} empty={filteredEmpty} onRowLabel={(m) => <StatusBadge tone={readinessTone[m.readiness]}>{m.readiness}</StatusBadge>} />
-        </div>
-      </Panel>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Market readiness by city" subtitle="Opportunity score 0–100">
-          {readinessData.length ? <BarSeries data={readinessData} horizontal colorByIndex height={220} /> : filteredEmpty}
-        </ChartCard>
-        <Panel>
-          <PanelHeader title="Suggested target cities" subtitle="Ranked by opportunity" />
-          {topCities.length === 0 ? (
-            filteredEmpty
-          ) : (
-            <ul className="space-y-2">
-              {topCities.map((m, i) => (
-                <li key={m.city} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-2 p-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose/12 text-xxs font-bold text-rose">{i + 1}</span>
-                    <div>
-                      <p className="text-sm font-medium text-ink">{m.city}, {m.country}</p>
-                      <p className="text-xxs text-ink-faint">{m.suggestedCategory}</p>
-                    </div>
-                  </div>
-                  <StatusBadge tone={readinessTone[m.readiness]} dot={false}>{m.readiness}</StatusBadge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <div className="flex justify-end"><SnapshotBadge active={isFiltered} /></div>
+      <DataPreviewTable
+        columns={cols}
+        rows={rows}
+        rowKey={(m) => m.city}
+        empty={<EmptyState icon={SearchX} title="No cities match the filters" description="Try clearing a filter to see more markets." />}
+      />
     </div>
   );
 }
 
 /* ------------------------------ Outreach tracker ---------------------------- */
 
-const outreachCols: Column<OutreachRow>[] = [
-  { key: "region", header: "Region", primary: true, cell: (o) => <span className="font-medium text-ink">{o.region}</span> },
-  { key: "sent", header: "Outreach Sent", align: "right", cell: (o) => <span className="font-mono text-sm text-ink tnum">{o.sent}</span> },
-  { key: "replies", header: "Replies", align: "right", cell: (o) => <span className="font-mono text-sm text-ink-muted tnum">{o.replies}</span> },
-  { key: "meetings", header: "Meetings Booked", align: "right", cell: (o) => <span className="font-mono text-sm text-ink-muted tnum">{o.meetings}</span> },
-  { key: "followups", header: "Follow-ups Due", align: "right", cell: (o) => <span className={cn("font-mono text-sm tnum", o.followupsDue > 0 ? "text-warning" : "text-ink-faint")}>{o.followupsDue}</span> },
-  { key: "rate", header: "Response Rate", cell: (o) => (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-ink/8"><div className={cn("h-full rounded-full", o.responseRate >= 40 ? "bg-success" : o.responseRate >= 28 ? "bg-rose" : "bg-warning")} style={{ width: `${o.responseRate}%` }} /></div>
-      <span className="font-mono text-xs text-ink-muted tnum">{o.responseRate.toFixed(1)}%</span>
-    </div>
-  ) },
-];
-
-function OutreachTab() {
+function OutreachSection() {
   const { filters } = useFilters();
-  const rows = applyGlobalFilters(outreach, filters);
-  const summary = getFilteredSummary(outreach, filters);
+  const rows = useMemo(() => applyGlobalFilters(outreach, filters), [filters]);
+  const isFiltered = activeFilterCount(filters) > 0;
+  const totals = rows.reduce((a, o) => ({ sent: a.sent + o.sent, replies: a.replies + o.replies, meetings: a.meetings + o.meetings, followups: a.followups + o.followupsDue }), { sent: 0, replies: 0, meetings: 0, followups: 0 });
+
+  const kpis: MinimalKpi[] = [
+    { label: "Outreach sent", value: num(totals.sent) },
+    { label: "Replies", value: num(totals.replies) },
+    { label: "Meetings booked", value: num(totals.meetings) },
+    { label: "Follow-ups due", value: num(totals.followups), tone: totals.followups > 0 ? "warning" : "neutral" },
+  ];
+
+  const cols: PreviewColumn<OutreachRow>[] = [
+    { key: "region", header: "Region", primary: true, cell: (o) => <span className="font-medium text-ink">{o.region}</span> },
+    { key: "sent", header: "Sent", align: "right", cell: (o) => <span className="font-mono text-sm text-ink tnum">{o.sent}</span> },
+    { key: "replies", header: "Replies", align: "right", cell: (o) => <span className="font-mono text-sm text-ink-muted tnum">{o.replies}</span> },
+    { key: "rate", header: "Response rate", align: "right", cell: (o) => <span className="font-mono text-sm text-ink tnum">{o.responseRate.toFixed(1)}%</span> },
+  ];
+
   return (
-    <div className="space-y-4">
-      <Panel padded={false}>
-        <PanelHeader title="Outreach tracker" subtitle={`${summary.shown} of ${summary.total} regions · outreach performance`} className="p-4" />
-        <div className="px-4 pb-4">
-          <DataTable columns={outreachCols} rows={rows} rowKey={(o) => o.region} empty={filteredEmpty} />
-        </div>
-      </Panel>
-      <ChartCard title="Outreach conversion by region" subtitle="Reply rate %">
-        {rows.length ? <BarSeries data={rows.map((o) => ({ label: o.region, value: o.responseRate }))} colorByIndex height={220} /> : filteredEmpty}
-      </ChartCard>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <div className="flex justify-end"><SnapshotBadge active={isFiltered} /></div>
+      <DataPreviewTable
+        columns={cols}
+        rows={rows}
+        rowKey={(o) => o.region}
+        empty={<EmptyState icon={Send} title="No outreach in this view" description="No regions match the active filters." />}
+      />
     </div>
   );
 }
 
 /* --------------------------- Meetings & follow-ups -------------------------- */
 
-const meetingCols: Column<MeetingRow>[] = [
-  { key: "id", header: "Meeting", primary: true, cell: (m) => <span className="font-mono text-xs font-semibold text-ink">{m.id}</span> },
-  { key: "partner", header: "Partner", cell: (m) => <span className="whitespace-nowrap font-medium text-ink">{m.partner}</span> },
-  { key: "owner", header: "Owner", cell: (m) => <span className="whitespace-nowrap text-xs text-ink-muted">{m.owner}</span> },
-  { key: "datetime", header: "Date / Time", cell: (m) => <span className="whitespace-nowrap text-xs text-ink-muted">{new Date(m.datetime).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span> },
-  { key: "type", header: "Type", cell: (m) => <StatusBadge tone="neutral" dot={false}>{m.type}</StatusBadge> },
-  { key: "next", header: "Next Action", cell: (m) => <span className="text-xs text-ink-faint">{m.nextAction}</span> },
-  { key: "status", header: "Status", cell: (m) => <StatusBadge tone={meetingStatusTone[m.status]}>{m.status}</StatusBadge> },
-  { key: "actions", header: "", align: "right", cell: () => <Button size="sm" variant="secondary">Open</Button> },
+type MeetTabId = "all" | "scheduled" | "confirmed" | "awaiting" | "done";
+const MEET_TABS: { id: MeetTabId; label: string; match: (s: string) => boolean }[] = [
+  { id: "all", label: "All", match: () => true },
+  { id: "scheduled", label: "Scheduled", match: (s) => s === "Scheduled" },
+  { id: "confirmed", label: "Confirmed", match: (s) => s === "Confirmed" },
+  { id: "awaiting", label: "Awaiting reply", match: (s) => s === "Awaiting Reply" },
+  { id: "done", label: "Done", match: (s) => s === "Done" },
 ];
 
-function MeetingsTab() {
+function MeetingsSection() {
+  const router = useRouter();
   const { filters } = useFilters();
-  const rows = applyGlobalFilters(meetings, filters);
+  const [tab, setTab] = useState<MeetTabId>("all");
+  const base = useMemo(() => applyGlobalFilters(meetings, filters), [filters]);
+  const matcher = MEET_TABS.find((t) => t.id === tab)!.match;
+  const rows = base.filter((m) => matcher(m.status));
+
+  const kpis: MinimalKpi[] = [
+    { label: "Upcoming", value: num(base.filter((m) => m.status !== "Done").length) },
+    { label: "Confirmed", value: num(base.filter((m) => m.status === "Confirmed").length), tone: "success" },
+    { label: "Awaiting reply", value: num(base.filter((m) => m.status === "Awaiting Reply").length), tone: "warning" },
+    { label: "Done", value: num(base.filter((m) => m.status === "Done").length) },
+  ];
+  const tabs: WorkflowTab[] = MEET_TABS.map((t) => ({ id: t.id, label: t.label, count: base.filter((m) => t.match(m.status)).length }));
+
   return (
-    <div className="space-y-4">
-      <Panel padded={false}>
-        <PanelHeader title="Meetings & follow-ups" subtitle={`${rows.length} of ${meetings.length} meetings · calendar view`} className="p-4" action={<StatusBadge tone="plum">{rows.filter((m) => m.status !== "Done").length} upcoming</StatusBadge>} />
-        <div className="px-4 pb-4">
-          <DataTable columns={meetingCols} rows={rows} rowKey={(m) => m.id} empty={filteredEmpty} onRowLabel={(m) => <StatusBadge tone={meetingStatusTone[m.status]}>{m.status}</StatusBadge>} />
-        </div>
-      </Panel>
-      <ChartCard title="Meetings scheduled over time" subtitle="Last 6 weeks" action={<SnapshotBadge active={activeFilterCount(filters) > 0} />}>
-        <AreaTrend data={meetingsOverTime} series={[{ key: "Meetings", color: CHART.plum }]} height={200} />
-      </ChartCard>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <TabsRow tabs={tabs} value={tab} onChange={(id) => setTab(id as MeetTabId)} />
+      {rows.length === 0 ? (
+        <EmptyState icon={CalendarClock} title="No meetings in this view" description="No meetings match this status and the active filters." />
+      ) : (
+        <RecordList>
+          {rows.map((m) => {
+            const leadId = getPartnerIdByName(m.partner);
+            return (
+              <CompactRecordCard
+                key={m.id}
+                id={m.id}
+                title={m.partner}
+                status={{ label: m.status, tone: meetingStatusTone[m.status] }}
+                fields={[
+                  { label: "Type", value: m.type },
+                  { label: "When", value: new Date(m.datetime).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) },
+                  { label: "Owner", value: m.owner },
+                ]}
+                href={leadId ? `/partner-acquisition/pipeline/${leadId}` : undefined}
+              />
+            );
+          })}
+        </RecordList>
+      )}
     </div>
   );
 }
 
 /* ------------------------------ Compliance queue ---------------------------- */
 
-function DocCell({ state }: { state: DocState }) {
-  return <StatusBadge tone={docStateTone[state]} dot={false}>{state}</StatusBadge>;
-}
-
-const complianceCols: Column<ComplianceRow>[] = [
-  { key: "partner", header: "Partner", primary: true, cell: (c) => <span className="whitespace-nowrap font-medium text-ink">{c.partner}</span> },
-  { key: "country", header: "Country", cell: (c) => <span className="text-xs text-ink-muted">{c.country}</span> },
-  { key: "license", header: "Trade License", cell: (c) => <DocCell state={c.tradeLicense} /> },
-  { key: "bank", header: "Bank / Payout", cell: (c) => <DocCell state={c.bankPayout} /> },
-  { key: "quality", header: "Quality Checklist", cell: (c) => <DocCell state={c.qualityChecklist} /> },
-  { key: "agreement", header: "Agreement", cell: (c) => <DocCell state={c.agreement} /> },
-  { key: "insurance", header: "Insurance / Docs", cell: (c) => <DocCell state={c.insurance} /> },
-  { key: "pending", header: "Pending", align: "right", cell: (c) => <span className={cn("font-mono text-sm tnum", c.pending > 0 ? "text-warning" : "text-ink-faint")}>{c.pending}</span> },
-  { key: "status", header: "Status", cell: (c) => <StatusBadge tone={complianceTone[c.status]}>{c.status}</StatusBadge> },
+type CompTabId = "all" | "in-review" | "docs-pending" | "flagged" | "passed";
+const COMP_TABS: { id: CompTabId; label: string; match: (s: string) => boolean }[] = [
+  { id: "all", label: "All", match: () => true },
+  { id: "in-review", label: "In review", match: (s) => s === "In Review" },
+  { id: "docs-pending", label: "Docs pending", match: (s) => s === "Docs Pending" },
+  { id: "flagged", label: "Flagged", match: (s) => s === "Flagged" },
+  { id: "passed", label: "Passed", match: (s) => s === "Passed" },
 ];
 
-function ComplianceTab() {
+function ComplianceSection() {
   const { filters } = useFilters();
-  const rows = applyGlobalFilters(complianceQueue, filters);
+  const [tab, setTab] = useState<CompTabId>("all");
+  const base = useMemo(() => applyGlobalFilters(complianceQueue, filters), [filters]);
+  const matcher = COMP_TABS.find((t) => t.id === tab)!.match;
+  const rows = base.filter((c) => matcher(c.status));
+
+  const kpis: MinimalKpi[] = [
+    { label: "Open reviews", value: num(base.filter((c) => c.status !== "Passed").length) },
+    { label: "Docs pending", value: num(base.filter((c) => c.status === "Docs Pending").length), tone: "warning" },
+    { label: "Flagged", value: num(base.filter((c) => c.status === "Flagged").length), tone: "danger" },
+    { label: "Passed", value: num(base.filter((c) => c.status === "Passed").length), tone: "success" },
+  ];
+  const tabs: WorkflowTab[] = COMP_TABS.map((t) => ({ id: t.id, label: t.label, count: base.filter((c) => t.match(c.status)).length }));
+
   return (
-    <Panel padded={false}>
-      <PanelHeader title="Compliance queue" subtitle="Document status only — no files or private data stored" className="p-4" action={<StatusBadge tone="warning">{rows.filter((c) => c.status !== "Passed").length} open</StatusBadge>} />
-      <div className="px-4 pb-4">
-        <DataTable columns={complianceCols} rows={rows} rowKey={(c) => c.partner} empty={filteredEmpty} onRowLabel={(c) => <StatusBadge tone={complianceTone[c.status]}>{c.status}</StatusBadge>} />
-      </div>
-      <p className="flex items-center gap-1.5 border-t border-border px-4 py-3 text-xxs text-ink-faint"><ShieldCheck className="h-3 w-3" /> Status-only view. Trade licenses, bank details and documents are represented as states — no document contents or account numbers are shown.</p>
-    </Panel>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <InfoNote>
+        <span className="font-semibold text-ink">Status-only view.</span> Trade licenses, bank details and documents are
+        represented as states — no document contents or account numbers are stored.
+      </InfoNote>
+      <TabsRow tabs={tabs} value={tab} onChange={(id) => setTab(id as CompTabId)} />
+      {rows.length === 0 ? (
+        <EmptyState icon={ShieldCheck} title="No compliance records in this view" description="No partners match this status and the active filters." />
+      ) : (
+        <RecordList>
+          {rows.map((c) => {
+            const leadId = getPartnerIdByName(c.partner);
+            return (
+              <CompactRecordCard
+                key={c.partner}
+                title={c.partner}
+                status={{ label: c.status, tone: complianceTone[c.status] }}
+                fields={[
+                  { label: "Country", value: c.country },
+                  { label: "Pending docs", value: String(c.pending) },
+                  { label: "Agreement", value: c.agreement },
+                ]}
+                href={leadId ? `/partner-acquisition/pipeline/${leadId}` : undefined}
+              />
+            );
+          })}
+        </RecordList>
+      )}
+    </div>
   );
 }
 
 /* ------------------------------ Regional coverage --------------------------- */
 
-const coverageCols: Column<CoverageRow>[] = [
-  { key: "region", header: "Region / Market", primary: true, cell: (c) => <span className="font-medium text-ink">{c.region}</span> },
-  { key: "active", header: "Active Partners", align: "right", cell: (c) => <span className="font-mono text-sm text-ink tnum">{c.activePartners}</span> },
-  { key: "pipeline", header: "In Pipeline", align: "right", cell: (c) => <span className="font-mono text-sm text-ink-muted tnum">{c.pipeline}</span> },
-  { key: "coverage", header: "Market Coverage", cell: (c) => (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-ink/8"><div className="h-full rounded-full bg-rose" style={{ width: `${(c.covered / c.targetMarkets) * 100}%` }} /></div>
-      <span className="font-mono text-xs text-ink-muted tnum">{c.covered}/{c.targetMarkets}</span>
-    </div>
-  ) },
-  { key: "status", header: "Status", cell: (c) => <StatusBadge tone={coverageStatusTone[c.status]}>{c.status}</StatusBadge> },
-];
-
-function CoverageTab() {
+function CoverageSection() {
   const { filters } = useFilters();
-  const rows = applyGlobalFilters(regionalCoverage, filters);
+  const rows = useMemo(() => applyGlobalFilters(regionalCoverage, filters), [filters]);
+  const isFiltered = activeFilterCount(filters) > 0;
+  const active = rows.reduce((s, c) => s + c.activePartners, 0);
+  const pipeline = rows.reduce((s, c) => s + c.pipeline, 0);
+  const covered = rows.reduce((s, c) => s + c.covered, 0);
+  const gaps = rows.filter((c) => c.status === "Gap" || c.status === "Early").length;
+
+  const kpis: MinimalKpi[] = [
+    { label: "Active partners", value: num(active), tone: "success" },
+    { label: "In pipeline", value: num(pipeline) },
+    { label: "Markets covered", value: num(covered) },
+    { label: "Coverage gaps", value: num(gaps), tone: gaps > 0 ? "warning" : "neutral" },
+  ];
+
+  const cols: PreviewColumn<CoverageRow>[] = [
+    { key: "region", header: "Region", primary: true, cell: (c) => <span className="font-medium text-ink">{c.region}</span> },
+    { key: "active", header: "Active", align: "right", cell: (c) => <span className="font-mono text-sm text-ink tnum">{c.activePartners}</span> },
+    { key: "pipeline", header: "Pipeline", align: "right", cell: (c) => <span className="font-mono text-sm text-ink-muted tnum">{c.pipeline}</span> },
+    { key: "coverage", header: "Coverage", align: "right", cell: (c) => <span className="font-mono text-sm text-ink-muted tnum">{c.covered}/{c.targetMarkets}</span> },
+    { key: "status", header: "Status", cell: (c) => <StatusBadge tone={coverageStatusTone[c.status]} dot={false}>{c.status}</StatusBadge> },
+  ];
+
   return (
-    <Panel padded={false}>
-      <PanelHeader title="Regional coverage" subtitle="MENA · Asia · Europe · Americas · GCC and key markets" className="p-4" />
-      <div className="px-4 pb-4">
-        <DataTable columns={coverageCols} rows={rows} rowKey={(c) => c.region} empty={filteredEmpty} onRowLabel={(c) => <StatusBadge tone={coverageStatusTone[c.status]}>{c.status}</StatusBadge>} />
-      </div>
-    </Panel>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <div className="flex justify-end"><SnapshotBadge active={isFiltered} /></div>
+      <DataPreviewTable
+        columns={cols}
+        rows={rows}
+        rowKey={(c) => c.region}
+        empty={<EmptyState icon={Globe2} title="No regions match the filters" description="Try clearing a filter to see more coverage." />}
+      />
+    </div>
   );
 }
 
 /* -------------------------- Partner performance preview --------------------- */
 
-const perfCols: Column<PerformancePreviewRow>[] = [
-  { key: "partner", header: "Partner", primary: true, cell: (p) => <span className="whitespace-nowrap font-medium text-ink">{p.partner}</span> },
-  { key: "city", header: "City", cell: (p) => <span className="text-xs text-ink-muted">{p.city}</span> },
-  { key: "orders", header: "Orders Handled", align: "right", cell: (p) => <span className="font-mono text-sm text-ink tnum">{p.ordersHandled}</span> },
-  { key: "turnaround", header: "Avg Turnaround", align: "right", cell: (p) => <span className="font-mono text-xs text-ink-muted tnum">{p.avgTurnaround}</span> },
-  { key: "quality", header: "Quality Score", align: "right", cell: (p) => <StatusBadge tone={scoreTone(p.qualityScore)} dot={false}>{p.qualityScore}</StatusBadge> },
-  { key: "complaint", header: "Complaint Rate", align: "right", cell: (p) => <span className="font-mono text-xs text-ink-muted tnum">{p.complaintRate.toFixed(1)}%</span> },
-  { key: "revenue", header: "Revenue Share", align: "right", cell: (p) => <span className="font-mono text-sm text-ink tnum">{p.revenueShare.toFixed(1)}%</span> },
-];
-
-function PerformanceTab() {
+function PerformanceSection() {
   const { filters } = useFilters();
-  const rows = applyGlobalFilters(performancePreview, filters);
-  return (
-    <div className="space-y-4">
-      <div className="flex items-start gap-2.5 rounded-xl border border-info/25 bg-info/8 p-3">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" />
-        <div>
-          <p className="text-xs font-semibold text-ink">Preview — populated once partners are live</p>
-          <p className="text-xxs text-ink-muted">Full partner performance (orders, turnaround, quality, complaints, revenue) will stream in from Operations once onboarded partners handle live volume. Two onboarded partners shown as a preview.</p>
-        </div>
-      </div>
-      <Panel padded={false}>
-        <PanelHeader title="Partner performance preview" subtitle="Onboarded partners only" className="p-4" />
-        <div className="px-4 pb-4">
-          <DataTable columns={perfCols} rows={rows} rowKey={(p) => p.partner} empty={<EmptyState icon={Gauge} title="No onboarded partners yet" description="Performance appears here once partners go live." />} />
-        </div>
-      </Panel>
-    </div>
-  );
-}
+  const rows = useMemo(() => applyGlobalFilters(performancePreview, filters), [filters]);
+  const orders = rows.reduce((s, p) => s + p.ordersHandled, 0);
+  const avgQuality = rows.length ? Math.round(rows.reduce((s, p) => s + p.qualityScore, 0) / rows.length) : 0;
 
-/* ------------------------------- Team & ownership --------------------------- */
+  const kpis: MinimalKpi[] = [
+    { label: "Onboarded partners", value: num(rows.length) },
+    { label: "Orders handled", value: num(orders) },
+    { label: "Avg quality", value: num(avgQuality), tone: avgQuality >= 90 ? "success" : "neutral" },
+    { label: "Data source", value: "Preview", hint: "Streams from Operations once live" },
+  ];
 
-function TeamSection() {
-  return (
-    <div className="space-y-4">
-      <SnapshotRow label="Team & ownership" />
-      <div className="grid gap-4 xl:grid-cols-3">
-      <div className="min-w-0 xl:col-span-2">
-        <RoleCards />
-      </div>
-      <aside className="space-y-4">
-        <div className="flex items-start gap-2.5 rounded-xl border border-warning/25 bg-warning/8 p-3">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-          <div>
-            <p className="text-xs font-semibold text-ink">Business data</p>
-            <p className="text-xxs text-ink-muted">No live CRM or outreach tools connected. Only business-level partner data — no private personal emails or phone numbers in tables.</p>
-          </div>
-        </div>
-        <Panel>
-          <PanelHeader title="Partnership activity" subtitle="Latest pipeline events" />
-          <ActivityTimeline events={partnerActivity} />
-        </Panel>
-        <Panel>
-          <PanelHeader title="Quick actions" />
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { label: "Add Partner Lead", icon: UserPlus },
-              { label: "Assign Owner", icon: Users },
-              { label: "Move Stage", icon: ArrowRightLeft },
-              { label: "Schedule Meeting", icon: CalendarClock },
-              { label: "Request Compliance", icon: ShieldCheck },
-              { label: "Add Note", icon: StickyNote },
-              { label: "Mark Onboarded", icon: CheckCircle2 },
-              { label: "Reject Lead", icon: XCircle },
-              { label: "New Market Report", icon: Target },
-              { label: "View B2B Partners", icon: Briefcase },
-            ].map((a) => (
-              <button key={a.label} type="button" className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-left text-xs font-medium text-ink transition-colors hover:border-rose/40">
-                <a.icon className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
-                <span className="truncate">{a.label}</span>
-              </button>
-            ))}
-          </div>
-        </Panel>
-      </aside>
-      </div>
-    </div>
-  );
-}
+  const cols: PreviewColumn<PerformancePreviewRow>[] = [
+    { key: "partner", header: "Partner", primary: true, cell: (p) => <span className="font-medium text-ink">{p.partner}</span> },
+    { key: "city", header: "City", cell: (p) => <span className="text-ink-muted">{p.city}</span> },
+    { key: "orders", header: "Orders", align: "right", cell: (p) => <span className="font-mono text-sm text-ink tnum">{p.ordersHandled}</span> },
+    { key: "quality", header: "Quality", align: "right", cell: (p) => <StatusBadge tone={scoreTone(p.qualityScore)} dot={false}>{p.qualityScore}</StatusBadge> },
+    { key: "revenue", header: "Revenue share", align: "right", cell: (p) => <span className="font-mono text-sm text-ink tnum">{p.revenueShare.toFixed(1)}%</span> },
+  ];
 
-/* -------------------------------- Pipeline section -------------------------- */
-
-function PipelineSection() {
   return (
     <div className="space-y-6">
-      <SnapshotRow label="Pipeline snapshot" />
-      <StatGrid stats={partnerKpis} cols="auto" />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="Pipeline by stage" subtitle="Partners per stage" className="lg:col-span-2">
-          <BarSeries data={pipelineByStage} color={CHART.rose} height={220} />
-        </ChartCard>
-        <ChartCard title="Partner type breakdown" subtitle="Share of pipeline">
-          <DonutChart data={partnerTypeBreakdown} colors={donutColors} centerValue="184" centerLabel="Leads" height={200} />
-        </ChartCard>
-      </div>
-      <PipelineTab rows={partners} />
-    </div>
-  );
-}
-
-/* ------------------------------ Compliance section -------------------------- */
-
-function ComplianceSection() {
-  return (
-    <div className="space-y-4">
-      <ComplianceTab />
-      <SnapshotRow label="Compliance rollup" />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Compliance status breakdown" subtitle="Across all partners">
-          <DonutChart data={complianceBreakdown} colors={[CHART.teal, CHART.sky, CHART.amber, "rgb(var(--ink-faint))", CHART.rose]} centerValue="58" centerLabel="Partners" height={220} />
-        </ChartCard>
-        <ChartCard title="Partner score distribution" subtitle="Count by score band">
-          <BarSeries data={scoreDistribution} color={CHART.teal} height={220} />
-        </ChartCard>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------- Coverage section --------------------------- */
-
-function CoverageSection() {
-  return (
-    <div className="space-y-4">
-      <SnapshotRow label="Coverage rollup" />
-      <ChartCard title="Partner leads by region" subtitle="Total leads">
-        <BarSeries data={leadsByRegion} colorByIndex height={200} />
-      </ChartCard>
-      <CoverageTab />
+      <MinimalKpiStrip kpis={kpis} />
+      <InfoNote>
+        <span className="font-semibold text-ink">Preview.</span> Full partner performance streams in from Operations once
+        onboarded partners handle live volume. Onboarded partners shown as a preview.
+      </InfoNote>
+      <DataPreviewTable
+        columns={cols}
+        rows={rows}
+        rowKey={(p) => p.partner}
+        empty={<EmptyState icon={Gauge} title="No onboarded partners yet" description="Performance appears here once partners go live." />}
+      />
     </div>
   );
 }
@@ -516,12 +459,12 @@ export function PartnerSubsection({ slug }: { slug: string }) {
   switch (slug) {
     case "team": return <TeamSection />;
     case "pipeline": return <PipelineSection />;
-    case "market-intelligence": return <MarketTab />;
-    case "outreach": return <OutreachTab />;
-    case "meetings": return <MeetingsTab />;
+    case "market-intelligence": return <MarketSection />;
+    case "outreach": return <OutreachSection />;
+    case "meetings": return <MeetingsSection />;
     case "compliance-queue": return <ComplianceSection />;
     case "regional-coverage": return <CoverageSection />;
-    case "performance-preview": return <PerformanceTab />;
+    case "performance-preview": return <PerformanceSection />;
     default: return <TeamSection />;
   }
 }

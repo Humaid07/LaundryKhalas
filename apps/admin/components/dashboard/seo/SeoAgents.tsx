@@ -1,60 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, AlertTriangle, TrendingUp, TrendingDown, Minus, FileText, SearchX } from "lucide-react";
-import { SectionTitle } from "@/components/dashboard/shell/PageHeader";
+import {
+  Sparkles, Bot, SearchX, FileText, TrendingUp, TrendingDown, Minus, MapPin,
+} from "lucide-react";
 import { seoAgentApi, type SeoAgentHealthDTO } from "@/lib/dashboard/seo-agent-api";
 import { formatRelativeTime } from "@/lib/dashboard/formatters";
-import type { SeoAgent, AgentStatus } from "@/lib/dashboard/types";
+import type { SeoAgent, AgentStatus, KpiStat } from "@/lib/dashboard/types";
 import { useFilters } from "@/components/dashboard/shell/FiltersProvider";
-import { StatGrid } from "@/components/dashboard/ui/StatCard";
-import { ChartCard } from "@/components/dashboard/ui/ChartCard";
-import { Panel, PanelHeader, StatusBadge } from "@/components/dashboard/ui/primitives";
-import { EmptyState, SnapshotBadge } from "@/components/dashboard/ui/states";
-import { Button } from "@/components/dashboard/ui/Button";
-import { DataTable, type Column } from "@/components/dashboard/ui/DataTable";
-import { AreaTrend, BarSeries, DonutChart } from "@/components/dashboard/charts";
-import { AgentStatusCard } from "@/components/dashboard/widgets";
-import { toneDot } from "@/components/dashboard/ui/tones";
-import { CHART } from "@/lib/dashboard/chart-theme";
-import { priorityTone } from "@/lib/dashboard/status-maps";
-import { activeFilterCount } from "@/lib/dashboard/filters";
+import { applyGlobalFilters, activeFilterCount } from "@/lib/dashboard/filters";
+import { agentStatusTone, priorityTone } from "@/lib/dashboard/status-maps";
 import {
-  seoAgents,
-  seoKpis,
-  gscPerformance,
-  indexedVsNon,
-  contentPipeline,
-  seoTasks,
-  seoBrief,
+  seoAgents, seoKpis, seoTasks, seoBrief,
 } from "@/lib/dashboard/mock-data";
 import {
-  gscPages,
-  indexingQueue,
-  indexStateTone,
-  hyperlocalPages,
-  hyperlocalStatusTone,
-  techSeoIssues,
-  techSeoSeverityTone,
-  competitors,
-  aiSearch,
-  aiPresenceTone,
-  pagesGainingLosing,
-  type GscPage,
-  type IndexRow,
-  type HyperlocalPage,
-  type TechSeoIssue,
-  type AiSearchRow,
+  gscPages, indexingQueue, indexStateTone, hyperlocalPages, hyperlocalStatusTone,
+  techSeoIssues, techSeoSeverityTone, competitors, aiSearch, aiPresenceTone, slugifyAgent,
+  type GscPage, type IndexRow, type HyperlocalPage, type TechSeoIssue,
+  type Competitor, type AiSearchRow,
 } from "@/lib/dashboard/seo-data";
-import { applyGlobalFilters } from "@/lib/dashboard/filters";
-import type { SeoTask } from "@/lib/dashboard/types";
+import {
+  MinimalKpiStrip, WorkflowTabs, CompactRecordCard, RecordList, DataPreviewTable,
+  StatusBadge, EmptyState, SnapshotBadge, type MinimalKpi, type WorkflowTab, type PreviewColumn,
+} from "@/components/dashboard/minimal";
+import type { Tone } from "@/lib/dashboard/types";
 import { cn } from "@/lib/utils";
 
 /* --------------------------- live data hook (API) --------------------------- */
 
-// Fetch a subsection's rows from the SEO backend; fall back to the passed static
-// list until it resolves (or if the backend is unreachable), so the page always
-// renders. The fetcher must be a stable module-level reference.
+/** Fetch a subsection's rows from the SEO backend; fall back to the static list
+ *  until it resolves (or if unreachable). The fetcher must be module-stable. */
 function useSeoLive<T>(fetcher: () => Promise<T[]>, fallback: T[]): T[] {
   const [rows, setRows] = useState<T[]>(fallback);
   useEffect(() => {
@@ -63,9 +38,7 @@ function useSeoLive<T>(fetcher: () => Promise<T[]>, fallback: T[]): T[] {
       .then((r) => {
         if (active && Array.isArray(r) && r.length) setRows(r);
       })
-      .catch(() => {
-        /* keep fallback */
-      });
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -73,79 +46,96 @@ function useSeoLive<T>(fetcher: () => Promise<T[]>, fallback: T[]): T[] {
   return rows;
 }
 
-/* ------------------------------- shared table ------------------------------- */
+/* --------------------------------- shared ----------------------------------- */
 
-/** Shared empty state for lists narrowed to nothing by the global filters. */
-const noMatchState = (
-  <EmptyState
-    icon={SearchX}
-    title="No records match the selected filters"
-    description="Try clearing a filter to see more."
-  />
+const noMatch = (
+  <EmptyState icon={SearchX} title="No records match the selected filters" description="Try clearing a filter to see more." />
 );
 
-/** Header row flagging aggregate/site-wide SEO views that are not geo-filtered. */
-function SnapshotRow({ label }: { label: string }) {
+/** Curate a KpiStat[] into 3–4 minimal KPIs (label + value + optional tone). */
+function toMinimalKpis(stats: KpiStat[], take = 4): MinimalKpi[] {
+  return stats.slice(0, take).map((s) => ({ label: s.label, value: String(s.value), tone: s.tone }));
+}
+
+function useSnapshot() {
   const { filters } = useFilters();
+  return { filters, isFiltered: activeFilterCount(filters) > 0 };
+}
+
+/** A tabs row with a right-aligned snapshot badge (site-wide views). */
+function TabsRow({
+  tabs, value, onChange, isFiltered,
+}: {
+  tabs: WorkflowTab[]; value: string; onChange: (id: string) => void; isFiltered: boolean;
+}) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">{label}</p>
-      <SnapshotBadge active={activeFilterCount(filters) > 0} label="Global / site-wide" />
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <WorkflowTabs tabs={tabs} value={value} onChange={onChange} />
+      <SnapshotBadge active={isFiltered} label="Global / site-wide" />
     </div>
   );
 }
 
-const taskCols: Column<SeoTask>[] = [
-  { key: "task", header: "Task", primary: true, cell: (t) => <span className="text-ink">{t.task}</span> },
-  { key: "agent", header: "Agent", cell: (t) => <span className="text-ink-muted">{t.agent}</span> },
-  { key: "priority", header: "Priority", cell: (t) => <StatusBadge tone={priorityTone[t.priority]}>{t.priority}</StatusBadge> },
-  { key: "url", header: "Page / URL", cell: (t) => <span className="font-mono text-xs text-ink-muted">{t.url}</span> },
-  { key: "status", header: "Status", cell: (t) => <StatusBadge tone={t.status === "Done" ? "success" : t.status === "Needs Review" ? "warning" : "info"}>{t.status}</StatusBadge> },
-  { key: "action", header: "Suggested action", cell: (t) => <span className="text-xs text-ink-muted">{t.suggestedAction}</span> },
-  { key: "approve", header: "", align: "right", cell: (t) => (t.approvalRequired ? <Button size="sm" variant="primary">Review</Button> : <Button size="sm" variant="ghost">Run</Button>) },
-];
-
 /* -------------------------------- Overview ---------------------------------- */
 
-function BriefPanel() {
+function BriefCard() {
   return (
-    <Panel className="border-rose/20 bg-gradient-to-br from-rose/[0.04] to-transparent">
-      <div className="flex items-center gap-2">
+    <div className="rounded-2xl border border-border/70 bg-surface p-5 shadow-card">
+      <div className="flex items-center gap-2.5">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose/12 text-rose"><Sparkles className="h-4 w-4" /></span>
-        <div>
-          <p className="text-xxs font-semibold uppercase tracking-eyebrow text-rose">Daily SEO Brief · {seoBrief.date}</p>
-          <h3 className="font-display text-base font-semibold text-ink">{seoBrief.headline}</h3>
+        <div className="min-w-0">
+          <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">Daily SEO brief · {seoBrief.date}</p>
+          <h3 className="truncate font-display text-[0.95rem] font-semibold text-ink">{seoBrief.headline}</h3>
         </div>
       </div>
-      <ul className="mt-4 grid gap-2.5 sm:grid-cols-2">
-        {seoBrief.items.map((it) => (
-          <li key={it.title} className="flex gap-2.5 rounded-xl border border-border bg-surface p-3">
-            <span className={cn("mt-1 h-2 w-2 shrink-0 rounded-full", toneDot[it.tone])} />
-            <div>
-              <p className="text-xs font-semibold text-ink">{it.title}</p>
-              <p className="text-xs text-ink-muted">{it.text}</p>
-            </div>
+      <ul className="mt-4 space-y-2.5">
+        {seoBrief.items.slice(0, 3).map((it) => (
+          <li key={it.title} className="flex gap-2.5">
+            <span className={cn("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", toneBg[it.tone])} />
+            <p className="text-xs text-ink-muted"><span className="font-medium text-ink">{it.title}:</span> {it.text}</p>
           </li>
         ))}
       </ul>
-    </Panel>
+    </div>
   );
 }
 
+const toneBg: Record<Tone, string> = {
+  rose: "bg-rose", success: "bg-success", warning: "bg-warning", danger: "bg-danger",
+  info: "bg-info", neutral: "bg-ink-faint", plum: "bg-plum",
+};
+
+const needsAttention = (a: SeoAgent) =>
+  a.approvalRequired || a.status === "Needs Review" || a.status === "Awaiting Approval";
+
 function OverviewSection() {
-  const kpis = useSeoLive(seoAgentApi.getOverviewKpis, seoKpis);
+  const kpis = toMinimalKpis(useSeoLive(seoAgentApi.getOverviewKpis, seoKpis));
+  const attention = seoAgents.filter(needsAttention);
   return (
     <div className="space-y-6">
-      <SnapshotRow label="SEO overview" />
-      <BriefPanel />
-      <StatGrid stats={kpis} cols="auto" />
-      <div className="grid gap-4 xl:grid-cols-3">
-        <ChartCard title="GSC performance" subtitle="Clicks & impressions · 4 weeks" className="xl:col-span-2">
-          <AreaTrend data={gscPerformance} series={[{ key: "Impressions", color: CHART.plum }, { key: "Clicks", color: CHART.rose }]} />
-        </ChartCard>
-        <ChartCard title="Index coverage" subtitle="1,284 known URLs">
-          <DonutChart data={indexedVsNon} colors={[CHART.teal, CHART.amber, CHART.slate]} centerValue="94%" centerLabel="Indexed" />
-        </ChartCard>
+      <MinimalKpiStrip kpis={kpis} />
+      <BriefCard />
+      <div className="space-y-3">
+        <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">Agents needing attention</p>
+        {attention.length === 0 ? (
+          <EmptyState icon={Bot} title="Nothing needs review" description="All agents are running cleanly." />
+        ) : (
+          <RecordList>
+            {attention.map((a) => (
+              <CompactRecordCard
+                key={a.name}
+                title={a.name}
+                status={{ label: a.status, tone: agentStatusTone[a.status] }}
+                fields={[
+                  { label: "Category", value: a.category },
+                  { label: "Open issues", value: String(a.openIssues) },
+                  { label: "Last run", value: fmt(a.lastRun) },
+                ]}
+                href={`/seo-agents/agents/${slugifyAgent(a.name)}`}
+              />
+            ))}
+          </RecordList>
+        )}
       </div>
     </div>
   );
@@ -153,17 +143,10 @@ function OverviewSection() {
 
 /* ------------------------------- Agent fleet -------------------------------- */
 
-// Map a live backend agent-health row to the UI's SeoAgent card shape. Falls
-// back to the static seoAgents list when the backend is unreachable.
 const SECTION_CATEGORY: Record<string, SeoAgent["category"]> = {
-  "technical-seo": "Technical",
-  indexing: "Technical",
-  "gsc-performance": "Technical",
-  "content-pipeline": "Content",
-  "hyperlocal-pages": "Content",
-  competitors: "Intelligence",
-  "ai-search": "Intelligence",
-  reports: "Intelligence",
+  "technical-seo": "Technical", indexing: "Technical", "gsc-performance": "Technical",
+  "content-pipeline": "Content", "hyperlocal-pages": "Content",
+  competitors: "Intelligence", "ai-search": "Intelligence", reports: "Intelligence",
 };
 
 function healthStatusToCard(h: SeoAgentHealthDTO): AgentStatus {
@@ -177,7 +160,7 @@ function toCardAgent(h: SeoAgentHealthDTO): SeoAgent {
   return {
     name: h.name,
     status: healthStatusToCard(h),
-    lastRun: h.last_run ? formatRelativeTime(h.last_run) : "—",
+    lastRun: h.last_run ? h.last_run : "—",
     nextRun: h.next_run,
     outputs: h.findings,
     openIssues: h.issues,
@@ -186,237 +169,367 @@ function toCardAgent(h: SeoAgentHealthDTO): SeoAgent {
   };
 }
 
+const fmt = (iso: string) => (iso === "—" || !iso ? "—" : formatRelativeTime(iso));
+
+type FleetTab = "all" | "active" | "attention" | "scheduled" | "paused";
+const FLEET_FILTERS: Record<FleetTab, (a: SeoAgent) => boolean> = {
+  all: () => true,
+  active: (a) => a.status === "Active",
+  attention: needsAttention,
+  scheduled: (a) => a.status === "Scheduled",
+  paused: (a) => a.status === "Paused",
+};
+const FLEET_LABELS: { id: FleetTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "active", label: "Active" },
+  { id: "attention", label: "Needs attention" },
+  { id: "scheduled", label: "Scheduled" },
+  { id: "paused", label: "Paused" },
+];
+
 function AgentFleetSection() {
-  // Live agent fleet from the SEO backend (all 16 agents), with a graceful
-  // fallback to the static list so the page always renders.
   const [agents, setAgents] = useState<SeoAgent[]>(seoAgents);
+  const [tab, setTab] = useState<FleetTab>("all");
   useEffect(() => {
     let active = true;
-    seoAgentApi
-      .listSeoAgentHealth()
-      .then((rows) => {
-        if (active && rows.length) setAgents(rows.map(toCardAgent));
-      })
-      .catch(() => {
-        /* keep static fallback */
-      });
-    return () => {
-      active = false;
-    };
+    seoAgentApi.listSeoAgentHealth()
+      .then((rows) => { if (active && rows.length) setAgents(rows.map(toCardAgent)); })
+      .catch(() => {});
+    return () => { active = false; };
   }, []);
 
-  const needAttention = agents.filter(
-    (a) => a.approvalRequired || a.status === "Needs Review" || a.status === "Awaiting Approval",
-  ).length;
+  const kpis: MinimalKpi[] = [
+    { label: "Total agents", value: String(agents.length) },
+    { label: "Active", value: String(agents.filter(FLEET_FILTERS.active).length), tone: "success" },
+    { label: "Needs attention", value: String(agents.filter(FLEET_FILTERS.attention).length), tone: "warning" },
+    { label: "Paused", value: String(agents.filter(FLEET_FILTERS.paused).length) },
+  ];
+  const tabs: WorkflowTab[] = FLEET_LABELS.map((t) => ({ id: t.id, label: t.label, count: agents.filter(FLEET_FILTERS[t.id]).length }));
+  const rows = agents.filter(FLEET_FILTERS[tab]);
+
   return (
     <div className="space-y-6">
-      <SnapshotRow label="Agent fleet" />
-      <SectionTitle title="Agent fleet" description={`${agents.length} agents · ${needAttention} need attention`} />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {agents.map((a) => <AgentStatusCard key={a.name} agent={a} />)}
-      </div>
-      <Panel padded={false}>
-        <div className="flex items-center justify-between p-4">
-          <PanelHeader title="SEO tasks" subtitle="Prioritised backlog · approval-gated" className="mb-0" />
-          <StatusBadge tone="warning"><AlertTriangle className="h-3 w-3" /> {seoTasks.filter((t) => t.approvalRequired).length} need approval</StatusBadge>
-        </div>
-        <div className="px-4 pb-4">
-          <DataTable columns={taskCols} rows={seoTasks} rowKey={(t) => t.id} onRowLabel={(t) => <StatusBadge tone={priorityTone[t.priority]}>{t.priority}</StatusBadge>} />
-        </div>
-      </Panel>
+      <MinimalKpiStrip kpis={kpis} />
+      <WorkflowTabs tabs={tabs} value={tab} onChange={(id) => setTab(id as FleetTab)} />
+      {rows.length === 0 ? (
+        <EmptyState icon={Bot} title="No agents in this view" description="No agents match this status." />
+      ) : (
+        <RecordList>
+          {rows.map((a) => (
+            <CompactRecordCard
+              key={a.name}
+              title={a.name}
+              status={{ label: a.status, tone: agentStatusTone[a.status] }}
+              fields={[
+                { label: "Category", value: a.category },
+                { label: "Last run", value: fmt(a.lastRun) },
+                { label: "Outputs", value: String(a.outputs) },
+              ]}
+              meta={a.openIssues > 0 ? <StatusBadge tone="warning" dot={false}>{a.openIssues} issue{a.openIssues === 1 ? "" : "s"}</StatusBadge> : undefined}
+              href={`/seo-agents/agents/${slugifyAgent(a.name)}`}
+            />
+          ))}
+        </RecordList>
+      )}
     </div>
   );
 }
 
 /* ----------------------------- GSC performance ------------------------------ */
 
-const gscCols: Column<GscPage>[] = [
+const gscCols: PreviewColumn<GscPage>[] = [
   { key: "page", header: "Page", primary: true, cell: (p) => <span className="font-mono text-xs text-ink">{p.page}</span> },
   { key: "clicks", header: "Clicks", align: "right", cell: (p) => <span className="font-mono text-sm text-ink tnum">{p.clicks}</span> },
   { key: "impressions", header: "Impressions", align: "right", cell: (p) => <span className="font-mono text-xs text-ink-muted tnum">{p.impressions.toLocaleString()}</span> },
-  { key: "ctr", header: "CTR", align: "right", cell: (p) => <span className="font-mono text-xs text-ink-muted tnum">{p.ctr}%</span> },
   { key: "position", header: "Position", align: "right", cell: (p) => <span className="font-mono text-xs text-ink-muted tnum">{p.position.toFixed(1)}</span> },
   { key: "delta", header: "Δ", align: "right", cell: (p) => <span className={cn("font-mono text-xs tnum", p.delta > 0 ? "text-success" : p.delta < 0 ? "text-danger" : "text-ink-faint")}>{p.delta > 0 ? "+" : ""}{p.delta}</span> },
 ];
 
 function GscSection() {
-  const { filters } = useFilters();
+  const { filters, isFiltered } = useSnapshot();
   const pages = applyGlobalFilters(useSeoLive(seoAgentApi.getGscPages, gscPages), filters);
+  const kpis: MinimalKpi[] = [
+    { label: "Pages tracked", value: String(pages.length) },
+    { label: "Total clicks", value: pages.reduce((s, p) => s + p.clicks, 0).toLocaleString() },
+    { label: "Impressions", value: pages.reduce((s, p) => s + p.impressions, 0).toLocaleString() },
+    { label: "Gaining", value: String(pages.filter((p) => p.delta > 0).length), tone: "success" },
+  ];
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-3">
-        <ChartCard title="Clicks & impressions" subtitle="Overall · 4 weeks" className="xl:col-span-2">
-          <AreaTrend data={gscPerformance} series={[{ key: "Impressions", color: CHART.plum }, { key: "Clicks", color: CHART.rose }]} />
-        </ChartCard>
-        <ChartCard title="Pages gaining / losing" subtitle="Overall · last 4 weeks">
-          <DonutChart data={pagesGainingLosing} colors={[CHART.teal, CHART.slate, CHART.danger]} centerValue="107" centerLabel="Pages" />
-        </ChartCard>
-      </div>
-      <Panel padded={false}>
-        <PanelHeader title="Top pages" subtitle="Clicks, CTR and position" className="p-4" />
-        <div className="px-4 pb-4">
-          <DataTable columns={gscCols} rows={pages} rowKey={(p) => p.page} empty={noMatchState} />
-        </div>
-      </Panel>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <div className="flex justify-end"><SnapshotBadge active={isFiltered} label="Global / site-wide" /></div>
+      <DataPreviewTable columns={gscCols} rows={pages} rowKey={(p) => p.page} empty={noMatch} />
     </div>
   );
 }
 
 /* --------------------------------- Indexing --------------------------------- */
 
-const indexCols: Column<IndexRow>[] = [
+const indexCols: PreviewColumn<IndexRow>[] = [
   { key: "url", header: "URL", primary: true, cell: (r) => <span className="font-mono text-xs text-ink">{r.url}</span> },
-  { key: "state", header: "State", cell: (r) => <StatusBadge tone={indexStateTone[r.state]}>{r.state}</StatusBadge> },
-  { key: "checked", header: "Last Checked", cell: (r) => <span className="whitespace-nowrap text-xs text-ink-muted">{r.lastChecked}</span> },
-  { key: "action", header: "Action", cell: (r) => <span className="text-xs text-ink-faint">{r.action}</span> },
-  { key: "btn", header: "", align: "right", cell: (r) => (r.state === "Failed" ? <Button size="sm" variant="primary">Resubmit</Button> : <Button size="sm" variant="ghost">View</Button>) },
+  { key: "state", header: "State", cell: (r) => <StatusBadge tone={indexStateTone[r.state]} dot={false}>{r.state}</StatusBadge> },
+  { key: "checked", header: "Last checked", cell: (r) => <span className="whitespace-nowrap text-xs text-ink-muted">{r.lastChecked}</span> },
+  { key: "action", header: "Suggested action", cell: (r) => <span className="text-xs text-ink-faint">{r.action}</span> },
+];
+
+type IndexTab = "all" | "indexed" | "submitted" | "crawled" | "failed";
+const INDEX_FILTERS: Record<IndexTab, (r: IndexRow) => boolean> = {
+  all: () => true,
+  indexed: (r) => r.state === "Indexed",
+  submitted: (r) => r.state === "Submitted",
+  crawled: (r) => r.state === "Crawled — not indexed",
+  failed: (r) => r.state === "Failed",
+};
+const INDEX_LABELS: { id: IndexTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "indexed", label: "Indexed" },
+  { id: "submitted", label: "Submitted" },
+  { id: "crawled", label: "Not indexed" },
+  { id: "failed", label: "Failed" },
 ];
 
 function IndexingSection() {
-  const { filters } = useFilters();
+  const { filters, isFiltered } = useSnapshot();
+  const [tab, setTab] = useState<IndexTab>("all");
   const queue = applyGlobalFilters(useSeoLive(seoAgentApi.getIndexing, indexingQueue), filters);
+  const kpis: MinimalKpi[] = [
+    { label: "Indexed", value: String(queue.filter(INDEX_FILTERS.indexed).length), tone: "success" },
+    { label: "Submitted", value: String(queue.filter(INDEX_FILTERS.submitted).length), tone: "info" },
+    { label: "Not indexed", value: String(queue.filter(INDEX_FILTERS.crawled).length), tone: "warning" },
+    { label: "Failed", value: String(queue.filter(INDEX_FILTERS.failed).length), tone: "danger" },
+  ];
+  const tabs: WorkflowTab[] = INDEX_LABELS.map((t) => ({ id: t.id, label: t.label, count: queue.filter(INDEX_FILTERS[t.id]).length }));
+  const rows = queue.filter(INDEX_FILTERS[tab]);
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="Index coverage" subtitle="Overall · 1,284 known URLs">
-          <DonutChart data={indexedVsNon} colors={[CHART.teal, CHART.amber, CHART.slate]} centerValue="94%" centerLabel="Indexed" height={220} />
-        </ChartCard>
-        <Panel className="lg:col-span-2" padded={false}>
-          <PanelHeader title="Indexing queue" subtitle="Submitted, crawled & failed URLs" className="p-4" action={<StatusBadge tone="danger">{queue.filter((r) => r.state === "Failed").length} failed</StatusBadge>} />
-          <div className="px-4 pb-4">
-            <DataTable columns={indexCols} rows={queue} rowKey={(r) => r.url} onRowLabel={(r) => <StatusBadge tone={indexStateTone[r.state]}>{r.state}</StatusBadge>} empty={noMatchState} />
-          </div>
-        </Panel>
-      </div>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <TabsRow tabs={tabs} value={tab} onChange={(id) => setTab(id as IndexTab)} isFiltered={isFiltered} />
+      <DataPreviewTable columns={indexCols} rows={rows} rowKey={(r) => r.url} empty={noMatch} />
     </div>
   );
 }
 
 /* ----------------------------- Content pipeline ----------------------------- */
 
+type ContentTab = "all" | "Todo" | "In Progress" | "Needs Review" | "Done";
+const CONTENT_LABELS: { id: ContentTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "Needs Review", label: "Needs review" },
+  { id: "In Progress", label: "In progress" },
+  { id: "Todo", label: "To do" },
+  { id: "Done", label: "Done" },
+];
+
 function ContentPipelineSection() {
-  const { filters } = useFilters();
+  const { filters, isFiltered } = useSnapshot();
+  const [tab, setTab] = useState<ContentTab>("all");
   const tasks = applyGlobalFilters(useSeoLive(seoAgentApi.getContentTasks, seoTasks), filters);
+  const kpis: MinimalKpi[] = [
+    { label: "Total tasks", value: String(tasks.length) },
+    { label: "Needs review", value: String(tasks.filter((t) => t.status === "Needs Review").length), tone: "warning" },
+    { label: "In progress", value: String(tasks.filter((t) => t.status === "In Progress").length), tone: "info" },
+    { label: "Approval-gated", value: String(tasks.filter((t) => t.approvalRequired).length), tone: "rose" },
+  ];
+  const tabs: WorkflowTab[] = CONTENT_LABELS.map((t) => ({
+    id: t.id, label: t.label,
+    count: t.id === "all" ? tasks.length : tasks.filter((x) => x.status === t.id).length,
+  }));
+  const rows = tab === "all" ? tasks : tasks.filter((t) => t.status === tab);
   return (
-    <div className="space-y-4">
-      <ChartCard title="Content pipeline" subtitle="Overall · articles & area pages by stage">
-        <BarSeries data={contentPipeline} colorByIndex height={230} />
-      </ChartCard>
-      <Panel padded={false}>
-        <PanelHeader title="Content & linking tasks" subtitle="Approval-gated" className="p-4" />
-        <div className="px-4 pb-4">
-          <DataTable columns={taskCols} rows={tasks} rowKey={(t) => t.id} onRowLabel={(t) => <StatusBadge tone={priorityTone[t.priority]}>{t.priority}</StatusBadge>} empty={noMatchState} />
-        </div>
-      </Panel>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <TabsRow tabs={tabs} value={tab} onChange={(id) => setTab(id as ContentTab)} isFiltered={isFiltered} />
+      {rows.length === 0 ? noMatch : (
+        <RecordList>
+          {rows.map((t) => (
+            <CompactRecordCard
+              key={t.id}
+              title={t.task}
+              status={{ label: t.priority, tone: priorityTone[t.priority] }}
+              fields={[
+                { label: "Agent", value: t.agent },
+                { label: "Page", value: <span className="font-mono text-xs">{t.url}</span> },
+                { label: "Suggested action", value: t.suggestedAction },
+              ]}
+              meta={<StatusBadge tone={t.status === "Done" ? "success" : t.status === "Needs Review" ? "warning" : "info"} dot={false}>{t.status}</StatusBadge>}
+            />
+          ))}
+        </RecordList>
+      )}
     </div>
   );
 }
 
 /* ----------------------------- Hyperlocal pages ----------------------------- */
 
-const hyperCols: Column<HyperlocalPage>[] = [
-  { key: "area", header: "Area Page", primary: true, cell: (p) => <span className="font-medium text-ink">{p.area}</span> },
-  { key: "city", header: "City", cell: (p) => <span className="text-xs text-ink-muted">{p.city}</span> },
-  { key: "status", header: "Status", cell: (p) => <StatusBadge tone={hyperlocalStatusTone[p.status]}>{p.status}</StatusBadge> },
-  { key: "words", header: "Words", align: "right", cell: (p) => <span className="font-mono text-xs text-ink-muted tnum">{p.wordCount}</span> },
-  { key: "dup", header: "Duplicate", align: "right", cell: (p) => <span className={cn("font-mono text-xs tnum", p.duplicateScore > 30 ? "text-danger" : p.duplicateScore > 10 ? "text-warning" : "text-ink-muted")}>{p.duplicateScore}%</span> },
-  { key: "btn", header: "", align: "right", cell: (p) => (p.status === "Awaiting Approval" ? <Button size="sm" variant="primary">Review</Button> : <Button size="sm" variant="ghost">Open</Button>) },
+type HyperTab = "all" | "Published" | "Awaiting Approval" | "Draft" | "Duplicate Risk";
+const HYPER_LABELS: { id: HyperTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "Published", label: "Published" },
+  { id: "Awaiting Approval", label: "Awaiting approval" },
+  { id: "Draft", label: "Draft" },
+  { id: "Duplicate Risk", label: "Duplicate risk" },
 ];
 
 function HyperlocalSection() {
-  const { filters } = useFilters();
+  const { filters, isFiltered } = useSnapshot();
+  const [tab, setTab] = useState<HyperTab>("all");
   const pages = applyGlobalFilters(useSeoLive(seoAgentApi.getHyperlocal, hyperlocalPages), filters);
+  const kpis: MinimalKpi[] = [
+    { label: "Area pages", value: String(pages.length) },
+    { label: "Published", value: String(pages.filter((p) => p.status === "Published").length), tone: "success" },
+    { label: "Awaiting approval", value: String(pages.filter((p) => p.status === "Awaiting Approval").length), tone: "rose" },
+    { label: "Duplicate risk", value: String(pages.filter((p) => p.status === "Duplicate Risk").length), tone: "danger" },
+  ];
+  const tabs: WorkflowTab[] = HYPER_LABELS.map((t) => ({
+    id: t.id, label: t.label,
+    count: t.id === "all" ? pages.length : pages.filter((p) => p.status === t.id).length,
+  }));
+  const rows = tab === "all" ? pages : pages.filter((p) => p.status === tab);
   return (
-    <Panel padded={false}>
-      <PanelHeader title="Hyperlocal area pages" subtitle="Area/market pages with duplicate checks" className="p-4" action={<StatusBadge tone="danger">{pages.filter((p) => p.status === "Duplicate Risk").length} duplicate risk</StatusBadge>} />
-      <div className="px-4 pb-4">
-        <DataTable columns={hyperCols} rows={pages} rowKey={(p) => p.area} onRowLabel={(p) => <StatusBadge tone={hyperlocalStatusTone[p.status]}>{p.status}</StatusBadge>} empty={noMatchState} />
-      </div>
-    </Panel>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <TabsRow tabs={tabs} value={tab} onChange={(id) => setTab(id as HyperTab)} isFiltered={isFiltered} />
+      {rows.length === 0 ? noMatch : (
+        <RecordList>
+          {rows.map((p) => (
+            <CompactRecordCard
+              key={p.area}
+              title={p.area}
+              status={{ label: p.status, tone: hyperlocalStatusTone[p.status] }}
+              fields={[
+                { label: "City", value: <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3 text-ink-faint" />{p.city}</span> },
+                { label: "Words", value: String(p.wordCount) },
+                { label: "Duplicate", value: `${p.duplicateScore}%` },
+              ]}
+            />
+          ))}
+        </RecordList>
+      )}
+    </div>
   );
 }
 
 /* ------------------------------- Technical SEO ------------------------------ */
 
-const techCols: Column<TechSeoIssue>[] = [
+const techCols: PreviewColumn<TechSeoIssue>[] = [
   { key: "issue", header: "Issue", primary: true, cell: (t) => <span className="text-ink">{t.issue}</span> },
-  { key: "type", header: "Type", cell: (t) => <StatusBadge tone="neutral" dot={false}>{t.type}</StatusBadge> },
+  { key: "type", header: "Type", cell: (t) => <span className="text-xs text-ink-muted">{t.type}</span> },
   { key: "affected", header: "Affected", align: "right", cell: (t) => <span className="font-mono text-sm text-ink tnum">{t.affected}</span> },
-  { key: "severity", header: "Severity", cell: (t) => <StatusBadge tone={techSeoSeverityTone[t.severity]}>{t.severity}</StatusBadge> },
-  { key: "status", header: "Status", cell: (t) => <StatusBadge tone={t.status === "Resolved" ? "success" : t.status === "Monitoring" ? "info" : "warning"}>{t.status}</StatusBadge> },
-  { key: "btn", header: "", align: "right", cell: () => <Button size="sm" variant="secondary">Fix</Button> },
+  { key: "severity", header: "Severity", cell: (t) => <StatusBadge tone={techSeoSeverityTone[t.severity]} dot={false}>{t.severity}</StatusBadge> },
+  { key: "status", header: "Status", cell: (t) => <StatusBadge tone={t.status === "Resolved" ? "success" : t.status === "Monitoring" ? "info" : "warning"} dot={false}>{t.status}</StatusBadge> },
+];
+
+type TechTab = "all" | "Open" | "Monitoring" | "Resolved";
+const TECH_LABELS: { id: TechTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "Open", label: "Open" },
+  { id: "Monitoring", label: "Monitoring" },
+  { id: "Resolved", label: "Resolved" },
 ];
 
 function TechnicalSeoSection() {
-  const { filters } = useFilters();
-  // Site-wide issues are tagged scope:"global" and stay visible under geo filters;
-  // market-specific issues (e.g. a Dubai cannibalization) carry a city.
+  const { filters, isFiltered } = useSnapshot();
+  const [tab, setTab] = useState<TechTab>("all");
   const issues = applyGlobalFilters(useSeoLive(seoAgentApi.getTechnicalIssues, techSeoIssues), filters);
+  const kpis: MinimalKpi[] = [
+    { label: "Total issues", value: String(issues.length) },
+    { label: "Open", value: String(issues.filter((i) => i.status === "Open").length), tone: "warning" },
+    { label: "High severity", value: String(issues.filter((i) => i.severity === "High").length), tone: "danger" },
+    { label: "Resolved", value: String(issues.filter((i) => i.status === "Resolved").length), tone: "success" },
+  ];
+  const tabs: WorkflowTab[] = TECH_LABELS.map((t) => ({
+    id: t.id, label: t.label,
+    count: t.id === "all" ? issues.length : issues.filter((i) => i.status === t.id).length,
+  }));
+  const rows = tab === "all" ? issues : issues.filter((i) => i.status === tab);
   return (
-    <Panel padded={false}>
-      <PanelHeader title="Technical SEO" subtitle="Crawl, cannibalization, decay & internal linking" className="p-4" action={<StatusBadge tone="warning">{issues.filter((t) => t.status !== "Resolved").length} open</StatusBadge>} />
-      <div className="px-4 pb-4">
-        <DataTable columns={techCols} rows={issues} rowKey={(t) => t.issue} onRowLabel={(t) => <StatusBadge tone={techSeoSeverityTone[t.severity]}>{t.severity}</StatusBadge>} empty={noMatchState} />
-      </div>
-    </Panel>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <TabsRow tabs={tabs} value={tab} onChange={(id) => setTab(id as TechTab)} isFiltered={isFiltered} />
+      <DataPreviewTable columns={techCols} rows={rows} rowKey={(t) => t.issue} empty={noMatch} />
+    </div>
   );
 }
 
 /* -------------------------------- Competitors ------------------------------- */
 
+const movementTone: Record<Competitor["movement"], Tone> = { up: "success", down: "danger", flat: "neutral" };
+const movementLabel: Record<Competitor["movement"], string> = { up: "Gaining", down: "Losing", flat: "Steady" };
+const MovementIcon = { up: TrendingUp, down: TrendingDown, flat: Minus };
+
 function CompetitorsSection() {
-  const { filters } = useFilters();
-  const Icon = { up: TrendingUp, down: TrendingDown, flat: Minus };
-  // Domain-wide signals (backlinks/PR) are scope:"global"; ranking/page moves
-  // tied to a market carry a city.
+  const { filters, isFiltered } = useSnapshot();
   const rows = applyGlobalFilters(useSeoLive(seoAgentApi.getCompetitors, competitors), filters);
+  const kpis: MinimalKpi[] = [
+    { label: "Competitors tracked", value: String(rows.length) },
+    { label: "Gaining on us", value: String(rows.filter((c) => c.movement === "up").length), tone: "danger" },
+    { label: "Losing ground", value: String(rows.filter((c) => c.movement === "down").length), tone: "success" },
+  ];
   return (
-    <Panel>
-      <PanelHeader title="Competitor monitor" subtitle="Ranking movement, new pages and backlinks" />
-      {rows.length === 0 ? (
-        noMatchState
-      ) : (
-      <ul className="divide-y divide-border">
-        {rows.map((c) => {
-          const M = Icon[c.movement];
-          return (
-            <li key={c.name} className="flex items-center justify-between gap-3 py-3">
-              <div className="flex items-center gap-3">
-                <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", c.movement === "up" ? "bg-success/12 text-success" : c.movement === "down" ? "bg-danger/12 text-danger" : "bg-ink/8 text-ink-muted")}><M className="h-4 w-4" /></span>
-                <div>
-                  <p className="text-sm font-medium text-ink">{c.name}</p>
-                  <p className="text-xxs text-ink-faint">{c.detail}</p>
-                </div>
-              </div>
-              <span className="whitespace-nowrap font-mono text-xs text-ink-muted">{c.change}</span>
-            </li>
-          );
-        })}
-      </ul>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <div className="flex justify-end"><SnapshotBadge active={isFiltered} label="Global / site-wide" /></div>
+      {rows.length === 0 ? noMatch : (
+        <RecordList>
+          {rows.map((c) => {
+            const Icon = MovementIcon[c.movement];
+            return (
+              <CompactRecordCard
+                key={c.name}
+                title={<span className="inline-flex items-center gap-2"><Icon className="h-4 w-4 text-ink-faint" />{c.name}</span>}
+                status={{ label: movementLabel[c.movement], tone: movementTone[c.movement] }}
+                fields={[
+                  { label: "Change", value: c.change },
+                  { label: "Detail", value: c.detail },
+                ]}
+              />
+            );
+          })}
+        </RecordList>
       )}
-    </Panel>
+    </div>
   );
 }
 
 /* --------------------------------- AI search -------------------------------- */
 
-const aiCols: Column<AiSearchRow>[] = [
+const aiCols: PreviewColumn<AiSearchRow>[] = [
   { key: "query", header: "Query", primary: true, cell: (a) => <span className="text-ink">{a.query}</span> },
-  { key: "presence", header: "Presence", cell: (a) => <StatusBadge tone={aiPresenceTone[a.presence]}>{a.presence}</StatusBadge> },
+  { key: "presence", header: "Presence", cell: (a) => <StatusBadge tone={aiPresenceTone[a.presence]} dot={false}>{a.presence}</StatusBadge> },
   { key: "engine", header: "Engine", cell: (a) => <span className="whitespace-nowrap text-xs text-ink-muted">{a.engine}</span> },
   { key: "opportunity", header: "Opportunity", cell: (a) => <span className="text-xs text-ink-faint">{a.opportunity}</span> },
 ];
 
+type AiTab = "all" | "Cited" | "Mentioned" | "Absent";
+const AI_LABELS: { id: AiTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "Cited", label: "Cited" },
+  { id: "Mentioned", label: "Mentioned" },
+  { id: "Absent", label: "Absent" },
+];
+
 function AiSearchSection() {
-  const { filters } = useFilters();
+  const { filters, isFiltered } = useSnapshot();
+  const [tab, setTab] = useState<AiTab>("all");
   const rows = applyGlobalFilters(useSeoLive(seoAgentApi.getAiSearch, aiSearch), filters);
+  const kpis: MinimalKpi[] = [
+    { label: "Queries tracked", value: String(rows.length) },
+    { label: "Cited", value: String(rows.filter((a) => a.presence === "Cited").length), tone: "success" },
+    { label: "Mentioned", value: String(rows.filter((a) => a.presence === "Mentioned").length), tone: "info" },
+    { label: "Absent", value: String(rows.filter((a) => a.presence === "Absent").length), tone: "warning" },
+  ];
+  const tabs: WorkflowTab[] = AI_LABELS.map((t) => ({
+    id: t.id, label: t.label,
+    count: t.id === "all" ? rows.length : rows.filter((a) => a.presence === t.id).length,
+  }));
+  const filtered = tab === "all" ? rows : rows.filter((a) => a.presence === tab);
   return (
-    <Panel padded={false}>
-      <PanelHeader title="AI search visibility" subtitle="Answer-engine presence & structured content opportunities" className="p-4" action={<StatusBadge tone="warning">{rows.filter((a) => a.presence === "Absent").length} gaps</StatusBadge>} />
-      <div className="px-4 pb-4">
-        <DataTable columns={aiCols} rows={rows} rowKey={(a) => a.query} onRowLabel={(a) => <StatusBadge tone={aiPresenceTone[a.presence]}>{a.presence}</StatusBadge>} empty={noMatchState} />
-      </div>
-    </Panel>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+      <TabsRow tabs={tabs} value={tab} onChange={(id) => setTab(id as AiTab)} isFiltered={isFiltered} />
+      <DataPreviewTable columns={aiCols} rows={filtered} rowKey={(a) => a.query} empty={noMatch} />
+    </div>
   );
 }
 
@@ -429,26 +542,21 @@ function ReportsSection() {
     { name: "Monthly SEO Strategy", freq: "Monthly", summary: "Topical authority progress, hyperlocal coverage and roadmap for next month." },
   ];
   return (
-    <div className="space-y-4">
-      <SnapshotRow label="SEO reports" />
-      <BriefPanel />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {reports.map((r) => (
-          <Panel key={r.name} className="flex flex-col">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h4 className="font-display text-sm font-semibold text-ink">{r.name}</h4>
-                <p className="text-xxs text-ink-faint">{r.freq}</p>
-              </div>
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose/10 text-rose"><FileText className="h-4 w-4" /></span>
-            </div>
-            <p className="mt-3 flex-1 text-xs leading-relaxed text-ink-muted">{r.summary}</p>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button size="sm" variant="ghost">Export</Button>
-              <Button size="sm" variant="primary">View</Button>
-            </div>
-          </Panel>
-        ))}
+    <div className="space-y-6">
+      <BriefCard />
+      <div className="space-y-3">
+        <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">Scheduled reports</p>
+        <RecordList>
+          {reports.map((r) => (
+            <CompactRecordCard
+              key={r.name}
+              title={r.name}
+              status={{ label: r.freq, tone: "neutral" }}
+              fields={[{ label: "Summary", value: r.summary }]}
+              meta={<FileText className="h-4 w-4 text-ink-faint" />}
+            />
+          ))}
+        </RecordList>
       </div>
     </div>
   );

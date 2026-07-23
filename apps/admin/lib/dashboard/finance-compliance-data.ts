@@ -6,6 +6,7 @@
  * adjustments require human approval. Documents are status-only.
  */
 import type { KpiStat, Tone, TimeSeriesPoint, CostLine } from "./types";
+import { paymentRecords, invoices, type PaymentRecord, type Invoice } from "./operations-data";
 
 const spark = (n: number[]) => n;
 
@@ -262,3 +263,27 @@ export const financeActivity: FinanceActivity[] = [
   { id: "fa4", title: "Document expiring soon", detail: "Doha West Bay license · 16 days", time: "2026-07-19T18:00:00Z", tone: "warning" },
   { id: "fa5", title: "Weekly cost export ready", detail: "July cost breakdown · read-only", time: "2026-07-19T16:00:00Z", tone: "info" },
 ];
+
+/* ---------------------- Detail-page getters + slug helpers ------------------ */
+/**
+ * Pure lookups for the click-through detail routes. Payment records and invoices
+ * are read (never mutated) from operations-data; refunds/adjustments are this
+ * section's own approval-gated records. Privacy: callers surface amount, method,
+ * status, order id and area/city only — never card numbers, CVV or bank details.
+ */
+export function getPaymentRecord(orderId: string): PaymentRecord | undefined {
+  return paymentRecords.find((p) => p.orderId === orderId);
+}
+
+export function getRefundAdjustment(id: string): RefundAdjustment | undefined {
+  return refundsAdjustments.find((r) => r.id === id);
+}
+
+export function getInvoice(id: string): Invoice | undefined {
+  return invoices.find((i) => i.id === id);
+}
+
+/** Whether a refund/adjustment can still be actioned (not yet finalised). */
+export function refundIsActionable(approval: RefundAdjustment["approval"]): boolean {
+  return approval === "Approval Required" || approval === "Pending Review";
+}

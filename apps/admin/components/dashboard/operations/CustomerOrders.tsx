@@ -2,24 +2,23 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardList, MapPin } from "lucide-react";
-import { StatGrid } from "@/components/dashboard/ui/StatCard";
+import { ClipboardList } from "lucide-react";
 import { FilterBar } from "@/components/dashboard/shell/FilterBar";
-import { EmptyState, SnapshotBadge } from "@/components/dashboard/ui/states";
 import { useFilters } from "@/components/dashboard/shell/FiltersProvider";
 import { filterOrders, activeFilterCount } from "@/lib/dashboard/filters";
-import { orderStatusTone, paymentTone } from "@/lib/dashboard/status-maps";
+import { orderStatusTone } from "@/lib/dashboard/status-maps";
 import { orders } from "@/lib/dashboard/mock-data";
-import { customerOrdersKpis, nextStepByStatus, orderSla } from "@/lib/dashboard/operations-data";
-import { formatCurrency } from "@/lib/dashboard/formatters";
+import { nextStepByStatus, orderSla } from "@/lib/dashboard/operations-data";
 import type { Order } from "@/lib/dashboard/types";
-import { WorkflowTabs, CardGrid, RecordCard, Badge, maskPhone, type WorkflowTab } from "./workspace/Workspace";
-
-const money = (n: number) => formatCurrency(n);
+import {
+  MinimalKpiStrip, WorkflowTabs, CompactRecordCard, RecordList, EmptyState, StatusBadge,
+  SnapshotBadge, type MinimalKpi, type WorkflowTab,
+} from "@/components/dashboard/minimal";
 
 /* Workflow/status tabs — STATUS filters for the Customer Orders page, NOT
  * navigation to another subsection (that lives only in the sidebar). Clicking a
- * card opens the dedicated full-page detail route, not a drawer. */
+ * card opens the dedicated full-page detail route — never a drawer. Only a light
+ * preview shows here; the detail page carries the full record and all actions. */
 type TabId =
   | "all" | "new" | "active" | "pickup" | "cleaning" | "ready"
   | "out" | "completed" | "cancelled" | "issues";
@@ -38,16 +37,15 @@ const TAB_FILTERS: Record<TabId, (o: Order) => boolean> = {
 };
 
 const TAB_LABELS: { id: TabId; label: string }[] = [
-  { id: "all", label: "All Orders" },
-  { id: "new", label: "New Orders" },
-  { id: "active", label: "Active Orders" },
-  { id: "pickup", label: "Pickup Scheduled" },
+  { id: "all", label: "All" },
+  { id: "active", label: "Active" },
+  { id: "new", label: "New" },
+  { id: "pickup", label: "Pickup" },
   { id: "cleaning", label: "In Cleaning" },
-  { id: "ready", label: "Ready for Delivery" },
+  { id: "ready", label: "Ready" },
   { id: "out", label: "Out for Delivery" },
   { id: "completed", label: "Completed" },
-  { id: "cancelled", label: "Cancelled" },
-  { id: "issues", label: "Issues / Escalations" },
+  { id: "issues", label: "Issues" },
 ];
 
 const isTabId = (v: string | null): v is TabId => !!v && v in TAB_FILTERS;
@@ -62,11 +60,19 @@ export function CustomerOrders() {
   const search = useSearchParams();
   const { filters } = useFilters();
   const initialTab = search.get("tab");
-  const [tab, setTab] = useState<TabId>(isTabId(initialTab) ? initialTab : "all");
+  const [tab, setTab] = useState<TabId>(isTabId(initialTab) ? initialTab : "active");
 
   const base = useMemo(() => filterOrders(orders, filters), [filters]);
   const rows = base.filter(TAB_FILTERS[tab]);
   const isFiltered = activeFilterCount(filters) > 0;
+
+  // Compact, curated KPI row — the deeper metric set lives on the Overview page.
+  const kpis: MinimalKpi[] = [
+    { label: "Active orders", value: String(base.filter(TAB_FILTERS.active).length) },
+    { label: "In cleaning", value: String(base.filter(TAB_FILTERS.cleaning).length) },
+    { label: "Ready for delivery", value: String(base.filter(TAB_FILTERS.ready).length) },
+    { label: "Needs attention", value: String(base.filter(TAB_FILTERS.issues).length), tone: "danger" },
+  ];
 
   const tabs: WorkflowTab[] = TAB_LABELS.map((t) => ({
     id: t.id,
@@ -77,53 +83,43 @@ export function CustomerOrders() {
   const openOrder = (o: Order) => router.push(`/operations/customer-orders/${o.id}?tab=${tab}`);
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">Order center snapshot</p>
+    <div className="space-y-6">
+      <MinimalKpiStrip kpis={kpis} />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <WorkflowTabs tabs={tabs} value={tab} onChange={(id) => setTab(id as TabId)} />
         <SnapshotBadge active={isFiltered} />
       </div>
-      <StatGrid stats={customerOrdersKpis} cols="auto" />
-      <div className="rounded-xl border border-border bg-surface px-3 py-2.5 shadow-card">
+
+      <div className="rounded-xl border border-border/70 bg-surface px-3 py-2.5">
         <FilterBar />
       </div>
-
-      <WorkflowTabs tabs={tabs} value={tab} onChange={(id) => setTab(id as TabId)} />
 
       {rows.length === 0 ? (
         <EmptyState icon={ClipboardList} title="No orders in this view" description="No orders match this status and the active filters." />
       ) : (
-        <CardGrid>
+        <RecordList>
           {rows.map((o) => (
-            <RecordCard
+            <CompactRecordCard
               key={o.id}
               id={o.id}
               title={o.customer}
-              onClick={() => openOrder(o)}
-              badges={
-                <>
-                  <Badge tone={orderStatusTone[o.status]}>{o.status}</Badge>
-                  <Badge tone={paymentTone[o.payment]}>{o.payment}</Badge>
-                </>
-              }
+              status={{ label: o.status, tone: orderStatusTone[o.status] }}
               fields={[
                 { label: "Service", value: o.service },
                 { label: "Items", value: itemsSummary(o) },
                 { label: "Pickup", value: o.pickupSlot },
-                { label: "City / Area", value: <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3 text-ink-faint" />{o.city}</span> },
-                { label: "Facility", value: o.facility || "—" },
-                { label: "Driver", value: o.driver ?? "Unassigned" },
-                { label: "Phone", value: maskPhone(o.phone) },
-                { label: "Amount", value: money(o.amount) },
               ]}
-              footer={
-                <span className="flex items-center justify-between">
-                  <span>Next: {nextStepByStatus[o.status] ?? "—"}</span>
-                  <Badge tone={orderSla(o.status).tone}>{orderSla(o.status).label}</Badge>
+              meta={
+                <span className="flex flex-col items-end gap-1">
+                  <StatusBadge tone={orderSla(o.status).tone} dot={false}>{orderSla(o.status).label}</StatusBadge>
+                  <span className="hidden text-xxs text-ink-faint sm:block">Next: {nextStepByStatus[o.status] ?? "—"}</span>
                 </span>
               }
+              onClick={() => openOrder(o)}
             />
           ))}
-        </CardGrid>
+        </RecordList>
       )}
     </div>
   );
