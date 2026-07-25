@@ -7,8 +7,9 @@ import pytest
 
 from agents.whatsapp_agent.llm_tools import TOOL_SCHEMAS, execute_tool
 from llm import costs, service as llm_service
-from llm.providers.anthropic import DEFAULT_MODEL, AnthropicProvider
+from llm.providers.anthropic import AnthropicProvider
 from llm.providers.base import LLMMessage, LLMProvider, LLMResult
+from settings import DEFAULT_ANTHROPIC_MODEL as DEFAULT_MODEL
 
 
 # --- Scripted fake Anthropic client ----------------------------------------

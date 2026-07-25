@@ -59,6 +59,10 @@ class LLMResult:
     tool_calls: list[ToolCall] = field(default_factory=list)
     # Estimated USD cost of this turn (all API round-trips summed). 0 for mock.
     cost_usd: float = 0.0
+    # Anthropic request id (last round-trip) for support/debugging; None for mock.
+    request_id: str | None = None
+    # Total tool rounds the loop ran (0 for a plain text reply).
+    tool_rounds: int = 0
 
 
 class LLMProvider(ABC):

@@ -35,6 +35,10 @@ async def lifespan(app: FastAPI):
     # vars must be present. mock needs nothing; evolution/meta require only their
     # own vars (blank Meta keys never block evolution/mock, and vice versa).
     get_settings().validate_whatsapp_config()
+    # Fail fast on a misconfigured Anthropic integration (enabled but no key,
+    # empty model, invalid token/timeout config). Never reveals the key. Mock /
+    # OpenAI providers never raise here.
+    get_settings().validate_ai_config()
 
     # In local SQLite mode: create the ORM tables and seed the demo orders
     # (LK-AE-1024..1027) so tracking/cancel/change flows and the dashboard have

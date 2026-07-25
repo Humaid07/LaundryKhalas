@@ -11,6 +11,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # it talks to FastAPI only; FastAPI decides based on WHATSAPP_MODE.
 WHATSAPP_MODES = ("mock", "evolution", "meta")
 
+# Default Anthropic model when neither ANTHROPIC_MODEL nor LLM_MODEL is set. Kept
+# in ONE place (not hardcoded across the codebase) and always overridable via
+# env — do not scatter model ids through the code.
+DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-8"
+
 # Required env vars per mode. mock needs nothing; each live provider requires
 # ONLY its own vars — a blank var for the other provider never causes a failure.
 _WHATSAPP_REQUIRED: dict[str, list[str]] = {
@@ -65,6 +70,27 @@ class Settings(BaseSettings):
     # exact model id (no date suffix) to override, e.g. claude-haiku-4-5 to cut
     # cost on the high-volume WhatsApp path. Never invent a model id.
     llm_model: str = ""
+
+    # --- AI provider (Anthropic) tunables -----------------------------------
+    # AI_PROVIDER / ANTHROPIC_MODEL are the spec-facing names; they fall back to
+    # the legacy LLM_PROVIDER / LLM_MODEL so existing .env files keep working
+    # (see ai_provider / anthropic_model_effective below). The key lives ONLY in
+    # ANTHROPIC_API_KEY and is never echoed in any status/validation output.
+    ai_provider: str = ""            # falls back to llm_provider when blank
+    anthropic_model: str = ""        # falls back to llm_model when blank
+    anthropic_enabled: bool = True   # master kill-switch; false → never call Claude
+    anthropic_tool_use_enabled: bool = True
+    anthropic_log_usage: bool = True
+    # When false (default, production-safe) raw prompts/replies are NOT persisted;
+    # only safe operational metadata (model, tokens, latency, tool names) is.
+    anthropic_store_raw_content: bool = False
+    anthropic_max_tokens: int = 800
+    anthropic_temperature: float = 0.2   # ignored for models that reject sampling params
+    anthropic_timeout_seconds: int = 30
+    anthropic_max_retries: int = 3       # APPLICATION-controlled retries (SDK retries are off)
+    anthropic_max_tool_rounds: int = 5
+    anthropic_history_message_limit: int = 20
+    anthropic_history_character_limit: int = 20000
 
     # Humanized typing indicator (frontend uses these to hold a "typing..."
     # bubble for a natural amount of time before showing the reply). The
@@ -198,14 +224,75 @@ class Settings(BaseSettings):
             if n
         )
 
+    # --- AI provider resolution (spec names → legacy fallback) --------------
+    @property
+    def ai_provider_effective(self) -> str:
+        """The active provider: AI_PROVIDER if set, else legacy LLM_PROVIDER."""
+        return (self.ai_provider or self.llm_provider or "mock").strip().lower()
+
+    @property
+    def anthropic_model_effective(self) -> str:
+        """Resolved Anthropic model id: ANTHROPIC_MODEL → LLM_MODEL → default.
+        Never empty, so the provider always has a valid id (no hardcoding at the
+        call site)."""
+        return (self.anthropic_model or self.llm_model or DEFAULT_ANTHROPIC_MODEL).strip()
+
     @property
     def live_llm_ready(self) -> bool:
-        """True only if a real provider is selected AND its key is present."""
-        if self.llm_provider == "anthropic":
-            return bool(self.anthropic_api_key)
-        if self.llm_provider == "openai":
+        """True only if a real provider is selected AND usable. For Anthropic that
+        means AI_PROVIDER/LLM_PROVIDER=anthropic, ANTHROPIC_ENABLED=true, and a
+        key present. OpenAI keeps its own gate. Nothing goes live otherwise."""
+        provider = self.ai_provider_effective
+        if provider == "anthropic":
+            return self.anthropic_enabled and bool(self.anthropic_api_key)
+        if provider == "openai":
             return bool(self.openai_api_key)
         return False
+
+    @property
+    def ai_status(self) -> dict:
+        """Safe (secret-free) snapshot of the AI integration for health/status
+        endpoints. NEVER includes the API key — only whether one is configured."""
+        provider = self.ai_provider_effective
+        return {
+            "provider": provider,
+            "enabled": self.anthropic_enabled if provider == "anthropic" else False,
+            "configured": bool(self.anthropic_api_key) if provider == "anthropic" else False,
+            "model_configured": bool(self.anthropic_model_effective) if provider == "anthropic" else False,
+            "model": self.anthropic_model_effective if provider == "anthropic" else None,
+            "tool_use_enabled": self.anthropic_tool_use_enabled,
+            "live_ready": self.live_llm_ready,
+        }
+
+    def validate_ai_config(self) -> None:
+        """Fail fast at startup on a misconfigured Anthropic integration, WITHOUT
+        ever revealing the key. Only validates when Anthropic is the active,
+        enabled provider — mock/openai never raise here."""
+        if self.ai_provider_effective != "anthropic" or not self.anthropic_enabled:
+            return
+        if not self.anthropic_api_key:
+            raise ValueError(
+                "Anthropic is enabled (AI_PROVIDER=anthropic, ANTHROPIC_ENABLED=true) "
+                "but ANTHROPIC_API_KEY is not set. Add it to the backend secret "
+                "configuration (never to source control)."
+            )
+        if not self.anthropic_model_effective:
+            raise ValueError("ANTHROPIC_MODEL (or LLM_MODEL) resolves to empty — set a valid model id.")
+        checks = {
+            "ANTHROPIC_MAX_TOKENS": (self.anthropic_max_tokens, 1, 200_000),
+            "ANTHROPIC_TIMEOUT_SECONDS": (self.anthropic_timeout_seconds, 1, 600),
+            "ANTHROPIC_MAX_RETRIES": (self.anthropic_max_retries, 0, 10),
+            "ANTHROPIC_MAX_TOOL_ROUNDS": (self.anthropic_max_tool_rounds, 1, 20),
+            "ANTHROPIC_HISTORY_MESSAGE_LIMIT": (self.anthropic_history_message_limit, 1, 500),
+            "ANTHROPIC_HISTORY_CHARACTER_LIMIT": (self.anthropic_history_character_limit, 100, 500_000),
+        }
+        for name, (value, lo, hi) in checks.items():
+            if not (isinstance(value, int) and lo <= value <= hi):
+                raise ValueError(f"{name} must be an integer in [{lo}, {hi}] (got {value!r}).")
+        if not (0.0 <= float(self.anthropic_temperature) <= 1.0):
+            raise ValueError(
+                f"ANTHROPIC_TEMPERATURE must be in [0.0, 1.0] (got {self.anthropic_temperature!r})."
+            )
 
     @property
     def _whatsapp_required_fields(self) -> list[str]:

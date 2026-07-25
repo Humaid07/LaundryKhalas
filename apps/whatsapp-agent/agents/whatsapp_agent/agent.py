@@ -64,6 +64,21 @@ class AgentReply:
     tool_calls: list[str] = field(default_factory=list)
 
 
+def _windowed_history(
+    history: list[tuple[str, str]], *, message_limit: int, char_limit: int
+) -> list[tuple[str, str]]:
+    """Bound the conversation context sent to the model: keep the most recent
+    `message_limit` turns, then trim oldest-first until under `char_limit`. The
+    structured facts (built separately) carry the durable state, so trimming
+    chat history never loses booking data. Returns oldest-first."""
+    window = history[-message_limit:] if message_limit > 0 else list(history)
+    total = sum(len(c) for _, c in window)
+    while window and total > char_limit:
+        _, dropped = window.pop(0)
+        total -= len(dropped)
+    return window
+
+
 def _build_facts(
     *, intent: str, history: list[tuple[str, str]], text: str
 ) -> tuple[list[str], list[Action]]:
@@ -263,12 +278,17 @@ async def handle_message(
             )
 
     facts, actions = _build_facts(intent=intent, history=history, text=text)
+    settings = get_settings()
 
     messages = [
         LLMMessage(role="system", content=build_system_prompt()),
         LLMMessage(role="system", content=" ".join(facts)),
     ]
-    for role, content in history[-10:]:
+    for role, content in _windowed_history(
+        history,
+        message_limit=settings.anthropic_history_message_limit,
+        char_limit=settings.anthropic_history_character_limit,
+    ):
         messages.append(
             LLMMessage(role="user" if role == "customer" else "assistant", content=content)
         )
@@ -280,9 +300,14 @@ async def handle_message(
     # mock mode (the default / all offline tests) we keep the plain text path —
     # identical behaviour to before. Booking transitions are never reachable
     # from here either way; the FSM owns those.
-    if get_settings().live_llm_ready:
+    if settings.live_llm_ready and settings.anthropic_tool_use_enabled:
         result, latency_ms, success, error_message = await llm_service.complete_with_tools(
-            messages, tools=TOOL_SCHEMAS, executor=execute_tool, max_tokens=400
+            messages, tools=TOOL_SCHEMAS, executor=execute_tool,
+            max_tokens=settings.anthropic_max_tokens,
+        )
+    elif settings.live_llm_ready:
+        result, latency_ms, success, error_message = await llm_service.complete(
+            messages, max_tokens=settings.anthropic_max_tokens
         )
     else:
         result, latency_ms, success, error_message = await llm_service.complete(

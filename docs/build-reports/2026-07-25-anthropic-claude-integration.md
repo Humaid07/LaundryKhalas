@@ -123,6 +123,29 @@ Live smoke output (2026-07-25):
 
 ## 25. Next recommended step
 1. Rotate the exposed API key.
-2. Decide production model tier (`claude-opus-4-8` vs `claude-haiku-4-5`) based on the cost/quality tradeoff.
+2. Decide production model tier (`claude-opus-4-8` vs `claude-sonnet-5` vs `claude-haiku-4-5`) based on the cost/quality tradeoff.
 3. Optionally surface the persisted AI-usage/cost metadata in the Operations dashboard.
 4. Consider running the agent live on WhatsApp (`WHATSAPP_MODE=evolution`, allow-list) to test the full inbound→Claude→outbound loop.
+
+---
+
+## Phase 2 (2026-07-25) — production hardening from the detailed spec
+
+Follow-up increment implementing the safe, high-value gaps from the expanded integration spec, **without** re-architecting the deterministic booking FSM.
+
+**Added / changed**
+- **Config surface + fail-safe startup validation** (`settings.py`): `AI_PROVIDER`, `ANTHROPIC_ENABLED`, `ANTHROPIC_MODEL`, `ANTHROPIC_MAX_TOKENS`, `ANTHROPIC_TEMPERATURE`, `ANTHROPIC_TIMEOUT_SECONDS`, `ANTHROPIC_MAX_RETRIES`, `ANTHROPIC_TOOL_USE_ENABLED`, `ANTHROPIC_LOG_USAGE`, `ANTHROPIC_STORE_RAW_CONTENT`, `ANTHROPIC_MAX_TOOL_ROUNDS`, `ANTHROPIC_HISTORY_MESSAGE_LIMIT`, `ANTHROPIC_HISTORY_CHARACTER_LIMIT`. Spec names fall back to legacy `LLM_PROVIDER`/`LLM_MODEL` (backward compatible). `validate_ai_config()` runs at startup (`main.py` lifespan) and fails safely on enabled-but-no-key / empty model / out-of-range numbers — **never echoing the key**.
+- **Singleton provider/client** (`llm/service.py`): one cached `AnthropicProvider` per (provider, model, key) instead of a new `AsyncAnthropic` per message.
+- **Application-controlled retries** (`llm/providers/anthropic.py`): SDK retries OFF (`max_retries=0`); bounded exponential backoff + jitter with retryable (429/5xx/timeout/connection) vs non-retryable (auth/validation) classification. Configurable via `ANTHROPIC_MAX_RETRIES`.
+- **Safe temperature handling**: temperature is omitted for model families that reject sampling params (Opus 4.6–4.8, Sonnet 5/4.6, Fable/Mythos 5) so a configured temperature can't cause a 400.
+- **Config-driven limits wired into the agent**: history message/char windowing (`_windowed_history`), configured `max_tokens`, and the `ANTHROPIC_TOOL_USE_ENABLED` toggle (falls back to plain completion when off).
+- **`request_id` + `tool_rounds`** captured on `LLMResult` (normalized result for support/debugging).
+- **`GET /health/ai`** (`api/health.py`): safe readiness (provider/enabled/configured/model/tool_use/live_ready) — **no key, no billed call**.
+- **`scripts/test_anthropic.py`**: protected connectivity smoke test — validates config, sends one minimal real request, prints model/latency/tokens/request_id, redacts the key from any error, exits non-zero on failure. Verified live (`req_011CdNQ…`, exit 0).
+
+**Tests:** +16 (`test_ai_config.py`, `test_anthropic_retry.py`, `test_health_ai.py`). **451 passed**, 0 failures. Suite still hermetic (mock).
+
+**Consciously deferred (see "Architectural decision" below):** Claude-orchestrated booking via write tools (`save_*`), a dedicated `llm_usage_events` table + migration (currently persisted to `messages.metadata`), conversation-summary compaction, per-conversation locking / `workflow_version`, admin AI settings UI, multi-model routing, and moving the AI turn to a background worker. These are larger and/or would touch the working deterministic FSM; they were not built to honour "smallest safe version / do not overbuild."
+
+### Architectural decision required — booking orchestration
+The spec's write-tool list (`save_pickup_date`, `save_service_selection`, `confirm_order`, …) implies **Claude drives the booking** by requesting tools the backend validates/executes. The current, working design keeps **booking fully deterministic** (`services/booking_flow.py` FSM, no LLM) and uses Claude only on the **non-booking** path with **read-only** grounded tools. Both satisfy "the backend validates and the DB is authoritative", but they are different architectures. Recommendation: keep the deterministic FSM (lower regression risk; it already satisfies DoD items 13–16) and expand Claude's read-only NLU role — unless the owner wants Claude to orchestrate booking via write tools, which is a larger, separately-scoped change.

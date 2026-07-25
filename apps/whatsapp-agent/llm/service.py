@@ -11,17 +11,38 @@ from settings import get_settings
 
 _mock = MockProvider()
 
+# One reusable provider instance per (provider, model, key) — building a new
+# AsyncAnthropic client for every WhatsApp message is wasteful. Rebuilt only
+# when the resolved config actually changes (e.g. after a settings reload).
+_provider_cache: dict[tuple, LLMProvider] = {}
+
 
 def _select_provider() -> LLMProvider:
     settings = get_settings()
     if not settings.live_llm_ready:
         return _mock
 
-    if settings.llm_provider == "anthropic":
-        from llm.providers.anthropic import AnthropicProvider
+    provider = settings.ai_provider_effective
+    if provider == "anthropic":
+        model = settings.anthropic_model_effective
+        cache_key = ("anthropic", model, settings.anthropic_api_key)
+        cached = _provider_cache.get(cache_key)
+        if cached is None:
+            from llm.providers.anthropic import AnthropicProvider
 
-        return AnthropicProvider(settings.anthropic_api_key, settings.llm_model)
-    if settings.llm_provider == "openai":
+            cached = AnthropicProvider(
+                settings.anthropic_api_key,
+                model,
+                timeout_seconds=settings.anthropic_timeout_seconds,
+                max_retries=settings.anthropic_max_retries,
+                max_tool_rounds=settings.anthropic_max_tool_rounds,
+                max_tokens=settings.anthropic_max_tokens,
+                temperature=settings.anthropic_temperature,
+            )
+            _provider_cache.clear()  # only the current config needs caching
+            _provider_cache[cache_key] = cached
+        return cached
+    if provider == "openai":
         from llm.providers.openai import OpenAIProvider
 
         return OpenAIProvider(settings.openai_api_key, settings.llm_model)
