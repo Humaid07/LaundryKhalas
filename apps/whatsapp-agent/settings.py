@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     anthropic_max_tool_rounds: int = 5
     anthropic_history_message_limit: int = 20
     anthropic_history_character_limit: int = 20000
+    # Let Claude ORCHESTRATE the booking via controlled write-tools (save_*/
+    # confirm_order) instead of the deterministic FSM. SAFE DEFAULT = false: the
+    # proven deterministic booking flow stays the live path unless explicitly
+    # enabled AND a live Claude provider is configured. The backend still
+    # validates + persists every write either way.
+    anthropic_booking_orchestration: bool = False
 
     # Humanized typing indicator (frontend uses these to hold a "typing..."
     # bubble for a natural amount of time before showing the reply). The

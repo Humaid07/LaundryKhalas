@@ -149,3 +149,26 @@ Follow-up increment implementing the safe, high-value gaps from the expanded int
 
 ### Architectural decision required — booking orchestration
 The spec's write-tool list (`save_pickup_date`, `save_service_selection`, `confirm_order`, …) implies **Claude drives the booking** by requesting tools the backend validates/executes. The current, working design keeps **booking fully deterministic** (`services/booking_flow.py` FSM, no LLM) and uses Claude only on the **non-booking** path with **read-only** grounded tools. Both satisfy "the backend validates and the DB is authoritative", but they are different architectures. Recommendation: keep the deterministic FSM (lower regression risk; it already satisfies DoD items 13–16) and expand Claude's read-only NLU role — unless the owner wants Claude to orchestrate booking via write tools, which is a larger, separately-scoped change.
+
+---
+
+## Phase 3 (2026-07-25) — Claude-orchestrated booking via controlled write-tools
+
+**Decision:** the owner chose to have **Claude orchestrate the booking via write-tools** (not the read-only-only design). Built accordingly, behind a default-off flag so the proven deterministic FSM stays the live path until explicitly switched.
+
+**Added**
+- `agents/whatsapp_agent/booking_tools.py`:
+  - **Structured workflow-state block** (`workflow_state_block`) loaded from the DB each turn (spec §7); internal UUIDs never exposed, `missing_fields`/`ready_to_confirm` derived by the backend.
+  - **15 controlled write/read tools** (`get_current_workflow`, `list_service_categories`, `list_service_items`, `save_customer_name`, `save_service_selection`, `save_order_item`, `save_pickup_date`, `save_pickup_time`, `save_pickup_address`, `save_special_instructions`, `get_order_summary`, `confirm_order`, `get_order_status`, `request_human_support`). **No unrestricted tool** — no SQL/arbitrary-update surface.
+  - Every tool **reuses the existing deterministic validators** (`booking_flow.resolve_service/resolve_item/parse_pickup_date/resolve_slot/validate_name`, `pricing`/`catalogue`) and **persists via the existing `orders_repo`** (column-whitelisted, idempotent `confirm_booking`). Validation can't drift from the FSM.
+  - **Conversation ownership by construction**: the `BookingContext` is bound to one `conversation_id`/`order_uuid`; a tool can never touch another customer's order. Persistence is injected (`repo`) so the whole layer is offline-testable.
+  - `confirm_order` is **guarded** (rejects with `missing_fields` if anything's incomplete — the injection defense: even if the model is told "just confirm", the backend refuses) and **idempotent** (a duplicate confirm reports the existing order, no second side effect).
+  - `run_booking_turn()` — the orchestration turn: loads state, gives Claude the write-tools, runs the tool loop; safe mock fallback on failure preserves workflow state.
+- `settings.py`: `ANTHROPIC_BOOKING_ORCHESTRATION` flag (default **false**) + `.env.example`.
+- `api/evolution_webhooks.py`: a **flag-gated branch** that routes booking through `run_booking_turn` when enabled AND a live Claude provider is configured — after the existing access/idempotency/takeover gates. Default off → deterministic FSM unchanged.
+
+**Tests:** +8 (`tests/test_booking_tools.py`) — full booking via tools, idempotent + guarded confirm, invalid/unknown/out-of-order rejection, past-date/invalid-name rejection, state-block privacy, and a scripted-provider end-to-end orchestration turn. **459 passed**, 0 failures.
+
+**Verified live** (real API, in-memory repo): Claude drove a complete 5-message booking — name → Wash & Fold → 3 shirts (backend-priced **AED 28.35** = 27 + 5% VAT) → tomorrow 9am–12pm → Dubai Marina → confirm — landing `pickup_scheduled` with `confirm_booking` called exactly once. The price/VAT/area/date were all backend-computed, never model-invented.
+
+**Remaining (next):** flip `ANTHROPIC_BOOKING_ORCHESTRATION=true` on staging for live WhatsApp acceptance (§31); reduce occasional redundant `save_pickup_time` retries via a tighter prompt; per-conversation locking / `workflow_version` for concurrent messages (§20); optional dedicated `llm_usage_events` table (§23/§27). The deterministic FSM remains the safe default until staging acceptance passes.

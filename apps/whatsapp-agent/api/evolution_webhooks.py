@@ -28,6 +28,7 @@ import structlog
 from fastapi import APIRouter, Request
 
 from agents.whatsapp_agent.agent import handle_message
+from agents.whatsapp_agent.booking_tools import BookingContext, run_booking_turn
 from channels.evolution_whatsapp import EvolutionWhatsAppChannel, parse_evolution_webhook
 from db import database
 from db.repositories import (
@@ -348,6 +349,29 @@ async def receive_evolution_webhook(request: Request):
 
         def _booking(row):
             return _booking_from_row(row, profile_name=profile_name, verified_name=verified_name)
+
+        # --- Optional: Claude-orchestrated booking (feature-flagged, default OFF) ---
+        # When ANTHROPIC_BOOKING_ORCHESTRATION=true AND a live Claude provider is
+        # configured, Claude drives the booking via controlled write-tools; the
+        # backend still validates + persists every field (booking_tools.py). Default
+        # off → the proven deterministic FSM below stays the live path. Same access,
+        # idempotency and takeover gates already ran above before we get here.
+        if settings.anthropic_booking_orchestration and settings.live_llm_ready:
+            booking_row = active_draft or await orders_repo.start_booking(convo["id"], customer)
+            ctx = BookingContext(
+                conversation_id=convo["id"], order_uuid=booking_row["id"], repo=orders_repo,
+                today=_today(), available_slots=slots_repo.available_slots, customer=customer,
+                profile_name=profile_name, verified_name=verified_name)
+            reply_text, _ = await run_booking_turn(ctx, text=text)
+            if live:
+                fresh = await orders_repo.get_active_draft(convo["id"])
+                await _deliver(channel, msg["phone"], convo["id"], booking_flow.BookingReply(
+                    text=reply_text,
+                    state=(fresh or booking_row).get("conversation_state")
+                    or booking_flow.WAITING_FOR_SERVICE))
+            logger.info("booking_orchestrated", sender=masked, order=booking_row["order_id"])
+            processed += 1
+            continue
 
         if draft_state in booking_flow.ACTIVE_STATES:
             booking_row = active_draft
