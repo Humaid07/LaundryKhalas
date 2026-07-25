@@ -470,9 +470,21 @@ async def receive_evolution_webhook(request: Request):
             try:
                 await EvolutionWhatsAppChannel.from_settings().send_text(
                     to_phone=msg["phone"], text=agent_reply.text)
-                await messages_repo.add_message(convo["id"], "agent", agent_reply.text,
-                                                status="sent", metadata={"intent": decision.intent})
-                logger.info("evolution_auto_reply_sent", sender=masked)
+                await messages_repo.add_message(
+                    convo["id"], "agent", agent_reply.text, status="sent",
+                    metadata={
+                        "intent": decision.intent,
+                        "provider": agent_reply.provider,
+                        "model": agent_reply.model,
+                        "tokens_in": agent_reply.tokens_in,
+                        "tokens_out": agent_reply.tokens_out,
+                        "cost_usd": agent_reply.cost_usd,
+                        "tool_calls": agent_reply.tool_calls,
+                    })
+                logger.info("evolution_auto_reply_sent", sender=masked,
+                            provider=agent_reply.provider, model=agent_reply.model,
+                            tokens_in=agent_reply.tokens_in, tokens_out=agent_reply.tokens_out,
+                            cost_usd=agent_reply.cost_usd, tool_calls=agent_reply.tool_calls)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("evolution_auto_reply_failed", sender=masked, error=str(exc))
         else:

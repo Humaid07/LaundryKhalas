@@ -46,6 +46,19 @@ Agent Fleet. Architecture: [[seo-agent-system]] · dashboard contract:
 
 ## Latest Build Report
 
+[[2026-07-25-anthropic-claude-integration]] —
+`build-reports/2026-07-25-anthropic-claude-integration.md` — **WhatsApp agent connected to
+Anthropic Claude (tool-use)**: the existing `AnthropicProvider` now runs a grounded agentic
+tool loop — Claude answers non-booking questions (pricing / turnaround / area) by calling
+backend-validated, read-only tools over the deterministic catalogue/pricing/SLA/gazetteer
+engines (`llm_tools.py`), never inventing data. Adds prompt caching, token + estimated-cost
+tracking (`llm/costs.py`, persisted to `messages.metadata`), and keeps mock-first defaults
+(nothing live unless `LLM_PROVIDER=anthropic` + key). Booking FSM, escalation, allow-list and
+domain guard unchanged. 435 tests pass (+21); verified live against the real API. See also
+[[2026-07-23-delivery-sla-engine]] and [[2026-07-23-service-catalogue-pricing]].
+
+## Earlier Build Report
+
 [[2026-07-23-service-catalogue-pricing]] —
 `build-reports/2026-07-23-service-catalogue-pricing.md` — **Item-level service catalogue,
 pricing engine & agent item collection**: the real Laundry Khalas price list (9 categories,

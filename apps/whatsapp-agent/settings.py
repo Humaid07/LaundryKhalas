@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     llm_provider: str = "mock"  # mock | anthropic | openai
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    # Blank → each provider's own default (Anthropic: claude-opus-4-8). Set an
+    # exact model id (no date suffix) to override, e.g. claude-haiku-4-5 to cut
+    # cost on the high-volume WhatsApp path. Never invent a model id.
     llm_model: str = ""
 
     # Humanized typing indicator (frontend uses these to hold a "typing..."

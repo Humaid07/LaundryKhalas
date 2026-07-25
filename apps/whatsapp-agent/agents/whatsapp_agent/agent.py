@@ -19,12 +19,14 @@ from agents.whatsapp_agent.actions import (
     actions_by_ids,
     resolve_intent_override,
 )
+from agents.whatsapp_agent.llm_tools import TOOL_SCHEMAS, execute_tool
 from agents.whatsapp_agent.prompts import build_system_prompt
 from llm import service as llm_service
 from llm.providers.base import LLMMessage
 from rules import escalation_rules
 from services.domain_guard import REFUSAL_MESSAGE, Domain, classify
 from services.escalation import detect_escalation
+from settings import get_settings
 
 _SMALLTALK_INTENTS = {"greeting", "smalltalk_thanks", "smalltalk_farewell"}
 _ORDER_FLOW_INTENTS = {"track_order_request", "cancel_order_request", "change_pickup_time_request"}
@@ -54,6 +56,12 @@ class AgentReply:
     # Set when this turn created or touched an order behind the scenes.
     order_id: str | None = None
     order_status: str | None = None
+    # LLM usage/cost for this turn (0 for deterministic/mock replies). Persisted
+    # as message metadata so spend and tool calls are auditable (CLAUDE.md §11).
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cost_usd: float = 0.0
+    tool_calls: list[str] = field(default_factory=list)
 
 
 def _build_facts(
@@ -266,9 +274,20 @@ async def handle_message(
         )
     messages.append(LLMMessage(role="user", content=text))
 
-    result, latency_ms, success, error_message = await llm_service.complete(
-        messages, max_tokens=200
-    )
+    # When a real Claude provider is configured, run the tool-enabled turn so
+    # the model can answer with GROUNDED figures (pricing/turnaround/coverage)
+    # pulled from the deterministic engines via validated backend tools. In
+    # mock mode (the default / all offline tests) we keep the plain text path —
+    # identical behaviour to before. Booking transitions are never reachable
+    # from here either way; the FSM owns those.
+    if get_settings().live_llm_ready:
+        result, latency_ms, success, error_message = await llm_service.complete_with_tools(
+            messages, tools=TOOL_SCHEMAS, executor=execute_tool, max_tokens=400
+        )
+    else:
+        result, latency_ms, success, error_message = await llm_service.complete(
+            messages, max_tokens=200
+        )
 
     reply_domain = domain.value if domain is Domain.IN_DOMAIN else Domain.UNCERTAIN.value
     return AgentReply(
@@ -281,4 +300,8 @@ async def handle_message(
         latency_ms=latency_ms,
         error_message=error_message,
         actions=actions,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost_usd,
+        tool_calls=[tc.name for tc in result.tool_calls],
     )
