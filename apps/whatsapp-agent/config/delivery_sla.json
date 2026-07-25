@@ -1,0 +1,30 @@
+{
+  "_note": "Delivery SLA / turnaround rules for Laundry Khalas (task spec §§23-25). DB-driven: scripts/seed_delivery_sla.py imports this into the `delivery_sla_rules` table (runtime source of truth); services/delivery.py reads the DB (JSON fallback) and computes each item's turnaround, Express eligibility and the order-level delivery estimate. Rules are matched most-specific-first: an item-level rule (item_codes) overrides its category default. `day_type` is CALENDAR by default (see meta.day_type) — whether 'days' means calendar or working days is a BUSINESS DECISION kept configurable here, NOT buried in the LLM prompt. Express = 12h, eligible ONLY for Wash & Fold / Clean & Press / Press Only; the Express surcharge is intentionally NULL (not invented — the business must configure express_surcharge_aed before it is charged).",
+  "meta": {
+    "timezone": "Asia/Dubai",
+    "day_type": "CALENDAR",
+    "express_hours": 12,
+    "express_surcharge_aed": null,
+    "express_eligible_categories": ["WASH_FOLD", "CLEAN_PRESS", "PRESS_ONLY"],
+    "source": "Laundry Khalas standard turnaround rules (task spec §23)",
+    "verified_at": "2026-07-23"
+  },
+  "rules": [
+    {"code": "SLA_WASH_FOLD", "match": {"category_code": "WASH_FOLD"}, "min_hours": 24, "max_hours": 24, "day_type": "CALENDAR", "express_eligible": true, "priority": 10, "display_text": "24 hours"},
+    {"code": "SLA_CLEAN_PRESS", "match": {"category_code": "CLEAN_PRESS"}, "min_hours": 24, "max_hours": 24, "day_type": "CALENDAR", "express_eligible": true, "priority": 10, "display_text": "24 hours"},
+    {"code": "SLA_PRESS_ONLY", "match": {"category_code": "PRESS_ONLY"}, "min_hours": 24, "max_hours": 24, "day_type": "CALENDAR", "express_eligible": true, "priority": 10, "display_text": "24 hours"},
+    {"code": "SLA_HOME_CARE_DEFAULT", "match": {"category_code": "HOME_CARE"}, "min_hours": 24, "max_hours": 24, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "24 hours"},
+    {"code": "SLA_SOFT_TOY_DEFAULT", "match": {"category_code": "SOFT_TOY"}, "min_hours": 24, "max_hours": 24, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "24 hours"},
+    {"code": "SLA_SHOE_CARE", "match": {"category_code": "SHOE_CARE"}, "min_hours": 48, "max_hours": 72, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "2–3 days"},
+    {"code": "SLA_BAG_CARE", "match": {"category_code": "BAG_CARE"}, "min_hours": 48, "max_hours": 72, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "2–3 days"},
+    {"code": "SLA_ALTERATIONS", "match": {"category_code": "ALTERATIONS"}, "min_hours": 48, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "2 days"},
+    {"code": "SLA_RESTORATION", "match": {"category_code": "RESTORATION"}, "min_hours": 48, "max_hours": 72, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "2–3 days"},
+
+    {"code": "SLA_CARPET", "match": {"item_codes": ["HOME_CARE_CARPET_REGULAR_SQM", "HOME_CARE_CARPET_WOOL_SQM"]}, "min_hours": 72, "max_hours": 96, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "3–4 days"},
+    {"code": "SLA_SOFA_COVER", "match": {"item_codes": ["HOME_CARE_SOFA_COVER_REGULAR", "HOME_CARE_SOFA_COVER_LARGE"]}, "min_hours": 24, "max_hours": 24, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "24 hours"},
+    {"code": "SLA_DUVET_BLANKET", "match": {"item_codes": ["HOME_CARE_DUVET", "HOME_CARE_COMFORTER", "HOME_CARE_COMFORTER_COVER", "HOME_CARE_BLANKET", "HOME_CARE_BLANKET_LARGE"]}, "min_hours": 24, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "1–2 days"},
+    {"code": "SLA_MASCOT", "match": {"item_codes": ["SOFT_TOY_MASCOT"]}, "min_hours": 48, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "2 days"},
+    {"code": "SLA_WEDDING_EVENING_DRESS", "match": {"item_codes": ["CLEAN_PRESS_DRESS_EVENING"]}, "min_hours": 24, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "1–2 days"}
+  ],
+  "default_rule": {"code": "SLA_DEFAULT", "min_hours": 24, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 0, "display_text": "1–2 days"}
+}
