@@ -296,19 +296,18 @@ def category_options() -> list[dict]:
 
 
 def item_price_label(item: dict) -> str:
-    """Short price string for an interactive list row / quote line, e.g.
-    'AED 9 per item', 'From AED 50 per pair', 'AED 20 per sqm'."""
+    """Short price string for an interactive list row / quote line, showing the
+    FINAL customer price (5% already included), e.g. 'AED 63 per bag',
+    'From AED 52.50 per pair'. Never mentions VAT/tax (task spec §§11/17/45)."""
+    from services import money as _money
+
     unit = (item.get("pricing_unit") or "ITEM").lower()
     unit_word = {"item": "item", "pair": "pair", "bag": "bag", "kg": "kg",
                  "sqm": "sqm"}.get(unit, unit)
     price = item.get("current_price")
     if price is None:
         return "Priced after inspection"
-    money = _fmt_money(price)
+    final = _money.final_unit_price(
+        price, vat_rate=vat_rate(), prices_include_vat=prices_include_vat())
     prefix = "From " if item.get("is_starting_price") else ""
-    return f"{prefix}AED {money} per {unit_word}"
-
-
-def _fmt_money(v: float) -> str:
-    v = float(v)
-    return str(int(v)) if v == int(v) else f"{v:.2f}"
+    return f"{prefix}AED {_money.format_money(final)} per {unit_word}"

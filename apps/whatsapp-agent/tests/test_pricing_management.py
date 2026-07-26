@@ -101,7 +101,10 @@ async def test_public_catalogue_reflects_publish_and_hides_internal(client):
     assert r.status_code == 200
     body = r.json()
     item = next(i for i in body["items"] if i["item_code"] == code)
-    assert item["display_price"] == 777.0
+    # Public API returns the FINAL customer price (777 × 1.05 = 815.85) and no
+    # VAT/tax wording (task §§17/26).
+    assert item["display_price"] == 815.85
+    assert "vat_note" not in item
     assert "internal_note" not in item and "id" not in item  # §12/§27
 
 
@@ -277,13 +280,16 @@ async def test_calculate_estimate_uses_published_overrides():
         await s.commit()
         code = _exact_code()
         base_item = cat.item_by_code(code)
-        # No override → static catalogue price.
+        # No override → static catalogue price. subtotal_excluding_vat is the
+        # internal net (final_total / 1.05); for an exact line that equals base×qty.
         q0 = pricing.calculate_estimate([{"item_code": code, "quantity": 2}])
-        assert q0.subtotal_excluding_vat == pricing._round(base_item["current_price"] * 2)
-        # Override (as the published resolver would supply) → new price used.
+        assert q0.subtotal_excluding_vat == round(base_item["current_price"] * 2, 2)
+        # Override (as the published resolver would supply) → new price used. The
+        # final customer total is 100 × 1.05 × 2 = 210; the net is 200.
         q1 = pricing.calculate_estimate([{"item_code": code, "quantity": 2}],
                                         price_overrides={code: 100.0})
         assert q1.subtotal_excluding_vat == 200.0
+        assert q1.customer_total == 210.0
         # And the resolver produces such an override map from the published version.
         await _publish_price_change(s, code, 100.0)
         overrides = await resolver.published_overrides(s)

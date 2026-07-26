@@ -4,7 +4,7 @@ import {
   User, Sparkles, CalendarClock, Truck, CreditCard, Wallet, Coins, Building2, Radio,
   type LucideIcon,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/dashboard/formatters";
+import { formatMoney } from "@/lib/dashboard/formatters";
 import { deliverySlotLabel, type OrderWithPricing } from "./data";
 
 /**
@@ -26,13 +26,13 @@ function Pill({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
 }
 
 export function OrderSummaryStrip({ order }: { order: OrderWithPricing }) {
-  // Prefer the catalogue-priced total when present; label it "Est. total" so an
-  // estimate is never read as a guaranteed amount. Falls back to `amount`.
+  // Prefer the catalogue-priced final total when present; label it "Est. total"
+  // so an estimate is never read as a guaranteed amount. Falls back to `amount`.
   const pricing = order.pricing;
   const amountValue =
-    pricing?.estimated_total_including_vat != null
-      ? formatCurrency(pricing.estimated_total_including_vat, pricing.currency)
-      : formatCurrency(order.amount);
+    pricing?.final_price != null
+      ? formatMoney(pricing.final_price, pricing.currency)
+      : formatMoney(order.amount);
   const amountLabel = pricing?.is_estimated ? "Est. total" : "Amount";
 
   const pills: { icon: LucideIcon; label: string; value: string }[] = [

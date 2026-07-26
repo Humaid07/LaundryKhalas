@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request, Response
 
 from db import AsyncSessionLocal, database
 from services import catalogue as cat
+from services import money
 from services import price_resolver as resolver
 
 router = APIRouter(prefix="/api/public/pricing", tags=["public-pricing"])
@@ -17,7 +18,18 @@ router = APIRouter(prefix="/api/public/pricing", tags=["public-pricing"])
 
 def _json_fallback(market: str) -> dict:
     """No published version yet (fresh DB) → serve the seeded base catalogue,
-    public projection. Never invents a price; starting/inspection stay flagged."""
+    public projection. All prices are FINAL customer prices (5% already
+    included, computed once via services.money) and NO VAT/tax wording is
+    exposed (task §§17/26). Never invents a price; starting/inspection stay
+    flagged."""
+    vat_rate = cat.vat_rate()
+    incl = cat.prices_include_vat()
+
+    def _final(price):
+        if price is None:
+            return None
+        return float(money.final_unit_price(price, vat_rate=vat_rate, prices_include_vat=incl))
+
     items = []
     for rec in cat.all_items():
         if not rec.get("active", True):
@@ -28,15 +40,15 @@ def _json_fallback(market: str) -> dict:
             "item_code": rec.get("item_code"),
             "name": rec.get("display_name") or rec.get("name"),
             "description": rec.get("description"),
-            "display_price": rec.get("current_price"),
-            "regular_price": rec.get("regular_price"),
+            "display_price": _final(rec.get("current_price")),
+            "regular_price": _final(rec.get("regular_price")),
             "promotion_price": None,
             "pricing_unit": rec.get("pricing_unit"),
             "is_starting_price": rec.get("is_starting_price"),
             "requires_inspection": rec.get("requires_inspection"),
             "promotion_label": None,
             "currency": rec.get("currency", "AED"),
-            "vat_note": "Prices exclude 5% VAT." if not cat.prices_include_vat() else "Prices include 5% VAT.",
+            "price_note": "Final price.",
         })
     items.sort(key=lambda r: (r.get("category_code") or "", r.get("name") or ""))
     return {"catalogue_version": None, "market": market, "items": items, "source": "base"}

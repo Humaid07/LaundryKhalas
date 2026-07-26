@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/dashboard/ui/primitives";
 import { Button } from "@/components/dashboard/ui/Button";
 import { orderStatusTone, paymentTone, convStatusTone } from "@/lib/dashboard/status-maps";
 import { qualityTone } from "@/lib/dashboard/operations-data";
-import { formatCurrency, formatRelativeTime, maskPhone } from "@/lib/dashboard/formatters";
+import { formatMoney, formatRelativeTime, maskPhone } from "@/lib/dashboard/formatters";
 import type { Order } from "@/lib/dashboard/types";
 import { SectionCard, Field, FieldGrid, Chip } from "./primitives";
 import {
@@ -102,28 +102,21 @@ export function CustomerSnapshotCard({ order }: { order: Order }) {
 export function PaymentSnapshotCard({ order }: { order: OrderWithPricing }) {
   const pending = pendingAmount(order);
   const refundRelevant = order.payment === "Refunded" || order.status === "Concern Raised";
-  // Catalogue pricing (when present) drives the total + its label so an estimate
-  // is never shown as a firm, VAT-exclusive figure. Falls back to `amount`.
+  // Catalogue pricing (when present) drives the customer-facing total + its label
+  // so an estimate is never read as a firm amount. Falls back to `amount`.
   const pricing = order.pricing;
-  const totalLabel = pricing ? (pricing.is_estimated ? "Estimated total (incl. VAT)" : "Total (incl. VAT)") : "Total amount";
+  const totalLabel = pricing ? (pricing.is_estimated ? "Estimated total" : "Total") : "Total amount";
   const totalValue =
-    pricing?.estimated_total_including_vat != null
-      ? formatCurrency(pricing.estimated_total_including_vat, pricing.currency)
-      : formatCurrency(order.amount);
-  const vatPct = pricing ? Math.round(pricing.vat_rate * 100) : 5;
+    pricing?.final_price != null
+      ? formatMoney(pricing.final_price, pricing.currency)
+      : formatMoney(order.amount);
   return (
     <SectionCard title="Payment" icon={CreditCard}>
       <FieldGrid>
         <Field label="Status" value={<StatusBadge tone={paymentTone[order.payment]}>{order.payment}</StatusBadge>} />
         <Field label="Method" value={order.channel === "B2B" ? "Invoice" : "Card / Pay on delivery"} />
-        {pricing && (
-          <>
-            <Field label="Subtotal (excl. VAT)" value={pricing.subtotal_excluding_vat != null ? formatCurrency(pricing.subtotal_excluding_vat, pricing.currency) : "—"} />
-            <Field label={`VAT (${vatPct}%)`} value={pricing.vat_amount != null ? formatCurrency(pricing.vat_amount, pricing.currency) : "—"} />
-          </>
-        )}
         <Field label={totalLabel} value={<span className="text-base font-semibold">{totalValue}</span>} />
-        <Field label="Pending" value={pending > 0 ? formatCurrency(pending) : "None"} />
+        <Field label="Pending" value={pending > 0 ? formatMoney(pending) : "None"} />
         {order.channel === "B2B" && <Field label="Invoice" value={order.payment === "Paid" ? "Settled" : "Sent — awaiting payment"} />}
         {refundRelevant && <Field label="Refund" value={order.payment === "Refunded" ? "Refund issued" : "Under review"} />}
       </FieldGrid>

@@ -1,6 +1,6 @@
 "use client";
 
-import { formatCurrency } from "@/lib/dashboard/formatters";
+import { formatMoney } from "@/lib/dashboard/formatters";
 import type { LineItemDTO } from "@/lib/dashboard/whatsapp-agent-api";
 import { itemCount, type OrderWithPricing } from "./data";
 import { Chip } from "./primitives";
@@ -22,8 +22,9 @@ function unitLabel(unit: string): string {
  * Itemized service breakdown.
  *
  * When the order carries backend catalogue pricing (`line_items`), it renders a
- * priced table + a VAT-aware summary. Otherwise it falls back to the original
- * item / quantity / category view with no invented per-line pricing.
+ * priced table + a final-total summary (customer-facing amounts, tax already
+ * included). Otherwise it falls back to the original item / quantity / category
+ * view with no invented per-line pricing.
  */
 export function OrderItemsTable({ order }: { order: OrderWithPricing }) {
   const lineItems = order.line_items;
@@ -80,11 +81,11 @@ function UnitPriceCell({ line, currency }: { line: LineItemDTO; currency: string
     <div className="flex flex-col items-end gap-1">
       <span className="inline-flex items-baseline gap-1.5">
         {showStrike && (
-          <span className="text-xxs text-ink-faint line-through">{formatCurrency(line.regular_price as number, currency)}</span>
+          <span className="text-xxs text-ink-faint line-through">{formatMoney(line.regular_price as number, currency)}</span>
         )}
         <span className="font-mono text-ink tnum">
           {line.is_starting_price && <span className="mr-0.5 text-ink-muted">From </span>}
-          {formatCurrency(line.unit_price, currency)}
+          {formatMoney(line.unit_price, currency)}
         </span>
       </span>
       <span className="text-xxs text-ink-faint">{unitLabel(line.pricing_unit)}</span>
@@ -95,7 +96,7 @@ function UnitPriceCell({ line, currency }: { line: LineItemDTO; currency: string
 
 function LineTotalCell({ line, currency }: { line: LineItemDTO; currency: string }) {
   if (line.line_total != null) {
-    return <span className="font-mono font-medium text-ink tnum">{formatCurrency(line.line_total, currency)}</span>;
+    return <span className="font-mono font-medium text-ink tnum">{formatMoney(line.line_total, currency)}</span>;
   }
   if (line.line_kind === "pending") {
     return <span className="text-xs text-ink-faint">Pending inspection</span>;
@@ -115,11 +116,10 @@ function SummaryRow({ label, value, strong }: { label: string; value: string; st
 function PricedItemsTable({ order, lineItems }: { order: OrderWithPricing; lineItems: LineItemDTO[] }) {
   const pricing = order.pricing;
   const currency = pricing?.currency ?? "AED";
-  const vatPct = pricing ? Math.round(pricing.vat_rate * 100) : 5;
   const anyPending = lineItems.some((l) => l.line_kind === "pending" || l.line_total == null);
   const pendingNote = (pricing?.has_pending_inspection ?? false) || anyPending;
 
-  const money = (v: number | null | undefined) => (v != null ? formatCurrency(v, currency) : "—");
+  const money = (v: number | null | undefined) => (v != null ? formatMoney(v, currency) : "—");
 
   return (
     <div className="space-y-3">
@@ -160,15 +160,11 @@ function PricedItemsTable({ order, lineItems }: { order: OrderWithPricing; lineI
 
       {pricing && (
         <div className="overflow-hidden rounded-xl border border-border/70 bg-surface-2/40">
-          <SummaryRow label="Subtotal (excl. VAT)" value={money(pricing.subtotal_excluding_vat)} />
-          <SummaryRow label={`VAT (${vatPct}%)`} value={money(pricing.vat_amount)} />
-          <div className="border-t border-border/60">
-            <SummaryRow
-              label={pricing.is_estimated ? "Estimated total (incl. VAT)" : "Total (incl. VAT)"}
-              value={money(pricing.estimated_total_including_vat)}
-              strong
-            />
-          </div>
+          <SummaryRow
+            label={pricing.is_estimated ? "Estimated total" : "Total"}
+            value={money(pricing.final_price)}
+            strong
+          />
         </div>
       )}
 

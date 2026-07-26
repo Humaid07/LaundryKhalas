@@ -12,6 +12,18 @@ import type { PricingItem, PricingVersion, Promotion, HistoryEntry, SyncStatus }
 
 const money = (v: number | null | undefined, cur = "AED") =>
   v === null || v === undefined ? "—" : `${cur} ${Number.isInteger(v) ? v : v.toFixed(2)}`;
+
+/**
+ * Customer-facing final price. The admin edits the BASE/original price; every
+ * customer surface shows base × 1.05 (the 5% adjustment already included),
+ * rounded HALF-UP to 2 decimals. Kept in the admin editor only, to preview the
+ * exact amount a customer will see — this adjustment is never worded to customers.
+ */
+const CUSTOMER_PRICE_MULTIPLIER = 1.05;
+const finalPrice = (base: number | null | undefined): number | null =>
+  base === null || base === undefined || Number.isNaN(base)
+    ? null
+    : Math.round(base * CUSTOMER_PRICE_MULTIPLIER * 100) / 100;
 const dt = (s?: string | null) => (s ? new Date(s).toLocaleString("en-AE", { dateStyle: "medium", timeStyle: "short" }) : "—");
 
 type TabId = "current" | "drafts" | "promotions" | "history" | "sync";
@@ -315,8 +327,13 @@ function EditItemModal({ item, versionId, onClose, onSaved }: { item: PricingIte
       footer={<><Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button><Button variant="primary" size="sm" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save to draft"}</Button></>}>
       <div className="space-y-3">
         <p className="text-xxs text-ink-faint">Staged in draft — live prices don't change until you publish.</p>
-        <label className="block text-xs"><span className="text-ink-muted">Current price (AED, excl. VAT)</span><input className={input} type="number" step="0.01" value={current} onChange={(e) => setCurrent(e.target.valueAsNumber)} /></label>
-        <label className="block text-xs"><span className="text-ink-muted">Regular price (crossed-out)</span><input className={input} type="number" step="0.01" value={regular} onChange={(e) => setRegular(e.target.valueAsNumber)} /></label>
+        <label className="block text-xs"><span className="text-ink-muted">Base / original price (AED)</span><input className={input} type="number" step="0.01" value={current} onChange={(e) => setCurrent(e.target.valueAsNumber)} /></label>
+        <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface-2 px-3 py-2 text-xs">
+          <span className="text-ink-muted">Customer-facing price (final)</span>
+          <span className="font-mono font-semibold text-ink tnum">{money(finalPrice(current))}</span>
+        </div>
+        <p className="text-xxs text-ink-faint">Customers always see the final price (base + 5%, already included). This adjustment is internal and is never shown or worded to customers.</p>
+        <label className="block text-xs"><span className="text-ink-muted">Regular price (crossed-out, base)</span><input className={input} type="number" step="0.01" value={regular} onChange={(e) => setRegular(e.target.valueAsNumber)} /></label>
         <label className="block text-xs"><span className="text-ink-muted">Customer disclaimer</span><input className={input} value={disclaimer} onChange={(e) => setDisclaimer(e.target.value)} /></label>
         <label className="flex items-center gap-2 text-xs text-ink"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />Active (shown to customers)</label>
         {err && <p className="text-xs text-danger">{err}</p>}
@@ -360,13 +377,13 @@ function PublishModal({ version, onClose, onPublished }: { version: PricingVersi
           <div className="rounded-xl border border-border/60 bg-surface-2 p-3">
             <p className="mb-1 text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">WhatsApp preview</p>
             {startingSample ? (
-              <p className="text-xs text-ink">{startingSample.canonical_name}<br />From {money(startingSample.current_price)} per {startingSample.pricing_unit.toLowerCase()}<br /><span className="text-ink-faint">Final price depends on condition, material and brand.</span></p>
-            ) : sample ? <p className="text-xs text-ink">{sample.canonical_name} — {money(sample.current_price)} per {sample.pricing_unit.toLowerCase()}</p> : <p className="text-xs text-ink-faint">—</p>}
+              <p className="text-xs text-ink">{startingSample.canonical_name}<br />From {money(finalPrice(startingSample.current_price))} per {startingSample.pricing_unit.toLowerCase()}<br /><span className="text-ink-faint">Final price depends on condition, material and brand.</span></p>
+            ) : sample ? <p className="text-xs text-ink">{sample.canonical_name} — {money(finalPrice(sample.current_price))} per {sample.pricing_unit.toLowerCase()}</p> : <p className="text-xs text-ink-faint">—</p>}
           </div>
           <div className="rounded-xl border border-border/60 bg-surface-2 p-3">
             <p className="mb-1 text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">Website preview</p>
             {sample ? (
-              <p className="text-xs text-ink">{sample.canonical_name}<br /><span className="font-semibold">{money(sample.current_price)}</span>{sample.regular_price ? <span className="ml-1 text-ink-faint line-through">{money(sample.regular_price)}</span> : null} / {sample.pricing_unit.toLowerCase()}<br /><span className="text-ink-faint">Prices exclude 5% VAT.</span></p>
+              <p className="text-xs text-ink">{sample.canonical_name}<br /><span className="font-semibold">{money(finalPrice(sample.current_price))}</span>{sample.regular_price ? <span className="ml-1 text-ink-faint line-through">{money(finalPrice(sample.regular_price))}</span> : null} / {sample.pricing_unit.toLowerCase()}<br /><span className="text-ink-faint">Final price.</span></p>
             ) : <p className="text-xs text-ink-faint">—</p>}
           </div>
         </div>

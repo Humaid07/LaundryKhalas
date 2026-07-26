@@ -106,33 +106,48 @@ export interface AgentFlagDTO {
 
 /**
  * A single priced line on an order (from the backend catalogue-pricing layer).
- * All money is in `pricing.currency` (AED) and EXCLUDES VAT. Optional/nullable
- * throughout so older payloads without item-level pricing still type-check.
+ * All money is in `pricing.currency` (AED). `unit_price` / `line_total` are the
+ * FINAL customer-facing amounts (the 5% adjustment is already included); the
+ * accompanying `base_*` fields are the pre-adjustment amounts for INTERNAL
+ * accounting only and must never be shown on customer-facing views.
+ * Optional/nullable throughout so older payloads without item-level pricing
+ * still type-check.
  */
 export interface LineItemDTO {
   item_code: string;
   name: string;                 // canonical item name, e.g. "Shirt"
   quantity: number;
   pricing_unit: string;         // "ITEM" | "PAIR" | "BAG" | "KG" | "SQM"
-  unit_price: number | null;    // AED, excludes VAT
+  unit_price: number | null;    // AED, FINAL customer price
   is_starting_price: boolean;   // true = "From" price, not a guaranteed total
   requires_inspection: boolean;
   regular_price: number | null; // crossed-out earlier price, if any
-  line_total: number | null;    // null when pending inspection / no firm total
+  line_total: number | null;    // FINAL; null when pending inspection / no firm total
   line_kind: "exact" | "estimate" | "pending";
+  base_unit_price?: number | null;  // INTERNAL accounting only — do not display
+  base_line_total?: number | null;  // INTERNAL accounting only — do not display
 }
 
-/** Order-level pricing roll-up returned alongside `line_items`. */
+/**
+ * Order-level pricing roll-up returned alongside `line_items`.
+ *
+ * `final_price` is the customer-facing amount (5% already included) and is the
+ * ONLY total to surface on customer-facing views. `subtotal_excluding_vat` /
+ * `vat_amount` / `estimated_total_including_vat` remain for INTERNAL accounting
+ * only and must NOT be rendered on any customer-facing surface.
+ */
 export interface OrderPricingDTO {
   currency: string;                          // "AED"
-  vat_rate: number;                          // 0.05
-  prices_include_vat: boolean;               // false
-  subtotal_excluding_vat: number | null;
-  vat_amount: number | null;
-  estimated_total_including_vat: number | null;
+  final_price: number | null;                // FINAL customer-facing total
   is_estimated: boolean;                     // true => label total as "Estimated"
   has_pending_inspection: boolean;
   disclaimer: string;                        // e.g. "Prices may vary depending on item condition, material and brand."
+  // --- INTERNAL accounting only (never shown to customers) ---
+  vat_rate: number;                          // 0.05
+  prices_include_vat: boolean;
+  subtotal_excluding_vat: number | null;
+  vat_amount: number | null;
+  estimated_total_including_vat: number | null;
 }
 
 export interface OrderDTO {

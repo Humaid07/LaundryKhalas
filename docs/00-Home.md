@@ -46,6 +46,22 @@ Agent Fleet. Architecture: [[seo-agent-system]] · dashboard contract:
 
 ## Latest Build Report
 
+[[2026-07-26-natural-language-orchestration-and-final-pricing]] —
+`build-reports/2026-07-26-natural-language-orchestration-and-final-pricing.md` — **Fixed the
+"stopped responding" regression, made Claude the natural-language conversation path, and made
+every customer price final**: the LLM tool-loop could return empty text that was sent as an
+empty WhatsApp message → fixed with three empty-reply guards (a grounded deterministic next-step
+never leaves the customer in silence). Claude orchestration is now the default path
+(`anthropic_booking_orchestration=true`) with a natural multi-field-extraction prompt, lazy
+order creation (a question never creates an order), the grounding tools folded in, and history
+passed each turn. New `services/money.py` (Decimal) makes all customer-facing prices FINAL — the
+5% is included once, never twice — and removes every "VAT/tax/excl/incl/subtotal" word across
+WhatsApp, order summaries, the public pricing API and the admin dashboard (`apps/admin` tsc
+clean; Pricing Management shows a base→final preview). 489 backend tests pass (+30). No real
+Stripe exists (mock/off label only). See also [[2026-07-25-anthropic-claude-integration]].
+
+## Earlier Build Report
+
 [[2026-07-25-anthropic-claude-integration]] —
 `build-reports/2026-07-25-anthropic-claude-integration.md` — **WhatsApp agent connected to
 Anthropic Claude (tool-use)**: the existing `AnthropicProvider` now runs a grounded agentic

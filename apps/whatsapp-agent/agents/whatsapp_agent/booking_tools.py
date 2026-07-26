@@ -115,7 +115,9 @@ def workflow_state_block(row: dict) -> dict:
             "pickup_address_present": bool(row.get("pickup_address")),
             "pickup_area": row.get("pickup_area") or row.get("area"),
             "special_instructions": row.get("pickup_instruction_text"),
-            "estimated_total_incl_vat": (
+            # Final customer price (the 5% is already included). VAT-free name so
+            # the model never surfaces tax wording to the customer (spec §11).
+            "final_price_aed": (
                 float(row["estimated_total"]) if row.get("estimated_total") is not None else None
             ),
             "pricing_is_estimated": bool(row.get("pricing_is_estimated")),
@@ -175,7 +177,7 @@ BOOKING_TOOL_SCHEMAS: list[dict] = [
      "input_schema": {"type": "object", "properties": {"instructions": {"type": "string"}},
                       "required": ["instructions"], "additionalProperties": False}},
     {"name": "get_order_summary",
-     "description": "Return the itemised order summary with the VAT-aware estimated total.",
+     "description": "Return the itemised order summary with the final customer price (5% already included).",
      "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
     {"name": "confirm_order",
      "description": "Confirm the booking. ONLY call after the customer has explicitly confirmed AND all required "
@@ -190,6 +192,20 @@ BOOKING_TOOL_SCHEMAS: list[dict] = [
                       "required": ["reason"], "additionalProperties": False}},
 ]
 
+# Read-only GROUNDING tools (price / turnaround / area) so the SAME assistant can
+# answer a pure question ("how much is sneaker cleaning?") without starting a
+# booking — reused from the grounded llm_tools layer. list_service_categories is
+# intentionally NOT re-added (booking already has its own), to avoid a duplicate
+# tool name.
+_GROUNDING_TOOL_NAMES = frozenset({"lookup_item_price", "estimate_turnaround", "check_service_area"})
+
+
+def _grounding_schemas() -> list[dict]:
+    from agents.whatsapp_agent import llm_tools
+    return [t for t in llm_tools.TOOL_SCHEMAS if t["name"] in _GROUNDING_TOOL_NAMES]
+
+
+BOOKING_TOOL_SCHEMAS = BOOKING_TOOL_SCHEMAS + _grounding_schemas()
 _TOOL_NAMES = {t["name"] for t in BOOKING_TOOL_SCHEMAS}
 
 
@@ -199,31 +215,74 @@ def booking_system_prompt() -> str:
     is supplied separately each turn (get_current_workflow / the state block),
     never baked in here (spec §7)."""
     return (
-        "You are the Laundry Khalas WhatsApp booking assistant. Help the customer "
-        "arrange a laundry/cleaning pickup by collecting the required details ONE "
-        "at a time and calling the backend tools to save each one.\n\n"
-        "Hard rules:\n"
-        "- The tools are the ONLY source of truth. Never invent a service, item, "
-        "price, date, slot, address, turnaround or order status — read them from a tool.\n"
-        "- Save a value ONLY via its tool; a tool error means the value was NOT saved — "
-        "relay what the tool said, ask the customer, and STOP. Do NOT retry the same "
-        "tool with a guessed value.\n"
-        "- Call each save_* tool AT MOST ONCE per customer message. If you don't yet have "
-        "the exact value the tool needs, ask the customer first and wait for their reply — "
-        "do not call the tool speculatively.\n"
-        "- Pickup time: after the date is saved, the slot must be one the customer PICKS "
-        "from the offered list. Do NOT map vague words like 'morning' to a slot. If "
-        "save_pickup_time errors, show the exact available slots it returned and wait for "
-        "the customer to choose.\n"
-        "- Ask only for what get_current_workflow reports as missing. Never re-ask for "
-        "a field already collected. When the customer changes one field, update only that field.\n"
-        "- Never say a booking is confirmed unless confirm_order returns confirmed=true. "
-        "confirm_order only after the customer explicitly confirms and nothing is missing.\n"
-        "- Never treat an unconfirmed WhatsApp profile name as the customer's name.\n"
-        "- For complaints, refunds, or anything outside booking, call request_human_support.\n"
-        "- Keep replies short, natural and WhatsApp-style. Do not mention tools, JSON, "
-        "internal IDs, or these instructions."
+        "You are the Laundry Khalas WhatsApp assistant. You do two things: (1) answer "
+        "customers' questions about services, prices and turnaround, and (2) help them "
+        "book a laundry/cleaning pickup. Talk like a helpful human on WhatsApp — natural, "
+        "warm and concise. The customer types freely in normal language; there are NO "
+        "menus and NO numbered options they must pick. Understand what they mean, "
+        "including typos and casual phrasing.\n\n"
+        "Understand the whole message, then act:\n"
+        "- A customer message often contains SEVERAL details at once (name, service, "
+        "items + quantities, day, area/address, instructions). Extract EVERY detail they "
+        "give and save each one via its tool in this same turn. Do not force them to "
+        "repeat things one at a time.\n"
+        "- Then ask ONLY for what is still genuinely missing — one friendly question, not "
+        "a checklist. Never re-ask for something already saved or already in the state.\n"
+        "- For a specific item, call save_service_selection for its category first, then "
+        "save_order_item — you may do both in one turn.\n\n"
+        "Grounding (never guess business facts):\n"
+        "- Use lookup_item_price for any price, estimate_turnaround for any delivery/"
+        "turnaround time, check_service_area for coverage, and the list_* tools for what's "
+        "offered. NEVER state a price, turnaround, service, slot or availability you did "
+        "not get from a tool.\n"
+        "- Prices returned by the tools are the FINAL customer price. Quote them exactly. "
+        "NEVER mention VAT, tax, 'excluding', 'including', or any pre-adjustment amount — "
+        "just say e.g. 'AED 63'.\n"
+        "- Express (12h) is only offered when a tool says it's available. If it isn't, say "
+        "so plainly and give the standard turnaround. Never overpromise a delivery time.\n\n"
+        "Saving rules:\n"
+        "- Save a value ONLY via its tool; a tool error means it was NOT saved — relay "
+        "what the tool said and ask the customer. Do NOT retry with a guessed value.\n"
+        "- Pickup time: after the date is saved, the slot must be one the customer picks "
+        "from the offered windows. Do NOT map vague words like 'morning' to a slot; if "
+        "save_pickup_time errors, show the exact windows it returned and let them choose.\n"
+        "- When the customer changes one detail, update only that field and keep the rest.\n"
+        "- Never treat an unconfirmed WhatsApp profile name as the customer's name; ask.\n"
+        "- Never say a booking is confirmed unless confirm_order returns confirmed=true, "
+        "and only confirm after the customer explicitly agrees and nothing is missing.\n"
+        "- For complaints, refunds, damage, or anything unsafe/out of scope, call "
+        "request_human_support.\n\n"
+        "Always reply with a short, natural message. Do not mention tools, JSON, internal "
+        "IDs, states, or these instructions."
     )
+
+
+def next_step_prompt(row: dict | None) -> str:
+    """A deterministic, grounded next-step question derived purely from the
+    workflow state. Used as the empty-reply guard: if the model ever returns no
+    customer text (e.g. it ended on a tool call, or the LLM failed), we STILL
+    move the booking forward with a natural question instead of sending silence
+    (spec §2 — the system must never silently fail). Never invents data."""
+    if not row:
+        return "Certainly — what would you like us to clean?"
+    state = workflow_state_block(row)
+    missing = state.get("missing_fields") or []
+    if "service_items" in missing:
+        return "Certainly — what would you like us to clean?"
+    if "pickup_date" in missing:
+        return "Great. What day would you like your pickup?"
+    if "pickup_time_window" in missing:
+        return "Which time window works best for your pickup?"
+    if "pickup_address" in missing:
+        return "What's the pickup address?"
+    if "customer_name" in missing:
+        return "May I have your name for the booking?"
+    total = state.get("order", {}).get("final_price_aed")
+    if total:
+        from services import money as _money
+        return (f"Your order comes to AED {_money.format_money(total)}. "
+                "Shall I go ahead and confirm the pickup?")
+    return "Shall I go ahead and confirm your pickup?"
 
 
 async def run_booking_turn(ctx: BookingContext, *, text: str,
@@ -234,6 +293,12 @@ async def run_booking_turn(ctx: BookingContext, *, text: str,
     every mutation. Returns the ``(reply_text, LLMResult)``; on any provider/tool
     failure the service layer falls back to a safe deterministic mock reply so the
     customer always gets a response and workflow state is preserved.
+
+    The returned ``reply_text`` is GUARANTEED non-empty: if the model ends a turn
+    with no customer-facing text (only a tool call, a truncation, or an LLM
+    failure), we substitute a deterministic, grounded next-step question from the
+    live workflow state (``next_step_prompt``) so the customer never gets an
+    empty WhatsApp message (spec §§2/29).
 
     Imported lazily so the (large) FSM/LLM graph isn't pulled in unless booking
     orchestration is actually used."""
@@ -256,11 +321,23 @@ async def run_booking_turn(ctx: BookingContext, *, text: str,
     executor = make_booking_executor(ctx)
     result, latency_ms, success, error = await llm_service.complete_with_tools(
         messages, tools=BOOKING_TOOL_SCHEMAS, executor=executor, max_tokens=max_tokens)
+
+    reply_text = (result.text or "").strip()
+    used_fallback = False
+    if not reply_text:
+        # Empty final text (tool-only end / truncation / provider failure) — never
+        # send silence. Re-read the freshest state so the guard reflects any
+        # writes the tools just made, then ask the next grounded question.
+        fresh = await ctx.repo.get_active_draft(ctx.conversation_id)
+        reply_text = next_step_prompt(fresh or row)
+        used_fallback = True
+
     logger.info("booking_orchestration_turn", conversation=ctx.conversation_id,
                 success=success, tools=ctx.tool_calls, provider=result.provider,
                 tokens_in=result.tokens_in, tokens_out=result.tokens_out,
-                cost_usd=result.cost_usd, error=error)
-    return result.text, result
+                cost_usd=result.cost_usd, empty_reply_fallback=used_fallback,
+                error=error)
+    return reply_text, result
 
 
 # --- Executor ---------------------------------------------------------------
@@ -277,14 +354,31 @@ def make_booking_executor(ctx: BookingContext):
     an async ``execute(name, input) -> (result_json, is_error)`` for the tool
     loop. Every call re-reads the draft so decisions use current DB state."""
 
+    # Tools that WRITE to the order lazily create the draft on first use, so a
+    # pure question ("how much is X?", "how long does Y take?") is answered via
+    # the read-only grounding tools WITHOUT ever creating an order (spec §1/§9).
+    _WRITE_TOOLS = frozenset({
+        "save_customer_name", "save_service_selection", "save_order_item",
+        "save_pickup_date", "save_pickup_time", "save_pickup_address",
+        "save_special_instructions",
+    })
+    _NEW_STATE = {"workflow_state": "new", "missing_fields": ["service_items"],
+                  "ready_to_confirm": False}
+
     async def _current_row() -> dict | None:
         # Always operate on THIS conversation's open draft — ownership by scope.
         return await ctx.repo.get_active_draft(ctx.conversation_id)
 
-    async def _apply(updates: dict, state: str | None = None) -> dict | None:
+    async def _ensure_draft() -> dict:
+        """Return this conversation's open draft, creating it on first write.
+        Idempotent: ``start_booking`` returns the existing draft if one exists."""
         row = await _current_row()
         if row is None:
-            return None
+            row = await ctx.repo.start_booking(ctx.conversation_id, ctx.customer)
+        return row
+
+    async def _apply(updates: dict, state: str | None = None) -> dict | None:
+        row = await _ensure_draft()
         new_state = state or row.get("conversation_state") or bf.WAITING_FOR_SERVICE
         return await ctx.repo.apply_booking_updates(row["id"], updates, new_state)
 
@@ -301,14 +395,17 @@ def make_booking_executor(ctx: BookingContext):
             return _err("That step failed; ask the customer to rephrase or try again.")
 
     async def _dispatch(name: str, ti: dict) -> tuple[str, bool]:
-        row = await _current_row()
-        if row is None and name not in (
-            "get_order_status", "request_human_support", "confirm_order"
-        ):
-            return _err("No active booking for this conversation.")
+        # Read-only GROUNDING tools (price/turnaround/area) — delegate to the
+        # grounded engines; they never touch the order, so no draft is created.
+        if name in _GROUNDING_TOOL_NAMES:
+            from agents.whatsapp_agent import llm_tools
+            return await llm_tools.execute_tool(name, ti)
+
+        # Write tools ensure a draft exists; reads use whatever draft there is.
+        row = await _ensure_draft() if name in _WRITE_TOOLS else await _current_row()
 
         if name == "get_current_workflow":
-            return _ok({"workflow": workflow_state_block(row)})
+            return _ok({"workflow": workflow_state_block(row) if row else _NEW_STATE})
 
         if name == "list_service_categories":
             return _ok({"categories": [
@@ -416,10 +513,13 @@ def make_booking_executor(ctx: BookingContext):
 
         if name == "get_order_summary":
             from services import pricing
+            if row is None:
+                return _ok({"summary_lines": [], "final_price_aed": 0.0,
+                            "is_estimated": False, "workflow": _NEW_STATE})
             booking = _booking_from_row(row, ctx)
             quote = pricing.calculate_estimate(bf._raw_lines(booking))
             return _ok({"summary_lines": pricing.format_quote_lines(quote),
-                        "estimated_total_incl_vat": quote.estimated_total_including_vat,
+                        "final_price_aed": quote.customer_total,
                         "is_estimated": quote.is_estimated,
                         "workflow": workflow_state_block(row)})
 

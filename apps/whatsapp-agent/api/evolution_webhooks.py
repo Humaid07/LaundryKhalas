@@ -40,7 +40,7 @@ from db.repositories import (
     slots_repo,
     tickets_repo,
 )
-from services import booking_flow, order_store
+from services import booking_flow, money, order_store
 from services.auto_reply import SENDER_NOT_ALLOWED, should_auto_reply
 from services.escalation import detect_escalation
 from services.privacy import mask_phone, normalize_e164
@@ -79,6 +79,14 @@ _ESCALATION_FLAG: dict[str, tuple[str, str, str]] = {
     "angry": ("complaint", "high", "Customer Facing"),
 }
 _DEFAULT_FLAG = ("handoff", "high", "Customer Facing")
+
+# Professional temporary-failure reply (spec §29). Sent — and the conversation
+# flagged for a human — when the AI turn fails, so the customer is never left in
+# silence and no false booking/confirmation is implied.
+_AI_FALLBACK_TEXT = (
+    "Sorry — I'm having trouble completing that right now. I've flagged this to our "
+    "team and someone will follow up with you shortly."
+)
 
 _BOOKING_SELECTION_PREFIXES = ("service:", "sub:", "item:", "slot:", "instruction:",
                                "date:", "change:")
@@ -132,8 +140,9 @@ def _final_confirmation_text(row: dict) -> str:
     ]
     total = row.get("estimated_total")
     if total is not None:
-        label = "Estimated total" if row.get("pricing_is_estimated") else "Total"
-        lines.append(f"{label} (incl. VAT): AED {float(total):g}")
+        # FINAL customer price (5% already included). No VAT/tax wording (spec §§11/23).
+        label = "Estimated price" if row.get("pricing_is_estimated") else "Price"
+        lines.append(f"{label}: AED {money.format_money(total)}")
     lines += [
         f"Pickup date: {date_str}",
         f"Pickup time: {row.get('pickup_slot') or '—'}",
@@ -153,8 +162,12 @@ async def _send_reply(channel, phone: str, reply) -> str:
     option id by the FSM. Returns the text stored as the agent message."""
     interactive = reply.interactive
     if interactive is None:
-        await channel.send_text(to_phone=phone, text=reply.text)
-        return reply.text
+        # Empty-text guard: never send an empty WhatsApp message (spec §2). If a
+        # text reply is somehow blank, substitute the safe fallback so the send
+        # is meaningful rather than silent/rejected.
+        text = (reply.text or "").strip() or _AI_FALLBACK_TEXT
+        await channel.send_text(to_phone=phone, text=text)
+        return text
     settings = get_settings()
     # Lists and buttons are gated independently: native lists render reliably on
     # this Evolution build, native buttons do not (see settings). A disabled kind
@@ -350,26 +363,57 @@ async def receive_evolution_webhook(request: Request):
         def _booking(row):
             return _booking_from_row(row, profile_name=profile_name, verified_name=verified_name)
 
-        # --- Optional: Claude-orchestrated booking (feature-flagged, default OFF) ---
-        # When ANTHROPIC_BOOKING_ORCHESTRATION=true AND a live Claude provider is
-        # configured, Claude drives the booking via controlled write-tools; the
-        # backend still validates + persists every field (booking_tools.py). Default
-        # off → the proven deterministic FSM below stays the live path. Same access,
-        # idempotency and takeover gates already ran above before we get here.
+        # --- Claude-orchestrated conversation (natural language, default path) ---
+        # When ANTHROPIC_BOOKING_ORCHESTRATION is on AND a live Claude provider is
+        # configured, Claude understands the free-text message and drives the
+        # conversation via controlled tools: read-only GROUNDING tools answer
+        # questions (price/turnaround/area) with no order created, and validated
+        # WRITE tools capture booking fields — the backend validates + persists
+        # every field and the draft order is created lazily only when a booking
+        # field is actually saved (booking_tools.py). Same access, idempotency and
+        # takeover gates already ran above. reply_text is guaranteed non-empty.
         if settings.anthropic_booking_orchestration and settings.live_llm_ready:
-            booking_row = active_draft or await orders_repo.start_booking(convo["id"], customer)
+            logger.info("anthropic_turn_started", sender=masked, conversation=convo["id"])
+            prior = await messages_repo.list_messages(convo["id"])
+            history = [(m["sender_type"], m["message_text"]) for m in prior
+                       if m["sender_type"] in ("customer", "agent")
+                       and m.get("message_text") and m["message_text"] != stored_text]
             ctx = BookingContext(
-                conversation_id=convo["id"], order_uuid=booking_row["id"], repo=orders_repo,
+                conversation_id=convo["id"], order_uuid=None, repo=orders_repo,
                 today=_today(), available_slots=slots_repo.available_slots, customer=customer,
                 profile_name=profile_name, verified_name=verified_name)
-            reply_text, _ = await run_booking_turn(ctx, text=text)
+            try:
+                reply_text, result = await run_booking_turn(ctx, text=text, history=history)
+            except Exception as exc:  # noqa: BLE001 — never leave the customer in silence
+                logger.warning("anthropic_turn_failed", sender=masked, error=str(exc))
+                reply_text, result = _AI_FALLBACK_TEXT, None
+                await _raise_support(convo["id"],
+                                     (active_draft or {}).get("id"))
+                if inbound_msg:
+                    await messages_repo.set_status(inbound_msg["id"], "human_needed")
+                logger.info("human_attention_required", sender=masked, reason="ai_turn_failed")
+
+            # If Claude asked to hand off, wire the real escalation (the tool only
+            # signals intent — the backend owns flags/tickets/human status).
+            if result is not None and "request_human_support" in (ctx.tool_calls or []):
+                open_order = await orders_repo.get_open_for_conversation(convo["id"])
+                await _raise_support(convo["id"], open_order["id"] if open_order else None)
+                if inbound_msg:
+                    await messages_repo.set_status(inbound_msg["id"], "human_needed")
+                logger.info("human_attention_required", sender=masked, reason="model_requested")
+
+            fresh = await orders_repo.get_active_draft(convo["id"])
+            state = (fresh or {}).get("conversation_state") or booking_flow.WAITING_FOR_SERVICE
             if live:
-                fresh = await orders_repo.get_active_draft(convo["id"])
-                await _deliver(channel, msg["phone"], convo["id"], booking_flow.BookingReply(
-                    text=reply_text,
-                    state=(fresh or booking_row).get("conversation_state")
-                    or booking_flow.WAITING_FOR_SERVICE))
-            logger.info("booking_orchestrated", sender=masked, order=booking_row["order_id"])
+                await _deliver(channel, msg["phone"], convo["id"],
+                               booking_flow.BookingReply(text=reply_text, state=state))
+            logger.info("anthropic_turn_delivered", sender=masked,
+                        tools=(ctx.tool_calls or []),
+                        provider=(result.provider if result else "fallback"),
+                        tokens_in=(result.tokens_in if result else 0),
+                        tokens_out=(result.tokens_out if result else 0),
+                        cost_usd=(result.cost_usd if result else 0.0),
+                        order=(fresh or {}).get("order_id"))
             processed += 1
             continue
 
@@ -491,11 +535,14 @@ async def receive_evolution_webhook(request: Request):
 
         if will_send:
             agent_reply = await handle_message(text=text, history=history, db=None)
+            # Empty-text guard (spec §2): never send silence, even if the model
+            # returned no text.
+            out_text = (agent_reply.text or "").strip() or _AI_FALLBACK_TEXT
             try:
                 await EvolutionWhatsAppChannel.from_settings().send_text(
-                    to_phone=msg["phone"], text=agent_reply.text)
+                    to_phone=msg["phone"], text=out_text)
                 await messages_repo.add_message(
-                    convo["id"], "agent", agent_reply.text, status="sent",
+                    convo["id"], "agent", out_text, status="sent",
                     metadata={
                         "intent": decision.intent,
                         "provider": agent_reply.provider,

@@ -165,28 +165,42 @@ async def get_published_catalogue(session: AsyncSession, *, market: str = "AE",
 
 
 def _public_projection(rec: dict) -> dict:
-    """Customer-facing subset only — NO internal notes, ids, cost, audit (task §12)."""
+    """Customer-facing subset only — NO internal notes, ids, cost, audit (task §12).
+
+    All prices are FINAL customer prices (the 5% adjustment already included,
+    computed once via services.money) and NO VAT/tax wording is exposed
+    publicly (task §§17/26)."""
+    from services import money as _money
+
+    vat_rate = rec.get("vat_rate")
+    if vat_rate is None:
+        from services import catalogue as _cat
+        vat_rate = _cat.vat_rate()
+    incl = bool(rec.get("prices_include_vat"))
+
+    def _final(price):
+        if price is None:
+            return None
+        return float(_money.final_unit_price(price, vat_rate=vat_rate, prices_include_vat=incl))
+
+    promo_was = (rec.get("promotion") or {}).get("was") is not None
     return {
         "category_code": rec.get("category_code"),
         "category_name": rec.get("category_name"),
         "item_code": rec.get("item_code"),
         "name": rec.get("display_name") or rec.get("name"),
         "description": rec.get("description"),
-        "display_price": rec.get("effective_price"),
-        "regular_price": rec.get("regular_price"),
-        "promotion_price": (rec.get("promotion") or {}).get("was") is not None and rec.get("effective_price") or None,
+        "display_price": _final(rec.get("effective_price")),
+        "regular_price": _final(rec.get("regular_price")),
+        "promotion_price": _final(rec.get("effective_price")) if promo_was else None,
         "pricing_unit": rec.get("pricing_unit"),
         "is_starting_price": rec.get("is_starting_price"),
         "requires_inspection": rec.get("requires_inspection"),
         "promotion_label": (rec.get("promotion") or {}).get("name"),
         "currency": rec.get("currency"),
-        "vat_note": _vat_note(rec),
+        # Customer-facing note only — final price, never any tax/VAT wording.
+        "price_note": "Final price.",
     }
-
-
-def _vat_note(rec: dict) -> str:
-    return ("Prices include 5% VAT." if rec.get("prices_include_vat")
-            else "Prices exclude 5% VAT.")
 
 
 async def published_overrides(session: AsyncSession, *, market: str = "AE",

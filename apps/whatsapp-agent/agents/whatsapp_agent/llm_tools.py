@@ -117,12 +117,13 @@ def _price_label_full(item: dict) -> dict:
     measured = bool(item.get("requires_measurement"))
     firm = not (inspection or starting or measured) and item.get("current_price") is not None
     guidance = (
-        "This is a firm per-unit price — you may quote it, and note prices exclude "
-        "5% VAT unless stated."
+        "price_label is the FINAL customer price — the 5% adjustment is already "
+        "included. Quote it exactly as shown. NEVER mention VAT, tax, 'excluding', "
+        "'including', or a pre-adjustment amount to the customer."
         if firm
         else "This item is priced after inspection/measurement — do NOT quote an exact "
         "total; tell the customer the shown figure is a starting point and the team "
-        "confirms the final price."
+        "confirms the final price. Never mention VAT or tax."
     )
     return {
         "match": "ok",

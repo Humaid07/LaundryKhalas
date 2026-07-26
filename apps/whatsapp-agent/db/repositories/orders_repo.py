@@ -48,6 +48,10 @@ def _pricing_block(row: dict) -> dict | None:
         total = _f("amount")
     return {
         "currency": "AED",
+        # ``final_price`` is the customer-facing amount (5% already included); it
+        # is the ONLY money the customer UI should show (task spec §§17/23/24).
+        # The subtotal/vat split below is retained for INTERNAL accounting only.
+        "final_price": total,
         "vat_rate": _f("vat_rate") if row.get("vat_rate") is not None else 0.05,
         "prices_include_vat": False,
         "subtotal_excluding_vat": _f("subtotal_amount"),

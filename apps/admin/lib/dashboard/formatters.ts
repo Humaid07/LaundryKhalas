@@ -9,6 +9,24 @@ export function formatCurrency(value: number, currency = "AED", compact = false)
   }).format(value);
 }
 
+/**
+ * Money formatter for exact customer-facing amounts. Whole numbers render clean
+ * ("AED 63"); anything with a fractional part shows two decimals ("AED 7.35",
+ * "AED 52.50"). Rounds decimal-safe to 2 dp first. Prefer this over
+ * {@link formatCurrency} wherever a precise final price is shown (order pricing,
+ * line totals) — `formatCurrency` deliberately drops the fractional part.
+ */
+export function formatMoney(value: number, currency = "AED"): string {
+  const rounded = Math.round(value * 100) / 100;
+  const isWhole = Number.isInteger(rounded);
+  return new Intl.NumberFormat("en-AE", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: isWhole ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(rounded);
+}
+
 export function formatNumber(value: number, compact = false): string {
   return new Intl.NumberFormat("en-US", {
     notation: compact ? "compact" : "standard",

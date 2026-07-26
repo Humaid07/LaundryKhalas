@@ -60,10 +60,12 @@ def test_full_item_collection_reaches_name_with_priced_summary():
     r = advance(b, Inbound(text="3"))
     assert r.state == bf.WAITING_FOR_MORE_ITEMS
     assert r.updates["line_items"][0]["item_code"] == "CLEAN_PRESS_SHIRT"
-    assert r.updates["line_items"][0]["line_total"] == 27.0
-    assert r.updates["subtotal_amount"] == 27.0
-    assert r.updates["vat_amount"] == 1.35
-    assert r.updates["estimated_total"] == 28.35
+    # line_total is the FINAL customer amount (3 × 9 × 1.05 = 28.35); base kept internal.
+    assert r.updates["line_items"][0]["line_total"] == 28.35
+    assert r.updates["line_items"][0]["base_line_total"] == 27.0
+    assert r.updates["subtotal_amount"] == 27.0     # internal net
+    assert r.updates["vat_amount"] == 1.35          # internal tax
+    assert r.updates["estimated_total"] == 28.35    # final customer total
     assert r.updates["pricing_is_estimated"] is False
     b = _apply(b, r)
     # 5) that's all -> name
@@ -75,10 +77,12 @@ def test_full_item_collection_reaches_name_with_priced_summary():
                    "pickup_address": "Marina Heights", "pickup_instruction_text": None,
                    "conversation_state": bf.WAITING_FOR_CONFIRMATION})
     summary = bf._summary_text(b)
-    assert "3 × Shirt × AED 9 = AED 27" in summary
-    assert "VAT (5%): AED 1.35" in summary
-    assert "AED 28.35" in summary
+    # Customer summary: final line + final total, NO VAT/tax wording (spec §§11/23).
+    assert "3 × Shirt — AED 28.35" in summary
+    assert "Final price — AED 28.35" in summary
     assert "Prices may vary" in summary
+    for banned in ("VAT", "vat", "tax", "excl", "incl", "Subtotal"):
+        assert banned not in summary
 
 
 def test_inline_quantity_skips_the_quantity_question():
@@ -135,7 +139,8 @@ def test_curtain_asks_for_sqm_and_prices_as_estimate():
     r2 = advance(b, Inbound(text="4"))
     line = r2.updates["line_items"][0]
     assert line["line_kind"] == "estimate"
-    assert line["line_total"] == 80.0                  # 4 sqm × 20
+    assert line["line_total"] == 84.0                  # FINAL: 4 sqm × (20 × 1.05)
+    assert line["base_line_total"] == 80.0
     assert r2.updates["pricing_is_estimated"] is True
 
 
@@ -149,7 +154,7 @@ def test_shoe_starting_price_never_a_total_in_summary():
     b = Booking(**{**b.__dict__, "line_items": r.updates["line_items"],
                    "customer_name": "Sara", "conversation_state": bf.WAITING_FOR_CONFIRMATION})
     summary = bf._summary_text(b)
-    assert "from aed 50" in summary.lower()
+    assert "from aed 52.50" in summary.lower()          # FINAL starting price
     assert "inspection" in summary.lower()
 
 
@@ -157,7 +162,7 @@ def test_shoe_starting_price_never_a_total_in_summary():
 def test_23_confirmed_snapshot_unchanged_after_catalogue_update(monkeypatch):
     q = pricing.calculate_estimate([{"item_code": "CLEAN_PRESS_SHIRT", "quantity": 3}])
     snapshot = q.to_dict()["lines"]
-    assert snapshot[0]["line_total"] == 27.0
+    assert snapshot[0]["line_total"] == 28.35   # FINAL customer line total
 
     # reprice the shirt in the catalogue
     catalogue.reload_catalogue()
@@ -172,15 +177,17 @@ def test_23_confirmed_snapshot_unchanged_after_catalogue_update(monkeypatch):
     try:
         assert catalogue.item_by_code("CLEAN_PRESS_SHIRT")["current_price"] == 99
         # the frozen snapshot is stored data — it does NOT re-price
-        assert snapshot[0]["line_total"] == 27.0
-        assert snapshot[0]["unit_price"] == 9
+        assert snapshot[0]["line_total"] == 28.35
+        assert snapshot[0]["unit_price"] == 9.45     # FINAL unit price
+        assert snapshot[0]["base_unit_price"] == 9   # internal base
         from db.repositories import orders_repo
         row = {"id": "x", "order_id": "LK-2026-000001", "status": "pickup_scheduled",
                "line_items": snapshot, "subtotal_amount": 27.0, "vat_amount": 1.35,
                "estimated_total": 28.35, "amount": 28.35, "pricing_is_estimated": False,
                "vat_rate": 0.05, "catalogue_category_name": "Clean & Press"}
         read = orders_repo.to_read(row)
-        assert read["line_items"][0]["line_total"] == 27.0
+        assert read["line_items"][0]["line_total"] == 28.35
+        assert read["pricing"]["final_price"] == 28.35
         assert read["pricing"]["estimated_total_including_vat"] == 28.35
     finally:
         catalogue._index.cache_clear()

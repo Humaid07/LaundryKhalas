@@ -142,7 +142,8 @@ def test_14_starting_price_is_never_a_guaranteed_total():
     assert q.subtotal_excluding_vat == 0.0
     assert q.is_final is False
     text = pricing.format_quote_summary(q)
-    assert "from aed 50" in text.lower()
+    # Starting price shown as the FINAL customer price (50 × 1.05 = 52.50).
+    assert "from aed 52.50" in text.lower()
     assert "inspection" in text.lower()
 
 
@@ -169,17 +170,19 @@ def test_18_multiple_lines_sum_correctly():
     assert all(ln.line_kind == "exact" for ln in q.lines)
 
 
-def test_16_vat_exclusive_pricing_is_clearly_represented():
+def test_16_customer_summary_shows_final_price_and_no_vat_wording():
     q = pricing.calculate_estimate([{"item_code": "CLEAN_PRESS_SHIRT", "quantity": 1}])
     d = q.to_dict()
-    assert d["prices_include_vat"] is False
-    assert d["vat_rate"] == 0.05
-    # subtotal, vat and total are all distinct, explicit fields
+    # Internal accounting split is retained (net + tax == final total) …
     assert d["subtotal_excluding_vat"] == 9.0
     assert d["vat_amount"] == 0.45
     assert d["estimated_total_including_vat"] == 9.45
+    assert d["customer_total"] == 9.45
+    # … but the CUSTOMER-FACING summary shows only the final price, never VAT/tax.
     summary = pricing.format_quote_summary(q)
-    assert "excl. VAT" in summary and "VAT (5%)" in summary
+    assert "AED 9.45" in summary
+    for banned in ("VAT", "vat", "tax", "excl", "incl", "Subtotal"):
+        assert banned not in summary
 
 
 def test_measured_line_is_estimate_not_final():
@@ -187,7 +190,9 @@ def test_measured_line_is_estimate_not_final():
     q = pricing.calculate_estimate([{"item_code": "HOME_CARE_CURTAIN_SQM", "quantity": 1, "measure": 4}])
     line = q.lines[0]
     assert line.line_kind == "estimate"
-    assert line.line_total == 80.0
+    # FINAL customer line total: 4 sqm × (20 × 1.05 = 21) = 84.00
+    assert line.line_total == 84.0
+    assert line.base_line_total == 80.0
     assert q.is_final is False
 
 
