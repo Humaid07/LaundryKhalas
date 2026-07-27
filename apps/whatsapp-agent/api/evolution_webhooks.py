@@ -32,6 +32,8 @@ from agents.whatsapp_agent.booking_tools import BookingContext, run_booking_turn
 from channels.evolution_whatsapp import EvolutionWhatsAppChannel, parse_evolution_webhook
 from db import database
 from db.repositories import (
+    b2b_leads_repo,
+    campaigns_repo,
     complaints_repo,
     conversations_repo,
     crm_repo,
@@ -46,6 +48,7 @@ from db.repositories import (
     turns_repo,
 )
 from services import (
+    b2b,
     booking_flow,
     complaints,
     discount,
@@ -487,6 +490,11 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
                     order_read = facility_orders_repo.to_facility_read(dict(row))
                     order_read["id"] = str(row["id"])
                     await facility_notifications.notify_new_order_assigned(fac_id, order_read)
+                # Last-touch campaign attribution (mock-first, best-effort).
+                try:
+                    await campaigns_repo.attribute_booking(customer["id"], str(row["id"]))
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("campaign_attribution_failed", sender=masked, error=str(exc))
                 # Recompute the customer's CRM lifecycle/segments (deterministic,
                 # best-effort — never raises into the confirmation reply).
                 await crm_repo.recompute_for_customer(customer["id"])
@@ -679,6 +687,39 @@ async def receive_evolution_webhook(request: Request):
                                                         metadata={"kind": "complaint_ack"})
                     except Exception as exc:  # noqa: BLE001
                         logger.warning("complaint_ack_failed", sender=masked, error=str(exc))
+
+            # B2B enquiry → its own lead entity (NOT the consumer funnel) + a sales
+            # follow-up task + a safe acknowledgement. Best-effort, never blocks.
+            elif flag_type == "b2b_lead":
+                try:
+                    existing_lead = await b2b_leads_repo.get_open_for_conversation(convo["id"])
+                    if existing_lead is None:
+                        btype = b2b.classify_business_type(text)
+                        lead = await b2b_leads_repo.create(
+                            customer_id=customer["id"], conversation_id=convo["id"],
+                            business_type=btype, market=customer.get("market"),
+                            location=customer.get("area") or customer.get("city"),
+                            notes=stored_text)
+                        await pending_tasks_repo.create(
+                            "AWAITING_OPERATIONS_RESPONSE",
+                            customer_id=customer["id"], conversation_id=convo["id"],
+                            notes=f"B2B lead {lead.get('lead_ref') if lead else ''} ({btype})")
+                        logger.info("b2b_lead_created", sender=masked, business_type=btype,
+                                    ref=(lead or {}).get("lead_ref"))
+                    can_reply = (live and mode != "paused"
+                                 and convo.get("status") != "human_takeover")
+                    if can_reply:
+                        b2b_ack = b2b.acknowledgement(b2b.classify_business_type(text))
+                        try:
+                            await EvolutionWhatsAppChannel.from_settings().send_text(
+                                to_phone=sender, text=b2b_ack)
+                            await messages_repo.add_message(convo["id"], "agent", b2b_ack,
+                                                            status="sent",
+                                                            metadata={"kind": "b2b_ack"})
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning("b2b_ack_failed", sender=masked, error=str(exc))
+                except Exception as exc:  # noqa: BLE001 - never break the handoff
+                    logger.warning("b2b_lead_failed", sender=masked, error=str(exc))
 
             if inbound_msg:
                 await messages_repo.set_status(inbound_msg["id"], "human_needed")

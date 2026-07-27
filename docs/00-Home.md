@@ -67,9 +67,38 @@ marketing / attribution / complaints layer was the main gap. Delivered slice-by-
   prompt clause (never expose facility costs/margins/other-customer data/keys), the
   `shortening` alias, and an empty-text guard on the grounded path. 8 tests, 674 total.
   `save_delivery_info` deferred (delivery not modelled in the FSM yet).
-- Slices 4–9 planned: B2B lead entity · quality metrics · sanitized eval dataset ·
-  campaign attribution (mock) · HubSpot sync (mock) · facility rates/margin + geo (mock).
-  Bespoke photo handling deferred (needs a media bucket).
+- **Slice 4 — B2B lead entity** ✅ [[2026-07-27-b2b-lead-entity]] —
+  `build-reports/2026-07-27-b2b-lead-entity.md`. `b2b_leads` table (migration 000025),
+  pure `services/b2b.py` (business-type classification + safe ack, no price quotes),
+  `b2b_leads_repo`; escalation now routes hotel/commercial/bulk enquiries to a
+  dedicated lead + Sales task + acknowledgement, out of the consumer funnel. 11 tests,
+  685 backend total; live-smoke-validated.
+- **Slice 5 — Quality-metrics reporting** ✅ [[2026-07-27-quality-metrics-reporting]] —
+  `build-reports/2026-07-27-quality-metrics-reporting.md`. Deterministic conversion /
+  repeat / escalation rollups + breakdowns by service/market/segment (pure
+  `services/metrics.py` + `db/repositories/metrics_repo.py`, B2B + demo excluded),
+  `GET /api/internal/metrics/quality` (ops). 5 tests, 690 backend total; live-validated.
+- **Slice 6 — PII sanitiser + evaluation dataset** ✅ [[2026-07-28-sanitized-eval-dataset]] —
+  `build-reports/2026-07-28-sanitized-eval-dataset.md`. `services/sanitize.py` (mask
+  phone/email/URL/order-id/address/keys) + `services/eval_dataset.py` (record schema,
+  20 groups, validator, `to_eval_record`) + `eval/evaluation_dataset.json` (11 PII-free
+  seed records). 9 tests.
+- **Slice 7 — Campaign attribution (mock-first)** ✅ [[2026-07-28-campaign-attribution]] —
+  `build-reports/2026-07-28-campaign-attribution.md`. `campaigns` + `campaign_sends`
+  (migration 000026), pure `services/campaign.py` (eligibility + last-touch attribution),
+  `campaigns_repo`, `get_campaign_eligibility` tool (never grants expired offers),
+  confirm-time attribution + `campaign_responder` CRM feed. 9 tests; live-validated.
+- **Slice 9 — Facility rates + margin + geo (mock)** ✅ [[2026-07-28-facility-rates-margin-geo]] —
+  `build-reports/2026-07-28-facility-rates-margin-geo.md`. `facility_services` +
+  `facility_rates` + `margin_rules` + facility geo/market/accepts_orders (migration 000027,
+  mock seed), pure `services/facility_pricing.py` (margin math + haversine + lowest-cost
+  pick), `facility_pricing_repo.quote_for_service` (lowest qualified rate + margin →
+  customer price, cost/margin hidden). 10 tests; live-validated. Wiring the quote into the
+  live discount/location flow is the documented next step.
+
+**Program complete (8 slices; HubSpot slice dropped per owner).** Deferred: wire
+`quote_for_service` into the agent discount flow; bespoke photo handling (media bucket);
+real rate cards / campaign sends to replace mock seeds.
 
 ## Latest — VAT-Inclusive Pricing, Auto 15% Discount & Message Aggregation (2026-07-27)
 

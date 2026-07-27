@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "description": "Mock campaign definitions (no live marketing system). The backend validates eligibility/expiry from these; the agent never grants an expired or ineligible offer. Replace with real campaigns when a marketing source exists.",
+    "version": "1.0.0"
+  },
+  "campaigns": [
+    {
+      "code": "NEW25-AE",
+      "name": "New customer 25% off (UAE)",
+      "campaign_type": "acquisition",
+      "offer": "25% off your first order",
+      "discount_percentage": 25.0,
+      "market": "AE",
+      "valid_from": "2026-07-01",
+      "valid_to": "2026-08-31",
+      "attribution_window_days": 30,
+      "active": true
+    },
+    {
+      "code": "WINBACK-AE",
+      "name": "We miss you (UAE returning)",
+      "campaign_type": "retention",
+      "offer": "20% off to welcome you back",
+      "discount_percentage": 20.0,
+      "market": "AE",
+      "valid_from": "2026-07-15",
+      "valid_to": "2026-09-15",
+      "attribution_window_days": 14,
+      "active": true
+    },
+    {
+      "code": "EXPIRED-TEST",
+      "name": "Expired test campaign",
+      "campaign_type": "promo",
+      "offer": "30% off",
+      "discount_percentage": 30.0,
+      "market": "AE",
+      "valid_from": "2026-01-01",
+      "valid_to": "2026-03-01",
+      "attribution_window_days": 30,
+      "active": true
+    }
+  ]
+}

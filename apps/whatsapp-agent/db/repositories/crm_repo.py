@@ -73,6 +73,14 @@ async def gather_facts(customer_id: str) -> CustomerFacts:
         customer_id,
     )
 
+    # Campaign responder: any converted campaign send for this customer (best-effort;
+    # absent campaign tables just mean False).
+    try:
+        from db.repositories import campaigns_repo
+        campaign_responder = await campaigns_repo.has_converted_send(customer_id)
+    except Exception:  # noqa: BLE001
+        campaign_responder = False
+
     last_activity = activity_row["last_activity_at"] if activity_row else None
     days_since = None
     if last_activity is not None:
@@ -92,6 +100,7 @@ async def gather_facts(customer_id: str) -> CustomerFacts:
         is_b2b=bool(flag_row["is_b2b"]) if flag_row else False,
         has_any_activity=bool(activity_row["has_any"]) if activity_row else False,
         days_since_activity=days_since,
+        campaign_responder=campaign_responder,
     )
 
 

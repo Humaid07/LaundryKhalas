@@ -17,6 +17,7 @@ from api import (
     flags,
     health,
     internal_facility_issues,
+    internal_metrics,
     orders,
     public_pricing,
     seo_agents,
@@ -116,6 +117,7 @@ app.include_router(public_pricing.router)
 app.include_router(facility.router, dependencies=[Depends(deps.require_facility_scope)])
 # Internal ops view of facility-raised issues (operations + admin).
 app.include_router(internal_facility_issues.router, dependencies=_OPS)
+app.include_router(internal_metrics.router, dependencies=_OPS)
 app.include_router(health.router)
 
 

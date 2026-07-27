@@ -223,6 +223,12 @@ BOOKING_TOOL_SCHEMAS: list[dict] = [
                       "properties": {"task_type": {"type": "string"},
                                      "notes": {"type": "string"}},
                       "required": ["task_type"], "additionalProperties": False}},
+    {"name": "get_campaign_eligibility",
+     "description": "Check whether a promotional campaign/offer is currently valid for this customer. "
+                    "Pass offer_code, or omit to list active offers. NEVER grant an expired or ineligible "
+                    "offer — apply ONLY what this returns as eligible.",
+     "input_schema": {"type": "object", "properties": {"offer_code": {"type": "string"}},
+                      "additionalProperties": False}},
     {"name": "request_human_support",
      "description": "Escalate this conversation to a human agent (complaints, refunds, anything unsafe or out of scope).",
      "input_schema": {"type": "object", "properties": {"reason": {"type": "string"}},
@@ -308,6 +314,10 @@ def booking_system_prompt() -> str:
         "- If you ever tell the customer you'll check something (with a facility, Operations "
         "or a driver) or get back to them, call create_pending_task so it's actually "
         "tracked. Never promise a follow-up without creating the task.\n"
+        "- If the customer mentions a promotion/offer ('the 25% offer you sent', 'is the "
+        "offer still valid?'), call get_campaign_eligibility and apply ONLY what it returns "
+        "as eligible. If it's expired/ineligible, say it's no longer valid and offer current "
+        "pricing — never grant an expired offer.\n"
         "- For a complaint (damage, delay, poor cleaning/pressing, shrinking, missing items): "
         "apologise sincerely, call create_complaint, ask for the order reference and a photo "
         "of the affected item if not already given, and NEVER promise a refund, replacement or "
@@ -704,6 +714,23 @@ def make_booking_executor(ctx: BookingContext):
                 conversation_id=ctx.conversation_id, notes=ti.get("notes"))
             return _ok({"task_created": True, "task_type": ttype,
                         "reference": (task or {}).get("task_ref")})
+
+        if name == "get_campaign_eligibility":
+            from services import campaign as campaign_svc
+            market = (ctx.customer or {}).get("market")
+            code = str(ti.get("offer_code", "")).strip()
+            if code:
+                c = campaign_svc.find_by_code(code)
+                if not c:
+                    return _ok({"found": False, "eligible": False, "reason": "unknown_offer"})
+                eligible = campaign_svc.is_eligible(c, ctx.today, market=market)
+                return _ok({"found": True, "eligible": eligible,
+                            "offer": c.get("offer") if eligible else None,
+                            "reason": "ok" if eligible else "expired_or_ineligible"})
+            active = campaign_svc.eligible_campaigns(ctx.today, market=market)
+            return _ok({"eligible_campaigns": [
+                {"code": c["code"], "offer": c.get("offer"), "valid_to": c.get("valid_to")}
+                for c in active]})
 
         if name == "request_human_support":
             return _ok({"escalated": True,
