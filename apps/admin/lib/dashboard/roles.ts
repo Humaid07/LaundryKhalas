@@ -47,9 +47,46 @@ export const ROLES: Record<UserRole, RoleDef> = {
       "Operations · Customer Orders",
     ],
   },
+  // Facility-app roles — NO access to this internal admin dashboard. They exist
+  // here only so a facility user's token decodes without a type error; every
+  // route is denied via the empty `allowedPrefixes`. Kept out of ROLE_LIST so
+  // they are never offered when creating/editing internal admin users.
+  facility_owner: {
+    id: "facility_owner",
+    label: "Facility Owner",
+    description: "Belongs to the separate facility app — no access to the internal admin dashboard.",
+    allowedPrefixes: [],
+    access: [],
+  },
+  facility_manager: {
+    id: "facility_manager",
+    label: "Facility Manager",
+    description: "Belongs to the separate facility app — no access to the internal admin dashboard.",
+    allowedPrefixes: [],
+    access: [],
+  },
+  facility_staff: {
+    id: "facility_staff",
+    label: "Facility Staff",
+    description: "Belongs to the separate facility app — no access to the internal admin dashboard.",
+    allowedPrefixes: [],
+    access: [],
+  },
+  facility_driver: {
+    id: "facility_driver",
+    label: "Facility Driver",
+    description: "Belongs to the separate facility app — no access to the internal admin dashboard.",
+    allowedPrefixes: [],
+    access: [],
+  },
 };
 
-export const ROLE_LIST: RoleDef[] = Object.values(ROLES);
+/**
+ * Roles offered in the internal admin app (Settings → Users/Roles, guards).
+ * Deliberately excludes the `facility_*` roles — those are managed in the
+ * separate facility app and must never be assignable to an internal user here.
+ */
+export const ROLE_LIST: RoleDef[] = [ROLES.admin, ROLES.operations];
 
 /** Whether a role may reach a route. Admin → everything; others → their prefixes. */
 export function roleAllowsRoute(role: UserRole, pathname: string): boolean {

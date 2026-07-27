@@ -9,7 +9,20 @@
  * (`POST /api/auth/login`). It is sent as `Authorization: Bearer <token>` on
  * every guarded `/api/*` call and verified server-side in api/deps.py.
  */
-export type UserRole = "admin" | "operations";
+/**
+ * Roles the backend can mint a token for. `admin`/`operations` are the internal
+ * admin-dashboard roles. The `facility_*` roles belong to the SEPARATE facility
+ * app and have NO access here — they are listed only so a facility user's token
+ * decodes without a type error (route access is denied via empty allowedPrefixes
+ * in roles.ts).
+ */
+export type UserRole =
+  | "admin"
+  | "operations"
+  | "facility_owner"
+  | "facility_manager"
+  | "facility_staff"
+  | "facility_driver";
 
 export interface AuthUser {
   id: string | null;

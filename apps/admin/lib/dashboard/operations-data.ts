@@ -237,7 +237,27 @@ export const severityTone: Record<string, Tone> = {
   Critical: "danger",
   High: "warning",
   Medium: "info",
+  Low: "neutral",
 };
+
+/**
+ * Tone for a facility-raised issue's lifecycle status (lowercase backend values:
+ * open | acknowledged | waiting_on_facility | waiting_on_internal_team |
+ * resolved | closed). Used by the Facility Facing → Issues surfaces.
+ */
+export const facilityIssueStatusTone: Record<string, Tone> = {
+  open: "warning",
+  acknowledged: "info",
+  waiting_on_facility: "plum",
+  waiting_on_internal_team: "rose",
+  resolved: "success",
+  closed: "neutral",
+};
+
+/** Title-case a lowercase/snake_case backend value, e.g. "waiting_on_facility" → "Waiting On Facility". */
+export function titleCaseStatus(value: string): string {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export const handoffTone: Record<string, Tone> = {
   Ready: "warning",

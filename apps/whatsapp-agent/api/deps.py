@@ -38,12 +38,14 @@ async def current_user(request: Request) -> dict | None:
     if not database.is_supabase_mode():
         # No user store in SQLite mode — trust the signed token's claims (dev).
         return {"id": payload.get("sub"), "email": payload.get("email"),
-                "role": payload.get("role"), "is_active": True}
+                "role": payload.get("role"), "is_active": True,
+                "facility_id": payload.get("facility_id")}
     user = await users_repo.get_by_id(payload.get("sub"))
     if not user or not user["is_active"]:
         return None
     return {"id": str(user["id"]), "email": user["email"], "role": user["role"],
-            "is_active": True, "full_name": user.get("full_name"), "market": user.get("market")}
+            "is_active": True, "full_name": user.get("full_name"), "market": user.get("market"),
+            "facility_id": str(user["facility_id"]) if user.get("facility_id") else None}
 
 
 def require_roles(*roles: str):
@@ -65,3 +67,56 @@ def require_roles(*roles: str):
 
 require_admin = require_roles("admin")
 require_ops = require_roles("admin", "operations")  # operations + admin
+
+
+# --- Facility (partner dashboard) scoping ----------------------------------
+# A facility principal used in dev (REQUIRE_AUTH=false) so the facility app works
+# without a login, scoped to a seeded demo facility. Never used when auth is on.
+_DEV_FACILITY_PRINCIPAL = {"id": None, "email": "facility-dev@local",
+                           "role": "facility_owner", "is_active": True}
+
+
+async def _dev_facility_id() -> str | None:
+    """Resolve a facility to scope dev/admin callers to: FACILITY_DEV_ID if set,
+    else the first active facility. Returns None outside Supabase mode."""
+    settings = get_settings()
+    if settings.facility_dev_id:
+        return settings.facility_dev_id
+    if not database.is_supabase_mode():
+        return None
+    return await database.fetchval(
+        "select id::text from facilities where is_active order by created_at asc limit 1"
+    )
+
+
+async def require_facility_scope(request: Request) -> dict:
+    """Facility-app guard. Returns the principal augmented with a resolved
+    ``facility_id`` and 403s if the caller isn't bound to a facility. Every
+    facility-scoped query MUST filter by this facility_id — the service role
+    bypasses RLS, so isolation is enforced here + in application SQL, never by
+    trusting a client-supplied facility_id.
+
+    - REQUIRE_AUTH off (dev): anonymous is allowed as a facility_owner scoped to
+      the seeded demo facility, so the app is usable without logging in.
+    - REQUIRE_AUTH on: a facility_* user is locked to their own facility_id; an
+      admin may target a facility via ?facility_id= (or the default facility).
+    """
+    settings = get_settings()
+    user = await current_user(request)
+    if not settings.require_auth:
+        facility_id = (user or {}).get("facility_id") or await _dev_facility_id()
+        if not facility_id:
+            raise HTTPException(status_code=403,
+                                detail="No facility is configured for this environment.")
+        return {**(user or _DEV_FACILITY_PRINCIPAL), "facility_id": facility_id}
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if user["role"] != "admin" and user["role"] not in auth_svc.FACILITY_ROLES:
+        raise HTTPException(status_code=403, detail="Facility access required.")
+    facility_id = user.get("facility_id")
+    if user["role"] == "admin" and not facility_id:
+        # Platform admin acting on a specific facility (validated: must exist).
+        facility_id = request.query_params.get("facility_id") or await _dev_facility_id()
+    if not facility_id:
+        raise HTTPException(status_code=403, detail="Your account is not linked to a facility.")
+    return {**user, "facility_id": facility_id}

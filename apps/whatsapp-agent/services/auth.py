@@ -18,7 +18,12 @@ import json
 import os
 import time
 
-ROLES = ("admin", "operations")
+# Platform (internal dashboard) roles and facility (partner dashboard) roles.
+# Kept as one flat ROLES tuple for the users table CHECK + admin user-management
+# validation; the two groups gate different apps (see api/deps.py).
+PLATFORM_ROLES = ("admin", "operations")
+FACILITY_ROLES = ("facility_owner", "facility_manager", "facility_staff", "facility_driver")
+ROLES = PLATFORM_ROLES + FACILITY_ROLES
 _PBKDF2_ITERATIONS = 200_000
 
 

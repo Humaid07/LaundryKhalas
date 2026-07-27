@@ -35,15 +35,20 @@ async def login(payload: LoginRequest):
     if not ok:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
+    # Facility users carry their facility_id as a token claim so the facility app
+    # is scoped without a separate lookup (backend still re-checks on every call).
+    facility_id = str(user["facility_id"]) if user.get("facility_id") else None
     token = create_access_token(
         subject=str(user["id"]), role=user["role"], email=user["email"],
         secret=settings.jwt_secret_effective, expiry_hours=settings.jwt_expiry_hours,
+        extra={"facility_id": facility_id} if facility_id else None,
     )
     return {
         "access_token": token,
         "token_type": "bearer",
         "user": {"id": str(user["id"]), "email": user["email"],
-                 "full_name": user.get("full_name"), "role": user["role"]},
+                 "full_name": user.get("full_name"), "role": user["role"],
+                 "facility_id": facility_id},
     }
 
 

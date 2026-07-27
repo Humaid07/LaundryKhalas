@@ -1,0 +1,50 @@
+   ▲ Next.js 15.5.22
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 120s
+   Linting and checking validity of types ...
+
+./app/(app)/orders/page.tsx
+45:9  Warning: The 'orders' logical expression could make the dependencies of useMemo Hook (at line 57) change on every render. To fix this, wrap the initialization of 'orders' in its own useMemo() Hook.  react-hooks/exhaustive-deps
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+   Collecting page data ...
+   Generating static pages (0/19) ...
+   Generating static pages (4/19) 
+   Generating static pages (9/19) 
+   Generating static pages (14/19) 
+ ✓ Generating static pages (19/19)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    6.17 kB         125 kB
+├ ○ /_not-found                            998 B         103 kB
+├ ○ /finance                             3.12 kB         237 kB
+├ ○ /finance/payouts                     2.62 kB         128 kB
+├ ○ /finance/revenue                     3.06 kB         237 kB
+├ ○ /finance/services                    2.91 kB         237 kB
+├ ○ /issues                              2.19 kB         128 kB
+├ ƒ /issues/[issueId]                    4.29 kB         131 kB
+├ ○ /issues/new                          2.37 kB         123 kB
+├ ○ /login                               3.47 kB         113 kB
+├ ○ /orders                              2.63 kB         129 kB
+├ ƒ /orders/[orderId]                       6 kB         132 kB
+├ ○ /settings                            1.98 kB         115 kB
+├ ○ /settings/notifications              2.44 kB         129 kB
+├ ○ /settings/operations                 2.25 kB         129 kB
+├ ○ /settings/price                      3.29 kB         130 kB
+├ ○ /settings/profile                    1.65 kB         128 kB
+├ ○ /settings/teams                      2.72 kB         129 kB
+└ ○ /settings/timings                    2.56 kB         129 kB
++ First Load JS shared by all             102 kB
+  ├ chunks/255-fd23c1ca0966ed5f.js         46 kB
+  ├ chunks/4bd1b696-409494caf8c83275.js  54.2 kB
+  └ other shared chunks (total)          2.05 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+EXIT=0

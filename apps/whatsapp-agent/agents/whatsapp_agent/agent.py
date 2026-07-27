@@ -28,6 +28,10 @@ from services.domain_guard import REFUSAL_MESSAGE, Domain, classify
 from services.escalation import detect_escalation
 from settings import get_settings
 
+_EMPTY_REPLY_FALLBACK = (
+    "Sorry, I didn't quite catch that. Could you tell me a bit more about what "
+    "you'd like help with for your laundry or cleaning?"
+)
 _SMALLTALK_INTENTS = {"greeting", "smalltalk_thanks", "smalltalk_farewell"}
 _ORDER_FLOW_INTENTS = {"track_order_request", "cancel_order_request", "change_pickup_time_request"}
 # Intents that unambiguously belong to the booking sub-flow even before any
@@ -315,8 +319,11 @@ async def handle_message(
         )
 
     reply_domain = domain.value if domain is Domain.IN_DOMAIN else Domain.UNCERTAIN.value
+    # Empty-final-text guard (parity with the booking path): if the model ends the
+    # turn with no customer text (tool-only end / truncation), never send silence.
+    safe_text = (result.text or "").strip() or _EMPTY_REPLY_FALLBACK
     return AgentReply(
-        text=result.text,
+        text=safe_text,
         domain=reply_domain,
         intent=intent,
         provider=result.provider,

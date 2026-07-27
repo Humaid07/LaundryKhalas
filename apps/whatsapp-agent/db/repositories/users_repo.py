@@ -8,7 +8,7 @@ from __future__ import annotations
 from db import database
 
 _SELECT = ("select id, email, password_hash, full_name, role, is_active, market, "
-           "created_at, updated_at from public.users")
+           "facility_id, created_at, updated_at from public.users")
 
 
 def _public(row: dict | None) -> dict | None:
@@ -22,6 +22,7 @@ def _public(row: dict | None) -> dict | None:
         "role": row["role"],
         "is_active": row["is_active"],
         "market": row.get("market"),
+        "facility_id": str(row["facility_id"]) if row.get("facility_id") else None,
     }
 
 
@@ -37,23 +38,25 @@ async def get_by_id(user_id: str) -> dict | None:
 
 async def create(
     *, email: str, password_hash: str, full_name: str | None, role: str,
-    market: str | None = None, created_by_seed: bool = False,
+    market: str | None = None, facility_id: str | None = None,
+    created_by_seed: bool = False,
 ) -> dict:
     return await database.fetchrow(
         """
         insert into public.users
-            (email, password_hash, full_name, role, market, environment, created_by_seed)
-        values (lower($1), $2, $3, $4, $5, 'dev', $6)
+            (email, password_hash, full_name, role, market, facility_id, environment, created_by_seed)
+        values (lower($1), $2, $3, $4, $5, $6, 'dev', $7)
         on conflict (email) do update
             set password_hash = excluded.password_hash,
                 full_name = excluded.full_name,
                 role = excluded.role,
                 market = excluded.market,
+                facility_id = excluded.facility_id,
                 is_active = true
         returning id, email, password_hash, full_name, role, is_active, market,
-                  created_at, updated_at
+                  facility_id, created_at, updated_at
         """,
-        (email or "").strip(), password_hash, full_name, role, market, created_by_seed,
+        (email or "").strip(), password_hash, full_name, role, market, facility_id, created_by_seed,
     )
 
 
@@ -65,7 +68,7 @@ async def list_users() -> list[dict]:
 async def set_active(user_id: str, is_active: bool) -> dict | None:
     row = await database.fetchrow(
         "update public.users set is_active = $2 where id = $1 returning id, email, "
-        "password_hash, full_name, role, is_active, market, created_at, updated_at",
+        "password_hash, full_name, role, is_active, market, facility_id, created_at, updated_at",
         user_id, is_active,
     )
     return _public(row)
@@ -95,7 +98,7 @@ async def update_user(
     row = await database.fetchrow(
         f"update public.users set {', '.join(sets)} where id = ${len(args)} "
         "returning id, email, password_hash, full_name, role, is_active, market, "
-        "created_at, updated_at",
+        "facility_id, created_at, updated_at",
         *args,
     )
     return _public(row)

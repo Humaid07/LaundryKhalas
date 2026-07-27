@@ -22,6 +22,49 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — Facility Notifications & Drivers (2026-07-27)
+
+[[2026-07-27-facility-notifications-and-drivers]] —
+`build-reports/2026-07-27-facility-notifications-and-drivers.md`. Two Facility
+Dashboard additions: (1) **automatic facility mobile notifications** — added the
+`order_status_updated`, `driver_assigned`, and `internal_issue_reply` triggers
+(idempotent via a `dedupe_key`, PII-safe previews, mock-first + env-gated) on top of
+the existing `new_order_assigned`; wired into facility actions, the internal issue
+reply, and driver assignment. (2) A first-class **Drivers** section — new schema
+(migration `000023`: `facility_drivers`, `driver_assignments`, `driver_status_events`),
+`services/facility_drivers.py` status derivation + role-guarded order→driver assignment
+(audited to the order timeline + notified), facility-scoped driver APIs, and a
+mobile-first Drivers list/detail with its own sidebar + bottom-nav route. Isolation +
+privacy enforced server-side. 639 backend tests. See [[facility-driver-operations]] and
+[[facility-notifications]].
+
+## Latest — Agent Production-Hardening Program (2026-07-27, in progress)
+
+A staged program auditing + closing the gaps in the WhatsApp agent against the full
+production brief. A five-way audit confirmed most of the brief is already built
+(aggregation, VAT-inclusive pricing, 15%/20% non-stacking discounts, booking FSM,
+Anthropic tool-use loop, aliases, SLA, facility routing, 500 tests); the CRM /
+marketing / attribution / complaints layer was the main gap. Delivered slice-by-slice:
+
+- **Slice 1 — CRM funnel + segment engine** ✅ [[2026-07-27-crm-funnel-segment-engine]] —
+  `build-reports/2026-07-27-crm-funnel-segment-engine.md`. Deterministic backend
+  `lifecycle_stage` / `funnel_stage` / `segments` on `customers` (pure
+  `services/crm_segments.py` + `db/repositories/crm_repo.py`, config-driven
+  thresholds, migration 000022), recomputed on booking-confirm + escalation. 18 tests,
+  626 backend total. Also fixed **migration drift** (applied the missing committed
+  000021 `orders.discount_requested` to the dev/test DB).
+- **Slice 2 — Structured complaints + durable pending tasks** ✅ [[2026-07-27-complaints-and-pending-tasks]] —
+  `build-reports/2026-07-27-complaints-and-pending-tasks.md`. `complaints` +
+  `pending_tasks` tables (migration 000024, renumbered around the concurrent
+  drivers 000023), pure `services/complaints.py` (classification + empathetic ack,
+  never promises compensation) + `services/pending_tasks.py` (7 `AWAITING_*` SLAs);
+  escalation now creates a typed complaint + `AWAITING_COMPLAINT_REVIEW` task and
+  sends one gated empathetic ack. 26 tests, 666 backend total; live-smoke-validated.
+- Slices 3–9 planned: missing Claude tools (+ `create_complaint`/`create_pending_task`) ·
+  B2B lead entity · quality metrics · sanitized eval dataset · campaign attribution (mock) ·
+  HubSpot sync (mock) · facility rates/margin + geo (mock). Bespoke photo handling
+  deferred (needs a media bucket).
+
 ## Latest — VAT-Inclusive Pricing, Auto 15% Discount & Message Aggregation (2026-07-27)
 
 [[2026-07-27-vat-inclusive-pricing-auto-discount-message-aggregation]] —
@@ -36,6 +79,16 @@ ONE durable `conversation_turns` turn → ONE Claude call → ONE reply (per-con
 debounce + lock + startup recovery). 536 backend tests. Live WhatsApp/Supabase paths
 need a manual smoke test; rollback via `WHATSAPP_MESSAGE_AGGREGATION_ENABLED=false`.
 
+**Follow-up (discount precedence + location-pricing audit):**
+[[2026-07-27-discount-precedence-and-location-pricing-audit]] —
+`build-reports/2026-07-27-discount-precedence-and-location-pricing-audit.md` — added the
+**20%-over-AED-200 discount tier** gated by an explicit discount request (`discount_requested`
+NLU + sticky order flag), with strict non-stacking precedence over the 15%-over-100 tier
+(200 → 15%, 200.01 → 20%, never 35%); migration `000021`. Audited (and honestly scoped as
+NOT-yet-built) the larger location-based **facility routing / margin rulebook / bespoke
+quotation** subsystem — deferred because it overlaps the concurrent Facility Dashboard build
+and is a multi-subsystem effort; a staged plan + coordination decision are in the report.
+
 ## Session Context Reconstruction
 
 [[2026-07-21-new-claude-session-context-reconstruction]] —
@@ -47,6 +100,33 @@ dashboard sections, Operations 4-subsection IA, stateful mock order lifecycle, t
 config/rules layer, functional global filters, mock/live status, known limitations
 (no git repo, approvals not persisted server-side, no conversation inbox endpoint,
 Windows `next build` quirk), and the next recommended build steps. No code changed.
+
+## Facility (Partner) Dashboard
+
+[[2026-07-27-facility-dashboard-foundation]] —
+`build-reports/2026-07-27-facility-dashboard-foundation.md` — a **separate mobile-first
+dashboard for laundry partner facilities** (`apps/facility-dashboard`, :3010), distinct
+from the internal admin dashboard, sharing the FastAPI backend (:8100). Adds the
+`facilities` table (+ `orders.facility_id`), facility roles + per-facility scoping
+(`require_facility_scope`), facility orders/finance/settings/issues APIs, mock-first
+notifications, and surfaces facility-raised issues inside the internal dashboard
+(Operations → Facility Facing). Privacy: facilities see area/city + operational data only,
+never customer PII; every query scoped by `facility_id`. Payout rates deferred (Finance
+shows order value + "payout pending"). Architecture: [[facility-dashboard]] ·
+[[facility-privacy-firewall]] · [[facility-notifications]] · test script:
+[[facility-dashboard-test-script]].
+
+**Follow-up (auto-assignment + new-order notification):**
+[[2026-07-27-facility-auto-assign-and-notify]] —
+`build-reports/2026-07-27-facility-auto-assign-and-notify.md` — the first **live data flow
+into the partner workspace**: on a customer's booking confirmation, the order is now
+**auto-assigned to a facility** by pickup location + current load (`facilities_repo.
+select_for_location`, `orders_repo.set_facility` idempotent, `services/facility_routing.py`),
+a `facility_assigned` audit event is written, and the facility is **mock-notified**
+(`notify_new_order_assigned`). Ranking: area > city > emirate, `open` over `busy`, spare
+capacity, least-loaded; no active facility → left unassigned (nothing force-routed). Never
+raises into the booking flow. Live-smoke-verified against Supabase (caught + fixed an
+`asyncpg` ambiguous-param bug). 608 backend tests pass (+8).
 
 ## SEO Agents (Phase 1)
 

@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "description": "Deterministic CRM segment + lifecycle thresholds for LaundryKhalas. Backend rules only (services/crm_segments.py). No LLM assigns these.",
+    "version": "1.0.0",
+    "currency": "AED"
+  },
+  "thresholds": {
+    "repeat_min_confirmed_orders": 2,
+    "high_value_lifetime_value": 500.0,
+    "price_sensitive_min_discount_requests": 2,
+    "price_sensitive_min_price_enquiries": 3,
+    "inactive_days": 60,
+    "campaign_attribution_days": 30
+  },
+  "notes": {
+    "repeat_customer": "confirmed_order_count >= repeat_min_confirmed_orders (two or more separate confirmed booking cycles).",
+    "high_value": "lifetime_value >= high_value_lifetime_value.",
+    "price_sensitive": "discount_request_count >= price_sensitive_min_discount_requests OR price_enquiry_count >= price_sensitive_min_price_enquiries (without a confirmed booking).",
+    "inactive": "no confirmed booking or meaningful activity within inactive_days.",
+    "campaign_responder": "confirmed booking within campaign_attribution_days of a campaign send (wired in the campaign-attribution slice)."
+  }
+}

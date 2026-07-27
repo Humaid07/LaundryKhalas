@@ -372,14 +372,14 @@
       "sort_order": 9,
       "default_pricing_type": "STARTING_FROM",
       "default_pricing_unit": "ITEM",
-      "aliases": ["alteration", "alterations", "alter", "tailoring", "tailor", "hemming", "resize", "resizing", "stitching", "fix my"],
+      "aliases": ["alteration", "alterations", "alter", "tailoring", "tailor", "hemming", "resize", "resizing", "stitching", "shortening", "shorten", "fix my"],
       "services": [
         {
           "code": "ALTERATIONS_ALL",
           "name": "Alterations",
           "sort_order": 1,
           "items": [
-            {"code": "ALTERATIONS_GENERAL", "name": "Alterations", "is_starting_price": true, "requires_inspection": true, "current_price": 30, "description": "Hemming, resizing, strap & buckle adjustments, elastic replacement", "aliases": ["alteration", "alterations", "hemming", "hem", "resize", "resizing", "strap adjustment", "buckle adjustment", "elastic replacement", "tailor", "tailoring"]}
+            {"code": "ALTERATIONS_GENERAL", "name": "Alterations", "is_starting_price": true, "requires_inspection": true, "current_price": 30, "description": "Hemming, resizing, strap & buckle adjustments, elastic replacement", "aliases": ["alteration", "alterations", "hemming", "hem", "shortening", "shorten", "resize", "resizing", "strap adjustment", "buckle adjustment", "elastic replacement", "tailor", "tailoring"]}
           ]
         }
       ]

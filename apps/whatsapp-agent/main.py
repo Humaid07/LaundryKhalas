@@ -13,8 +13,10 @@ from api import (
     conversations,
     deps,
     evolution_webhooks,
+    facility,
     flags,
     health,
+    internal_facility_issues,
     orders,
     public_pricing,
     seo_agents,
@@ -39,6 +41,8 @@ async def lifespan(app: FastAPI):
     # empty model, invalid token/timeout config). Never reveals the key. Mock /
     # OpenAI providers never raise here.
     get_settings().validate_ai_config()
+    # Fail fast on an unusable LIVE facility-notification config (mock never raises).
+    get_settings().validate_facility_notifications_config()
 
     # In local SQLite mode: create the ORM tables and seed the demo orders
     # (LK-AE-1024..1027) so tracking/cancel/change flows and the dashboard have
@@ -108,6 +112,10 @@ app.include_router(catalogue.router, dependencies=_OPS)
 app.include_router(admin_pricing.router)
 # Public pricing — UNAUTHENTICATED, read-only, published data only (for the website).
 app.include_router(public_pricing.router)
+# Facility (partner) dashboard — every endpoint scoped to the caller's facility.
+app.include_router(facility.router, dependencies=[Depends(deps.require_facility_scope)])
+# Internal ops view of facility-raised issues (operations + admin).
+app.include_router(internal_facility_issues.router, dependencies=_OPS)
 app.include_router(health.router)
 
 

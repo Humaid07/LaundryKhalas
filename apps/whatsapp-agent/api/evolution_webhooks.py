@@ -32,16 +32,29 @@ from agents.whatsapp_agent.booking_tools import BookingContext, run_booking_turn
 from channels.evolution_whatsapp import EvolutionWhatsAppChannel, parse_evolution_webhook
 from db import database
 from db.repositories import (
+    complaints_repo,
     conversations_repo,
+    crm_repo,
     customers_repo,
+    facility_orders_repo,
     flags_repo,
     messages_repo,
     orders_repo,
+    pending_tasks_repo,
     slots_repo,
     tickets_repo,
     turns_repo,
 )
-from services import booking_flow, discount, message_aggregation, money, order_store
+from services import (
+    booking_flow,
+    complaints,
+    discount,
+    facility_notifications,
+    facility_routing,
+    message_aggregation,
+    money,
+    order_store,
+)
 from services.auto_reply import SENDER_NOT_ALLOWED, should_auto_reply
 from services.escalation import detect_escalation
 from services.privacy import mask_phone, normalize_e164
@@ -131,6 +144,13 @@ _ESCALATION_FLAG: dict[str, tuple[str, str, str]] = {
     "angry": ("complaint", "high", "Customer Facing"),
 }
 _DEFAULT_FLAG = ("handoff", "high", "Customer Facing")
+
+# Flag types that represent a customer COMPLAINT (→ structured complaint record +
+# review task + empathetic ack). B2B/handoff/legal go through their own flows.
+_COMPLAINT_FLAG_TYPES = frozenset({
+    "refund_request", "payment_issue", "damaged_item", "missing_item",
+    "complaint", "late_delivery",
+})
 
 # Professional temporary-failure reply (spec §29). Sent — and the conversation
 # flagged for a human — when the AI turn fails, so the customer is never left in
@@ -458,6 +478,18 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
                 await orders_repo.set_conversation_state(row["id"], booking_flow.POST_ORDER)
             logger.info("booking_confirmed", sender=masked,
                         order=row["order_id"] if row else None, created_now=created_now)
+            # First-time confirm only: auto-assign a facility + notify it (mock-first).
+            # Both steps are idempotent and never raise, so they can't break the
+            # customer's confirmation reply.
+            if row and created_now:
+                fac_id = await facility_routing.assign_facility_for_order(dict(row))
+                if fac_id:
+                    order_read = facility_orders_repo.to_facility_read(dict(row))
+                    order_read["id"] = str(row["id"])
+                    await facility_notifications.notify_new_order_assigned(fac_id, order_read)
+                # Recompute the customer's CRM lifecycle/segments (deterministic,
+                # best-effort — never raises into the confirmation reply).
+                await crm_repo.recompute_for_customer(customer["id"])
             if live:
                 await _deliver(channel, phone, convo["id"], booking_flow.BookingReply(
                     text=_final_confirmation_text(row) if row else "Your booking is confirmed.",
@@ -601,12 +633,62 @@ async def receive_evolution_webhook(request: Request):
                                                 title=f"{reason.title()} — WhatsApp",
                                                 description=f"Raised from WhatsApp. Category: {reason}.",
                                                 order_uuid=order_uuid)
+
+            # Structured complaint + durable review task for complaint-type flags
+            # (B2B/handoff go through their own flows). Best-effort — a failure here
+            # must not stop the escalation handoff.
+            order_ref = open_order["order_id"] if open_order else None
+            has_order_ref = bool(order_ref) or "LK-" in (text or "").upper()
+            if flag_type in _COMPLAINT_FLAG_TYPES:
+                try:
+                    complaint_category = complaints.classify_category(text, category)
+                    complaint = await complaints_repo.create(
+                        customer_id=customer["id"], conversation_id=convo["id"],
+                        order_id=order_uuid, order_ref=order_ref,
+                        category=complaint_category,
+                        description=stored_text,
+                        requested_resolution=complaints.detect_requested_resolution(text),
+                        urgency=complaints.urgency_from_priority(priority),
+                    )
+                    await pending_tasks_repo.create(
+                        "AWAITING_COMPLAINT_REVIEW",
+                        customer_id=customer["id"], conversation_id=convo["id"],
+                        order_id=order_uuid,
+                        complaint_id=(complaint or {}).get("id"),
+                        notes=f"Complaint {complaint.get('complaint_ref') if complaint else ''}: {reason}",
+                    )
+                    logger.info("complaint_created", sender=masked,
+                                category=complaint_category,
+                                ref=(complaint or {}).get("complaint_ref"))
+                except Exception as exc:  # noqa: BLE001 - never break the handoff
+                    logger.warning("complaint_create_failed", sender=masked, error=str(exc))
+
+                # One empathetic acknowledgement (deterministic, no compensation
+                # promise), only when we're actually allowed to reply.
+                can_reply = (live and mode != "paused"
+                             and convo.get("status") != "human_takeover")
+                if can_reply:
+                    ack = complaints.empathetic_ack(
+                        complaints.classify_category(text, category),
+                        has_order_ref=has_order_ref, has_photo=False)
+                    try:
+                        await EvolutionWhatsAppChannel.from_settings().send_text(
+                            to_phone=sender, text=ack)
+                        await messages_repo.add_message(convo["id"], "agent", ack,
+                                                        status="sent",
+                                                        metadata={"kind": "complaint_ack"})
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("complaint_ack_failed", sender=masked, error=str(exc))
+
             if inbound_msg:
                 await messages_repo.set_status(inbound_msg["id"], "human_needed")
             # Cancel any pending buffered turn so a delayed AI reply never talks
             # over the human now handling this escalation (spec §24).
             if settings.whatsapp_message_aggregation_enabled:
                 await get_turn_buffer().cancel(convo["id"])
+            # Recompute CRM lifecycle/segments so complaint_open / b2b_lead is
+            # reflected immediately (deterministic, best-effort — never raises).
+            await crm_repo.recompute_for_customer(customer["id"])
             logger.info("evolution_inbound_escalation", sender=masked, flag_type=flag_type)
             processed += 1
             continue

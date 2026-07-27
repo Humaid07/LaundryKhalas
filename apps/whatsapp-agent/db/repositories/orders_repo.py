@@ -680,6 +680,19 @@ async def confirm_booking(order_uuid: str) -> tuple[dict | None, bool]:
     return row, True
 
 
+async def set_facility(order_uuid: str, facility_id: str) -> dict | None:
+    """Attach a facility to an order EXACTLY once. The ``facility_id is null``
+    guard makes this idempotent — an order that already has a facility is never
+    reassigned (facility reassignment is an ops-only action, CLAUDE.md §6), so a
+    redelivered confirm won't re-route. Returns the updated row, or None when the
+    order was already assigned / not found."""
+    return await database.fetchrow(
+        "update orders set facility_id = $2 where id = $1 and facility_id is null "
+        "returning *",
+        order_uuid, facility_id,
+    )
+
+
 async def cancel_booking(order_uuid: str) -> dict | None:
     row = await database.fetchrow(
         "update orders set status = $2, conversation_state = $3 where id = $1 returning *",

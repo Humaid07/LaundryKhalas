@@ -183,6 +183,37 @@ def _extract_interactive(message: dict) -> tuple[str | None, str]:
     return None, ""
 
 
+def _resolve_sender_phone(key: dict) -> str:
+    """Return the sender's real phone number (digits only), resolving WhatsApp
+    LID addressing.
+
+    Newer WhatsApp/Baileys uses "LID" addressing: ``key.remoteJid`` is then an
+    opaque LID such as ``58239773319181@lid`` that is NOT a phone number, and the
+    real phone-number JID (``971543216640@s.whatsapp.net``) is carried alongside
+    in ``key.remoteJidAlt``. Reading the LID as the phone number is why the agent
+    stopped replying — the "number" never matched the allow-list and any reply
+    would have been addressed to the LID. A provider restart only helps until the
+    contact flips back to LID addressing, which is why the failure recurred.
+
+    Preference order:
+      1. ``remoteJidAlt`` when ``remoteJid`` is a LID (the true PN),
+      2. otherwise ``remoteJid`` (already a phone-number JID),
+      3. a leftover ``@lid`` value as a last resort so the message is still stored.
+    """
+    remote_jid = key.get("remoteJid") or ""
+    alt = key.get("remoteJidAlt") or ""
+    if remote_jid.endswith("@lid") and alt:
+        jid = alt
+    elif remote_jid:
+        jid = remote_jid
+    else:
+        jid = alt
+    number = jid.split("@", 1)[0] if "@" in jid else jid
+    # A resolved phone-number JID is a run of digits; the ``:device`` suffix some
+    # JIDs carry (e.g. ``9715...:12@s.whatsapp.net``) is dropped.
+    return number.split(":", 1)[0]
+
+
 def _extract_location(message: dict) -> tuple[float | None, float | None]:
     if not isinstance(message, dict):
         return None, None
@@ -231,7 +262,7 @@ def parse_evolution_webhook(payload: dict) -> list[dict]:
         display = text or sel_text
         if not display and selection_id is None and latitude is None:
             continue
-        phone = remote_jid.split("@", 1)[0] if "@" in remote_jid else remote_jid
+        phone = _resolve_sender_phone(key)
         if not phone:
             continue
         results.append(

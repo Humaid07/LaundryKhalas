@@ -9,11 +9,15 @@ import { filterFacilityOrders, filterByArea, applyGlobalFilters, activeFilterCou
 import {
   facilityOrders, facilityIssues, deliveryHandoff,
   facilityOrderStatusTone, facilityPriorityTone, severityTone, handoffTone,
+  facilityIssueStatusTone, titleCaseStatus,
   type FacilityOrder,
 } from "@/lib/dashboard/operations-data";
 import { formatRelativeTime } from "@/lib/dashboard/formatters";
+import { agentApi, type FacilityIssueDTO } from "@/lib/dashboard/whatsapp-agent-api";
+import { LIVE_WHATSAPP_ENABLED, useLiveAgentData } from "@/components/dashboard/operations/live/useLiveAgentData";
+import { Button } from "@/components/dashboard/ui/Button";
 import {
-  MinimalKpiStrip, WorkflowTabs, CompactRecordCard, RecordList, EmptyState, StatusBadge,
+  MinimalKpiStrip, WorkflowTabs, CompactRecordCard, RecordList, EmptyState, LoadingState, StatusBadge,
   SnapshotBadge, type MinimalKpi, type WorkflowTab,
 } from "@/components/dashboard/minimal";
 
@@ -51,6 +55,12 @@ export function FacilityFacing() {
   const fHandoff = useMemo(() => filterByArea(deliveryHandoff, filters), [filters]);
   const isFiltered = activeFilterCount(filters) > 0;
 
+  // Facility-raised issues come from the live backend when the live flag is on
+  // (Dashboard → FastAPI). Off → fall back to the existing mock `facilityIssues`.
+  const liveIssues = useLiveAgentData<FacilityIssueDTO[]>(() => agentApi.listFacilityIssues());
+  const liveIssueRows = liveIssues.data ?? [];
+  const issuesCount = LIVE_WHATSAPP_ENABLED ? liveIssueRows.length : fIssues.length;
+
   const kpis: MinimalKpi[] = [
     { label: "In cleaning", value: String(fOrders.filter(ORDER_TAB_FILTERS.cleaning!).length) },
     { label: "QC pending", value: String(fOrders.filter(ORDER_TAB_FILTERS.qc!).length), tone: "warning" },
@@ -62,7 +72,7 @@ export function FacilityFacing() {
     id: t.id,
     label: t.label,
     count:
-      t.id === "issues" ? fIssues.length
+      t.id === "issues" ? issuesCount
       : t.id === "handoffs" ? fHandoff.length
       : fOrders.filter(ORDER_TAB_FILTERS[t.id]!).length,
   }));
@@ -91,7 +101,38 @@ export function FacilityFacing() {
       </div>
 
       {tab === "issues" ? (
-        fIssues.length === 0 ? (
+        LIVE_WHATSAPP_ENABLED ? (
+          liveIssues.loading ? (
+            <LoadingState label="Loading facility issues…" />
+          ) : liveIssues.error ? (
+            <EmptyState
+              icon={AlertTriangle}
+              title="Backend unavailable"
+              description={liveIssues.error}
+              action={<Button size="sm" variant="secondary" onClick={liveIssues.refresh}>Try again</Button>}
+            />
+          ) : liveIssueRows.length === 0 ? (
+            <EmptyState icon={AlertTriangle} title="No facility issues" description="Issues raised by facilities from the facility app appear here." />
+          ) : (
+            <RecordList>
+              {liveIssueRows.map((i) => (
+                <CompactRecordCard
+                  key={i.id}
+                  id={i.order_ref ?? undefined}
+                  title={i.facility_name}
+                  status={{ label: titleCaseStatus(i.severity), tone: severityTone[titleCaseStatus(i.severity)] ?? "neutral" }}
+                  fields={[
+                    { label: "Order", value: i.order_ref ?? "—" },
+                    { label: "Raised", value: formatRelativeTime(i.created_at) },
+                    { label: "Issue type", value: titleCaseStatus(i.issue_type) },
+                  ]}
+                  meta={<StatusBadge tone={facilityIssueStatusTone[i.status] ?? "neutral"} dot={false}>{titleCaseStatus(i.status)}</StatusBadge>}
+                  href={`/operations/facility-facing/issues/${i.id}?tab=issues`}
+                />
+              ))}
+            </RecordList>
+          )
+        ) : fIssues.length === 0 ? (
           <EmptyState icon={AlertTriangle} title="No facility issues" description="Operational problems raised by or for facilities appear here." />
         ) : (
           <RecordList>

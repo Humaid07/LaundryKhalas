@@ -62,6 +62,67 @@ def test_parse_ignores_non_text_and_other_events():
     assert parse_evolution_webhook({"event": "messages.update", "data": {}}) == []
 
 
+def test_parse_lid_addressing_resolves_real_number():
+    """LID addressing: remoteJid is an opaque @lid id, the real phone-number JID
+    is in remoteJidAlt. The parser must return the REAL number so allow-list
+    matching, customer identity and the reply target are correct (the bug that
+    made the agent stop replying)."""
+    payload = {
+        "event": "messages.upsert",
+        "data": {
+            "key": {
+                "remoteJid": "58239773319181@lid",
+                "remoteJidAlt": "971543216640@s.whatsapp.net",
+                "addressingMode": "lid",
+                "fromMe": False,
+                "id": "LID1",
+            },
+            "pushName": "Test",
+            "message": {"conversation": "I need a laundry pickup"},
+        },
+    }
+    out = parse_evolution_webhook(payload)
+    assert out[0]["phone"] == "971543216640"
+
+
+def test_parse_lid_without_alt_falls_back_to_lid_digits():
+    """No remoteJidAlt available → still store the message (never silently drop),
+    using the LID digits as a last resort."""
+    payload = {
+        "event": "messages.upsert",
+        "data": {
+            "key": {"remoteJid": "58239773319181@lid", "fromMe": False, "id": "LID2"},
+            "message": {"conversation": "hi"},
+        },
+    }
+    out = parse_evolution_webhook(payload)
+    assert out[0]["phone"] == "58239773319181"
+
+
+def test_parse_strips_device_suffix():
+    out = parse_evolution_webhook(_upsert("hi", jid="971543216640:12@s.whatsapp.net"))
+    assert out[0]["phone"] == "971543216640"
+
+
+def test_parse_lid_group_still_ignored():
+    """A group stays ignored even under LID addressing (remoteJid is still @g.us)."""
+    payload = {
+        "event": "messages.upsert",
+        "data": {
+            "key": {
+                "remoteJid": "919372522055-1571388479@g.us",
+                "participant": "270166378168570@lid",
+                "participantAlt": "918828367593@s.whatsapp.net",
+                "addressingMode": "lid",
+                "fromMe": False,
+                "id": "LID3",
+            },
+            "message": {"conversation": "group msg"},
+        },
+    }
+    assert parse_evolution_webhook(payload) == []
+
+
 def test_parse_handles_messages_list():
     payload = {"event": "messages.upsert", "data": {"messages": [
         {"key": {"remoteJid": "111@s.whatsapp.net", "fromMe": False, "id": "a"}, "message": {"conversation": "one"}},

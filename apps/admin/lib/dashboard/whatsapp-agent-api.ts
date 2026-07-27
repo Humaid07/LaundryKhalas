@@ -105,6 +105,38 @@ export interface AgentFlagDTO {
 }
 
 /**
+ * An operational issue RAISED BY A FACILITY (from the separate facility app),
+ * surfaced for the internal Operations team under Operations → Facility Facing.
+ * PII-free by design: facility name + business order ref only — never a customer
+ * phone/email/address. Backend: GET /api/internal/facility-issues.
+ */
+export interface FacilityIssueDTO {
+  id: string;
+  facility_id: string;
+  facility_name: string;
+  order_ref: string | null;
+  issue_type: string;
+  title: string;
+  message: string;
+  severity: string;   // critical | high | medium | low
+  priority: string;   // urgent | high | medium | low
+  status: string;     // open | acknowledged | waiting_on_facility | waiting_on_internal_team | resolved | closed
+  assigned_internal_owner: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A single message on a facility-issue thread (facility ↔ internal team). */
+export interface FacilityIssueMessageDTO {
+  id: string;
+  sender_type: "facility" | "internal" | "system";
+  sender_label: string;
+  message: string;
+  is_internal: boolean;   // true = internal-only note, not shown to the facility
+  created_at: string;
+}
+
+/**
  * A single priced line on an order (from the backend catalogue-pricing layer).
  * All money is in `pricing.currency` (AED). `unit_price` / `line_total` are the
  * FINAL customer-facing amounts (the 5% adjustment is already included); the
@@ -339,6 +371,24 @@ export const agentApi = {
     request<AgentFlagDTO[]>(`/api/flags${status ? `?status=${encodeURIComponent(status)}` : ""}`),
   resolveFlag: (flagId: string) =>
     request<AgentFlagDTO>(`/api/flags/${flagId}/resolve`, { method: "POST" }),
+
+  // --- Facility-raised issues (Operations → Facility Facing) ---
+  listFacilityIssues: (status?: string) =>
+    request<FacilityIssueDTO[]>(`/api/internal/facility-issues${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  getFacilityIssue: (id: string) =>
+    request<FacilityIssueDTO>(`/api/internal/facility-issues/${id}`),
+  getFacilityIssueMessages: (id: string) =>
+    request<FacilityIssueMessageDTO[]>(`/api/internal/facility-issues/${id}/messages`),
+  replyFacilityIssue: (id: string, message: string, isInternal?: boolean) =>
+    request<FacilityIssueMessageDTO>(`/api/internal/facility-issues/${id}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ message, is_internal: isInternal }),
+    }),
+  setFacilityIssueStatus: (id: string, status: string, owner?: string) =>
+    request<FacilityIssueDTO>(`/api/internal/facility-issues/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, assigned_internal_owner: owner }),
+    }),
 
   // --- Service taxonomy health ---
   serviceTaxonomyHealth: () =>

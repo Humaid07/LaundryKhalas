@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "description": "Durable pending operational task types + default SLA. A conversational promise ('I'll check with the facility') must create one of these so it is tracked, followed up and escalated — never left as chat only.",
+    "version": "1.0.0"
+  },
+  "task_types": {
+    "AWAITING_FACILITY_QUOTE":      { "due_hours": 4,  "follow_up_hours": 2,  "escalation_team": "Operations" },
+    "AWAITING_FACILITY_APPROVAL":   { "due_hours": 4,  "follow_up_hours": 2,  "escalation_team": "Operations" },
+    "AWAITING_DRIVER_CONFIRMATION": { "due_hours": 2,  "follow_up_hours": 1,  "escalation_team": "Operations" },
+    "AWAITING_OPERATIONS_RESPONSE": { "due_hours": 6,  "follow_up_hours": 3,  "escalation_team": "Operations" },
+    "AWAITING_CUSTOMER_PHOTO":      { "due_hours": 24, "follow_up_hours": 12, "escalation_team": "Customer Facing" },
+    "AWAITING_CUSTOMER_LOCATION":   { "due_hours": 24, "follow_up_hours": 12, "escalation_team": "Customer Facing" },
+    "AWAITING_PAYMENT":             { "due_hours": 24, "follow_up_hours": 6,  "escalation_team": "Customer Facing / Finance" },
+    "AWAITING_COMPLAINT_REVIEW":    { "due_hours": 4,  "follow_up_hours": 2,  "escalation_team": "Customer Facing" }
+  }
+}

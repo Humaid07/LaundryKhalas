@@ -1,0 +1,172 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  LaundryKhalas Internal Dashboard — design tokens.
+  Pink is a signal, not a fill: rose is reserved for brand, active states,
+  primary actions and one hero chart hue. Surfaces stay clean.
+  All semantic colors are "R G B" triplets so Tailwind's <alpha-value>
+  utilities (e.g. bg-rose/10) work, and charts recolor on theme switch.
+*/
+:root {
+  --canvas: 250 247 248; /* #faf7f8 warm rose-white */
+  --surface: 255 255 255;
+  --surface-2: 252 250 251;
+  --surface-raised: 255 255 255;
+  --border: 236 231 234;
+  --border-strong: 222 214 219;
+  --ink: 26 20 24; /* near-black, warm */
+  --ink-muted: 107 99 104;
+  --ink-faint: 150 143 148;
+
+  --rose: 214 51 108; /* #d6336c primary accent */
+  --rose-strong: 180 45 94; /* hover / pressed */
+  --rose-contrast: 255 255 255; /* text on rose */
+
+  --success: 5 150 105;
+  --warning: 217 119 6;
+  --danger: 220 38 38;
+  --info: 37 99 235;
+
+  /* Categorical chart palette — rose leads, supports separate cleanly */
+  --c-rose: 214 51 108;
+  --c-plum: 124 58 173;
+  --c-teal: 13 148 136;
+  --c-amber: 217 119 6;
+  --c-slate: 71 85 105;
+  --c-sky: 2 132 199;
+
+  --ring: 214 51 108;
+  --shadow-color: 24 15 20;
+}
+
+.dark {
+  --canvas: 13 15 19; /* #0d0f13 deep slate */
+  --surface: 22 27 34; /* #161b22 */
+  --surface-2: 28 34 43;
+  --surface-raised: 30 36 46;
+  --border: 40 46 56;
+  --border-strong: 57 65 77;
+  --ink: 237 233 236;
+  --ink-muted: 158 164 174;
+  --ink-faint: 112 119 129;
+
+  --rose: 232 76 136; /* #e84c88 brighter for dark */
+  --rose-strong: 240 106 162;
+  --rose-contrast: 20 12 16;
+
+  --success: 52 211 153;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
+  --info: 96 165 250;
+
+  --c-rose: 232 76 136;
+  --c-plum: 167 139 250;
+  --c-teal: 45 212 191;
+  --c-amber: 251 191 36;
+  --c-slate: 148 163 184;
+  --c-sky: 56 189 248;
+
+  --ring: 232 76 136;
+  --shadow-color: 0 0 0;
+}
+
+html,
+body {
+  background-color: rgb(var(--canvas));
+  color: rgb(var(--ink));
+}
+
+* {
+  border-color: rgb(var(--border));
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tabular numerals for all metric/data surfaces */
+.tnum {
+  font-feature-settings: "tnum" 1, "ss01" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Refined scrollbars — quiet, theme-aware */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--border-strong)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--border-strong));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--ink-faint));
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--ring));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes lk-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.lk-enter {
+  animation: lk-fade-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes lk-pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.lk-live-dot {
+  animation: lk-pulse-dot 2s ease-in-out infinite;
+}
+
+/* Dropdown / popover menu entrance — soft scale + fade from the top edge. */
+@keyframes lk-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.lk-menu-in {
+  animation: lk-menu-in 0.15s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: top;
+}
