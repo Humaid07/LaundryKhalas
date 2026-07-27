@@ -60,10 +60,16 @@ marketing / attribution / complaints layer was the main gap. Delivered slice-by-
   never promises compensation) + `services/pending_tasks.py` (7 `AWAITING_*` SLAs);
   escalation now creates a typed complaint + `AWAITING_COMPLAINT_REVIEW` task and
   sends one gated empathetic ack. 26 tests, 666 backend total; live-smoke-validated.
-- Slices 3–9 planned: missing Claude tools (+ `create_complaint`/`create_pending_task`) ·
-  B2B lead entity · quality metrics · sanitized eval dataset · campaign attribution (mock) ·
-  HubSpot sync (mock) · facility rates/margin + geo (mock). Bespoke photo handling
-  deferred (needs a media bucket).
+- **Slice 3 — Agent tools + prompt hardening** ✅ [[2026-07-27-agent-tools-and-prompt-hardening]] —
+  `build-reports/2026-07-27-agent-tools-and-prompt-hardening.md`. New Claude tools
+  (`get_available_pickup_slots`, `get_customer_record`, `get_saved_addresses`,
+  `start_another_order`, `create_complaint`, `create_pending_task`), a Confidentiality
+  prompt clause (never expose facility costs/margins/other-customer data/keys), the
+  `shortening` alias, and an empty-text guard on the grounded path. 8 tests, 674 total.
+  `save_delivery_info` deferred (delivery not modelled in the FSM yet).
+- Slices 4–9 planned: B2B lead entity · quality metrics · sanitized eval dataset ·
+  campaign attribution (mock) · HubSpot sync (mock) · facility rates/margin + geo (mock).
+  Bespoke photo handling deferred (needs a media bucket).
 
 ## Latest — VAT-Inclusive Pricing, Auto 15% Discount & Message Aggregation (2026-07-27)
 
