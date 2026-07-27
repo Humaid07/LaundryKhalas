@@ -165,6 +165,29 @@ class Settings(BaseSettings):
     # expiry job runs (scripts/expire_drafts.py). Confirmed orders are never touched.
     draft_expiry_hours: int = 24
 
+    # --- Facility (partner) dashboard ---------------------------------------
+    # Mock-first facility notifications. "mock" = log a facility_notifications row
+    # only (no external send); "whatsapp"/"sms" = future live channels that fire
+    # ONLY when their readiness gate passes. Unknown value resolves to "mock"
+    # (fail-safe: never sends by accident).
+    facility_notifications_mode: str = "mock"
+    # Dev-only: the facility the anonymous dev principal is scoped to when
+    # REQUIRE_AUTH=false (blank = first active facility). Never used with auth on.
+    facility_dev_id: str = ""
+
+    # --- Inbound message aggregation (task spec §§14-23) --------------------
+    # Customers often send one thought as several quick fragments ("Hi" / "need
+    # wash" / "tomorrow"). When enabled, inbound fragments are buffered per
+    # conversation and processed as ONE logical turn: the agent waits for a short
+    # inactivity window, then makes ONE Anthropic call and sends ONE reply.
+    whatsapp_message_aggregation_enabled: bool = True
+    # Wait ~this many seconds of inactivity after the LATEST fragment before
+    # processing (the debounce window). Each new fragment resets it.
+    whatsapp_message_debounce_seconds: float = 5.0
+    # Never wait longer than this from the FIRST fragment of a turn — a hard cap
+    # so a customer who keeps typing still gets a timely reply.
+    whatsapp_message_max_aggregation_seconds: float = 15.0
+
     # --- Auth / RBAC ---
     # When true, every dashboard /api/* endpoint requires a valid JWT + role.
     # Default false so local dev works without logging in; MUST be true in
@@ -185,15 +208,43 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./whatsapp_agent.db"
 
-    # :3100 = standalone chat UI · :3000 = internal admin dashboard (Operations tab)
+    # :3100 = standalone chat UI · :3000/:3005 = internal admin dashboard ·
+    # :3010 = facility (partner) dashboard (apps/facility-dashboard).
     allowed_origins: str = (
         "http://localhost:3100,http://127.0.0.1:3100,"
-        "http://localhost:3000,http://127.0.0.1:3000"
+        "http://localhost:3000,http://127.0.0.1:3000,"
+        "http://localhost:3005,http://127.0.0.1:3005,"
+        "http://localhost:3010,http://127.0.0.1:3010"
     )
 
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
+    @property
+    def facility_notifications_mode_normalized(self) -> str:
+        """Normalized facility-notification channel (mock|whatsapp|sms); anything
+        unrecognized resolves to the safe 'mock' (log only, never sends)."""
+        m = (self.facility_notifications_mode or "").strip().lower()
+        return m if m in ("mock", "whatsapp", "sms") else "mock"
+
+    @property
+    def facility_notifications_ready(self) -> bool:
+        """True only when a LIVE facility-notification channel is selected AND
+        usable. 'mock' only logs, so it is never 'ready'/live. 'whatsapp' reuses
+        the Evolution readiness gate; 'sms' has no provider yet (never ready)."""
+        return (self.facility_notifications_mode_normalized == "whatsapp"
+                and self.evolution_live_ready)
+
+    def validate_facility_notifications_config(self) -> None:
+        """Fail fast on an unusable LIVE facility-notification config. 'mock'
+        never raises (it only logs a row)."""
+        mode = self.facility_notifications_mode_normalized
+        if mode == "whatsapp" and not self.evolution_live_ready:
+            raise ValueError(
+                "FACILITY_NOTIFICATIONS_MODE=whatsapp requires a live Evolution "
+                "config (WHATSAPP_MODE=evolution + all EVOLUTION_* set)."
+            )
 
     @property
     def jwt_secret_effective(self) -> str:

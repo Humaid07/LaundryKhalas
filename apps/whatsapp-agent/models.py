@@ -160,7 +160,9 @@ class CatalogueVersionItem(Base):
     requires_inspection: Mapped[bool] = mapped_column(Boolean, default=False)
     requires_measurement: Mapped[bool] = mapped_column(Boolean, default=False)
     vat_rate: Mapped[float] = mapped_column(Float, default=0.05)
-    prices_include_vat: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Published Laundry Khalas prices are already final VAT-inclusive customer
+    # prices — the customer pays the stored price with NO 5% added (spec §§1-4).
+    prices_include_vat: Mapped[bool] = mapped_column(Boolean, default=True)
     market: Mapped[str] = mapped_column(String(8), default="AE")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)

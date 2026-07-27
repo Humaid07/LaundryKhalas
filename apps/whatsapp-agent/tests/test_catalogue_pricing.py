@@ -14,7 +14,7 @@ CATALOGUE_FIXTURE = {
     "catalogue": "Laundry Khalas UAE",
     "currency": "AED",
     "vat_rate": 0.05,
-    "prices_include_vat": False,
+    "prices_include_vat": True,
     "source": "Approved Laundry Khalas price-list image",
     "verified_at": "2026-07-23",
 }
@@ -31,7 +31,7 @@ def test_catalogue_metadata_matches_fixture():
     m = catalogue.meta()
     assert m["currency"] == CATALOGUE_FIXTURE["currency"]
     assert m["vat_rate"] == CATALOGUE_FIXTURE["vat_rate"]
-    assert m["prices_include_vat"] is False
+    assert m["prices_include_vat"] is True
     assert m["verified_at"] == CATALOGUE_FIXTURE["verified_at"]
 
 
@@ -142,30 +142,32 @@ def test_14_starting_price_is_never_a_guaranteed_total():
     assert q.subtotal_excluding_vat == 0.0
     assert q.is_final is False
     text = pricing.format_quote_summary(q)
-    # Starting price shown as the FINAL customer price (50 × 1.05 = 52.50).
-    assert "from aed 52.50" in text.lower()
+    # Starting price shown as the FINAL customer price (already inclusive: 50).
+    assert "from aed 50" in text.lower()
+    assert "52.50" not in text
     assert "inspection" in text.lower()
 
 
 # --- Required tests 15-18: VAT + quantity + multi-line math -------------------
 def test_15_and_17_vat_and_quantity_for_exact_order():
-    # 3 shirts @ 9 = 27 (task spec §15 worked example, single line)
+    # 3 shirts @ 9 = 27 final (prices already inclusive; no 5% added). The
+    # internal net split (27 / 1.05 = 25.71) never changes the customer total.
     q = pricing.calculate_estimate([{"item_code": "CLEAN_PRESS_SHIRT", "quantity": 3}])
-    assert q.subtotal_excluding_vat == 27.0
-    assert q.vat_amount == 1.35
-    assert q.estimated_total_including_vat == 28.35
+    assert q.estimated_total_including_vat == 27.0        # customer pays 27
+    assert q.subtotal_excluding_vat == 25.71              # internal net only
+    assert q.vat_amount == 1.29
     assert q.is_final is True
 
 
 def test_18_multiple_lines_sum_correctly():
-    # 3 × Shirt (9) + 2 × Trousers (11) = 27 + 22 = 49; VAT 2.45; total 51.45
+    # 3 × Shirt (9) + 2 × Trousers (11) = 27 + 22 = 49 final (no 5% added).
     q = pricing.calculate_estimate([
         {"item_code": "CLEAN_PRESS_SHIRT", "quantity": 3},
         {"item_code": "CLEAN_PRESS_TROUSERS", "quantity": 2},
     ])
-    assert q.subtotal_excluding_vat == 49.0
-    assert q.vat_amount == 2.45
-    assert q.estimated_total_including_vat == 51.45
+    assert q.estimated_total_including_vat == 49.0        # customer pays 49
+    assert q.subtotal_excluding_vat == 46.67              # internal net only
+    assert q.vat_amount == 2.33
     assert len(q.lines) == 2
     assert all(ln.line_kind == "exact" for ln in q.lines)
 
@@ -173,14 +175,15 @@ def test_18_multiple_lines_sum_correctly():
 def test_16_customer_summary_shows_final_price_and_no_vat_wording():
     q = pricing.calculate_estimate([{"item_code": "CLEAN_PRESS_SHIRT", "quantity": 1}])
     d = q.to_dict()
-    # Internal accounting split is retained (net + tax == final total) …
-    assert d["subtotal_excluding_vat"] == 9.0
-    assert d["vat_amount"] == 0.45
-    assert d["estimated_total_including_vat"] == 9.45
-    assert d["customer_total"] == 9.45
-    # … but the CUSTOMER-FACING summary shows only the final price, never VAT/tax.
+    # Customer pays the published price unchanged (9). Internal accounting still
+    # splits the tax OUT of the inclusive total (net + tax == 9), never adding.
+    assert d["estimated_total_including_vat"] == 9.0
+    assert d["customer_total"] == 9.0
+    assert d["subtotal_excluding_vat"] == 8.57
+    assert d["vat_amount"] == 0.43
+    # … and the CUSTOMER-FACING summary shows only the final price, never VAT/tax.
     summary = pricing.format_quote_summary(q)
-    assert "AED 9.45" in summary
+    assert "AED 9" in summary
     for banned in ("VAT", "vat", "tax", "excl", "incl", "Subtotal"):
         assert banned not in summary
 
@@ -190,8 +193,8 @@ def test_measured_line_is_estimate_not_final():
     q = pricing.calculate_estimate([{"item_code": "HOME_CARE_CURTAIN_SQM", "quantity": 1, "measure": 4}])
     line = q.lines[0]
     assert line.line_kind == "estimate"
-    # FINAL customer line total: 4 sqm × (20 × 1.05 = 21) = 84.00
-    assert line.line_total == 84.0
+    # FINAL customer line total: 4 sqm × 20 (already inclusive) = 80.00
+    assert line.line_total == 80.0
     assert line.base_line_total == 80.0
     assert q.is_final is False
 

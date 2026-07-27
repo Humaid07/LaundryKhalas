@@ -297,8 +297,8 @@ def category_options() -> list[dict]:
 
 def item_price_label(item: dict) -> str:
     """Short price string for an interactive list row / quote line, showing the
-    FINAL customer price (5% already included), e.g. 'AED 63 per bag',
-    'From AED 52.50 per pair'. Never mentions VAT/tax (task spec §§11/17/45)."""
+    FINAL customer price (already VAT-inclusive, no 5% added), e.g.
+    'AED 60 per bag', 'From AED 50 per pair'. Never mentions VAT/tax (spec §4)."""
     from services import money as _money
 
     unit = (item.get("pricing_unit") or "ITEM").lower()

@@ -55,6 +55,18 @@ async def lifespan(app: FastAPI):
         if get_settings().enable_demo_data:
             async with AsyncSessionLocal() as session:
                 await order_store.seed_demo_orders(session)
+
+    # Recover any inbound message turns left buffered / in-flight by a restart so
+    # a pending customer message still gets its one reply (spec §§21/27).
+    # Supabase-only (the turn model lives there) and best-effort — never blocks
+    # startup on error.
+    if database.is_supabase_mode() and get_settings().whatsapp_message_aggregation_enabled:
+        try:
+            from api.evolution_webhooks import recover_pending_turns
+            await recover_pending_turns()
+        except Exception as exc:  # noqa: BLE001
+            import structlog
+            structlog.get_logger().warning("turn_recovery_startup_failed", error=str(exc))
     yield
     await database.close_pool()
 

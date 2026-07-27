@@ -22,6 +22,20 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — VAT-Inclusive Pricing, Auto 15% Discount & Message Aggregation (2026-07-27)
+
+[[2026-07-27-vat-inclusive-pricing-auto-discount-message-aggregation]] —
+`build-reports/2026-07-27-vat-inclusive-pricing-auto-discount-message-aggregation.md` —
+**Three corrections:** (1) published prices are treated as ALREADY VAT-inclusive
+(AED 60 stays 60 — the previous build's `×1.05` double-VAT removed everywhere,
+one flag flip since all money routes through `services/money.py`); (2) an automatic
+**15% order discount** over AED 100 (config-driven rule, pure Decimal engine,
+applied once, snapshotted, never on inspection/starting-price unknown totals);
+(3) **inbound message aggregation** — rapid customer fragments are buffered into
+ONE durable `conversation_turns` turn → ONE Claude call → ONE reply (per-conversation
+debounce + lock + startup recovery). 536 backend tests. Live WhatsApp/Supabase paths
+need a manual smoke test; rollback via `WHATSAPP_MESSAGE_AGGREGATION_ENABLED=false`.
+
 ## Session Context Reconstruction
 
 [[2026-07-21-new-claude-session-context-reconstruction]] —

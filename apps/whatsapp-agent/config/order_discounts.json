@@ -1,0 +1,22 @@
+{
+  "_note": "Central, configurable definition of automatic ORDER-LEVEL discounts (task spec §5). The database/config is the single source of truth — the rule is NEVER hardcoded across components. Amounts are in AED and compared against the eligible order subtotal (sum of final, VAT-inclusive line totals). The threshold comparison is STRICTLY GREATER THAN (spec §5): 100.00 gets NO discount, 100.01 gets the discount.",
+  "currency": "AED",
+  "rules": [
+    {
+      "rule_code": "ORDER_OVER_100_DISCOUNT",
+      "name": "Order value over AED 100",
+      "description": "15% off automatically when the eligible order subtotal is over AED 100.",
+      "threshold_amount": 100.00,
+      "threshold_comparison": "greater_than",
+      "discount_type": "PERCENTAGE",
+      "discount_value": 15.00,
+      "currency": "AED",
+      "active": true,
+      "stacking": "non_stackable",
+      "effective_start": null,
+      "effective_end": null,
+      "eligible_markets": ["AE"],
+      "eligible_services": null
+    }
+  ]
+}

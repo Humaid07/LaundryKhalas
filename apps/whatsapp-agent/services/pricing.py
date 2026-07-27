@@ -5,13 +5,12 @@ NEVER invents a price and NEVER presents a starting ('From') or
 inspection-dependent price as a guaranteed total (CLAUDE.md §5/§8, task spec
 §§2/8/9).
 
-CUSTOMER-FACING PRICES ARE FINAL. Catalogue/base prices are stored EXCLUDING the
-5% adjustment; every price this module exposes for display (unit price, line
-total, order total) already has the 5% included, computed once via
-``services.money`` so it is never applied twice (spec §§17-20). No customer-
-facing string ever mentions VAT/tax (spec §11) — the split is kept only as
-internal accounting fields (spec §24). Money is computed with Decimal, HALF-UP
-to 2dp (spec §19).
+CUSTOMER-FACING PRICES ARE FINAL. Catalogue prices are ALREADY VAT-inclusive
+customer prices, so every price this module exposes for display (unit price,
+line total, order total) is the stored price UNCHANGED — no 5% is added on top
+(spec §§1-4), computed via ``services.money``. No customer-facing string ever
+mentions VAT/tax (spec §4) — the tax split is kept only as internal accounting
+fields (§3). Money is computed with Decimal, HALF-UP to 2dp (spec §3/§6).
 
 Line kinds:
   * ``exact``    — fixed per-item / per-pair / per-bag price × quantity. Firm.
@@ -25,7 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from services import catalogue, money
+from services import catalogue, discount, money
 
 
 @dataclass
@@ -75,12 +74,24 @@ class Quote:
     vat_rate: float
     prices_include_vat: bool
     lines: list[QuoteLine] = field(default_factory=list)
-    # Internal accounting only (spec §24) — NEVER shown to a customer.
+    # Internal accounting only (spec §3) — NEVER shown to a customer. Derived
+    # from the FINAL (post-discount) customer total.
     subtotal_excluding_vat: float = 0.0
     vat_amount: float = 0.0
-    # The final customer total (5% already included). Kept under this name for
-    # the existing order-row column mapping; it is the amount the customer pays.
+    # The final customer total the customer PAYS: eligible subtotal minus any
+    # automatic order discount. Kept under this name for the existing order-row
+    # column mapping.
     estimated_total_including_vat: float = 0.0
+    # Automatic order-level discount (spec §§5-11). eligible_subtotal is the
+    # pre-discount sum of final line totals; discount_amount is 0 when the order
+    # does not qualify (subtotal <= threshold) or the exact total is unknown.
+    eligible_subtotal: float = 0.0
+    discount_applied: bool = False
+    discount_reason: str = "below_threshold"
+    discount_rule_code: str | None = None
+    discount_percentage: float | None = None
+    discount_threshold: float | None = None
+    discount_amount: float = 0.0
     has_starting_prices: bool = False
     has_pending_inspection: bool = False
     has_measured_estimate: bool = False
@@ -106,6 +117,13 @@ class Quote:
             "vat_amount": self.vat_amount,
             "estimated_total_including_vat": self.estimated_total_including_vat,
             "customer_total": self.estimated_total_including_vat,
+            "eligible_subtotal": self.eligible_subtotal,
+            "discount_applied": self.discount_applied,
+            "discount_reason": self.discount_reason,
+            "discount_rule_code": self.discount_rule_code,
+            "discount_percentage": self.discount_percentage,
+            "discount_threshold": self.discount_threshold,
+            "discount_amount": self.discount_amount,
             "has_starting_prices": self.has_starting_prices,
             "has_pending_inspection": self.has_pending_inspection,
             "has_measured_estimate": self.has_measured_estimate,
@@ -215,18 +233,31 @@ def calculate_estimate(order_items: list[dict],
         if line.line_kind == "estimate":
             quote.has_measured_estimate = True
 
-    total = money.round_money(customer_total)
-    # Internal accounting split (never shown): net + tax == final total exactly.
-    net, tax = money.vat_breakdown(total, vat_rate=vat)
-    quote.subtotal_excluding_vat = float(net)
-    quote.vat_amount = float(tax)
-    quote.estimated_total_including_vat = float(total)
+    eligible_subtotal = money.round_money(customer_total)
     # Not final if anything can't be firmly totalled yet.
     quote.is_final = not (
         quote.has_pending_inspection
         or quote.has_measured_estimate
         or any(ln.line_kind == "pending" for ln in quote.lines)
     )
+    # Automatic order-level discount (spec §§5-9). Only applied when the exact
+    # eligible total is KNOWN (no 'from'/inspection/measured line); computed
+    # deterministically so recomputation never stacks it (spec §9).
+    disc = discount.evaluate(eligible_subtotal, total_is_known=quote.is_final)
+    quote.eligible_subtotal = float(eligible_subtotal)
+    quote.discount_applied = disc.applied
+    quote.discount_reason = disc.reason
+    quote.discount_rule_code = disc.rule_code
+    quote.discount_percentage = float(disc.discount_percentage) if disc.discount_percentage is not None else None
+    quote.discount_threshold = float(disc.threshold) if disc.threshold is not None else None
+    quote.discount_amount = float(disc.discount_amount)
+
+    total = money.round_money(disc.final_total)   # customer pays post-discount
+    # Internal accounting split (never shown): net + tax == final total exactly.
+    net, tax = money.vat_breakdown(total, vat_rate=vat)
+    quote.subtotal_excluding_vat = float(net)
+    quote.vat_amount = float(tax)
+    quote.estimated_total_including_vat = float(total)
     return quote
 
 
@@ -271,8 +302,15 @@ def format_quote_summary(quote: Quote) -> str:
     single FINAL amount — no subtotal, no VAT line, no tax wording (spec §23)."""
     lines = format_quote_lines(quote)
     body = "\n".join(lines)
-    if quote.estimated_total_including_vat > 0:
-        label = "Estimated price" if quote.is_estimated else "Final price"
+    label = "Estimated price" if quote.is_estimated else "Final price"
+    if quote.discount_applied and quote.discount_amount > 0:
+        # Show the benefit of the automatic discount (spec §10). No VAT line.
+        pct = money.format_money(quote.discount_percentage)
+        body += f"\nSubtotal — AED {money.format_money(quote.eligible_subtotal)}"
+        body += (f"\nAutomatic {pct}% discount — AED "
+                 f"{money.format_money(quote.discount_amount)} off")
+        body += f"\n{label} — AED {money.format_money(quote.estimated_total_including_vat)}"
+    elif quote.estimated_total_including_vat > 0:
         body += f"\n{label} — AED {money.format_money(quote.estimated_total_including_vat)}"
     if quote.has_pending_inspection or any(ln.line_kind == "pending" for ln in quote.lines):
         body += "\n\nSome items are priced after inspection — the team will confirm the final price."

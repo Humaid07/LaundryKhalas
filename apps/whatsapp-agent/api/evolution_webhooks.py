@@ -39,17 +39,69 @@ from db.repositories import (
     orders_repo,
     slots_repo,
     tickets_repo,
+    turns_repo,
 )
-from services import booking_flow, money, order_store
+from services import booking_flow, message_aggregation, money, order_store
 from services.auto_reply import SENDER_NOT_ALLOWED, should_auto_reply
 from services.escalation import detect_escalation
 from services.privacy import mask_phone, normalize_e164
+from services.turn_service import TurnBuffer
 from settings import get_settings
 
 router = APIRouter(prefix="/webhooks", tags=["evolution-webhook"])
 logger = structlog.get_logger()
 
 _GST = _dt.timezone(_dt.timedelta(hours=4))  # Dubai (no DST)
+
+
+def _utcnow() -> _dt.datetime:
+    return _dt.datetime.now(_dt.timezone.utc)
+
+
+_TURN_BUFFER: TurnBuffer | None = None
+
+
+def get_turn_buffer() -> TurnBuffer:
+    """Process-wide inbound message buffer (debounce timers live here). Rebuilt
+    if the configured debounce/max window changes. Shared by the webhook (ingest)
+    and startup recovery."""
+    global _TURN_BUFFER
+    s = get_settings()
+    if (_TURN_BUFFER is None
+            or _TURN_BUFFER.debounce != float(s.whatsapp_message_debounce_seconds)
+            or _TURN_BUFFER.max != float(s.whatsapp_message_max_aggregation_seconds)):
+        _TURN_BUFFER = TurnBuffer(
+            turns_repo,
+            debounce_seconds=s.whatsapp_message_debounce_seconds,
+            max_seconds=s.whatsapp_message_max_aggregation_seconds,
+        )
+    return _TURN_BUFFER
+
+
+async def recover_pending_turns() -> int:
+    """Re-drive inbound turns left buffered / in-flight by a restart so a pending
+    customer message still gets its one reply (spec §§21/27). Supabase-only and
+    best-effort — it skips conversations now under human takeover so the AI never
+    talks over an operator, and never blocks startup on error."""
+    settings = get_settings()
+    if not settings.whatsapp_message_aggregation_enabled:
+        return 0
+    buf = get_turn_buffer()
+    live = settings.agent_replies_enabled and settings.evolution_live_ready
+
+    async def _recovery_processor(conversation_id, combined, turn):
+        convo = await conversations_repo.get_conversation(conversation_id)
+        if not convo or convo.get("status") == "human_takeover":
+            return None
+        phone = await conversations_repo.get_customer_phone(conversation_id)
+        if not phone:
+            return None
+        customer = {"id": convo.get("customer_id"), "display_name": None}
+        await _process_reply(convo, customer, combined, phone=phone,
+                             masked=mask_phone(phone), live=live, last_inbound_msg=None)
+        return None
+
+    return await buf.recover(_recovery_processor)
 
 
 async def _published_price_overrides() -> dict:
@@ -140,7 +192,14 @@ def _final_confirmation_text(row: dict) -> str:
     ]
     total = row.get("estimated_total")
     if total is not None:
-        # FINAL customer price (5% already included). No VAT/tax wording (spec §§11/23).
+        # FINAL customer price — already VAT-inclusive, no 5% added, and net of
+        # any automatic order discount. No VAT/tax wording (spec §§4/10).
+        discount_amount = row.get("discount_amount")
+        if discount_amount and float(discount_amount) > 0:
+            pct = row.get("discount_percentage")
+            pct_str = money.format_money(pct) if pct is not None else "15"
+            lines.append(f"Subtotal: AED {money.format_money(row.get('eligible_subtotal'))}")
+            lines.append(f"Automatic {pct_str}% discount: AED {money.format_money(discount_amount)} off")
         label = "Estimated price" if row.get("pricing_is_estimated") else "Price"
         lines.append(f"{label}: AED {money.format_money(total)}")
     lines += [
@@ -239,6 +298,210 @@ async def _raise_support(conversation_id: str, order_uuid) -> None:
         description="Customer asked to talk to support from WhatsApp.", order_uuid=order_uuid)
 
 
+async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
+                         masked: str, live: bool, last_inbound_msg: dict | None) -> None:
+    """Generate + send ONE agent reply for a combined customer turn.
+
+    The per-turn processor: runs the booking routing (Claude orchestration → FSM
+    → non-booking) exactly ONCE on the combined text and sends a single reply.
+    Extracted so the inline path (aggregation off) and the debounce flush
+    (aggregation on) share identical behaviour. Access/idempotency/escalation/
+    takeover gates already ran per fragment in the webhook loop before this."""
+    settings = get_settings()
+    text = combined.text
+    inbound_obj = booking_flow.Inbound(
+        text=text, selection_id=combined.selection_id,
+        latitude=combined.latitude, longitude=combined.longitude,
+    )
+    # Exclude THIS turn's own fragments from the history we hand the model.
+    current_texts = set(combined.fragments)
+
+    active_draft = await orders_repo.get_active_draft(convo["id"])
+    draft_state = active_draft.get("conversation_state") if active_draft else None
+    sel = inbound_obj.selection_id
+    channel = EvolutionWhatsAppChannel.from_settings()
+    booking_row = None
+    reply = None
+    profile_name = booking_flow.validate_name(customer.get("display_name"))
+    verified_name = await orders_repo.get_confirmed_customer_name(customer["id"])
+
+    def _booking(row):
+        return _booking_from_row(row, profile_name=profile_name, verified_name=verified_name)
+
+    # --- Claude-orchestrated conversation (natural language, default path) ---
+    if settings.anthropic_booking_orchestration and settings.live_llm_ready:
+        logger.info("anthropic_turn_started", sender=masked, conversation=convo["id"])
+        prior = await messages_repo.list_messages(convo["id"])
+        history = [(m["sender_type"], m["message_text"]) for m in prior
+                   if m["sender_type"] in ("customer", "agent")
+                   and m.get("message_text") and m["message_text"] not in current_texts]
+        ctx = BookingContext(
+            conversation_id=convo["id"], order_uuid=None, repo=orders_repo,
+            today=_today(), available_slots=slots_repo.available_slots, customer=customer,
+            profile_name=profile_name, verified_name=verified_name)
+        try:
+            reply_text, result = await run_booking_turn(ctx, text=text, history=history)
+        except Exception as exc:  # noqa: BLE001 — never leave the customer in silence
+            logger.warning("anthropic_turn_failed", sender=masked, error=str(exc))
+            reply_text, result = _AI_FALLBACK_TEXT, None
+            await _raise_support(convo["id"], (active_draft or {}).get("id"))
+            if last_inbound_msg:
+                await messages_repo.set_status(last_inbound_msg["id"], "human_needed")
+            logger.info("human_attention_required", sender=masked, reason="ai_turn_failed")
+
+        if result is not None and "request_human_support" in (ctx.tool_calls or []):
+            open_order = await orders_repo.get_open_for_conversation(convo["id"])
+            await _raise_support(convo["id"], open_order["id"] if open_order else None)
+            if last_inbound_msg:
+                await messages_repo.set_status(last_inbound_msg["id"], "human_needed")
+            logger.info("human_attention_required", sender=masked, reason="model_requested")
+
+        fresh = await orders_repo.get_active_draft(convo["id"])
+        state = (fresh or {}).get("conversation_state") or booking_flow.WAITING_FOR_SERVICE
+        if live:
+            await _deliver(channel, phone, convo["id"],
+                           booking_flow.BookingReply(text=reply_text, state=state))
+        logger.info("anthropic_turn_delivered", sender=masked,
+                    tools=(ctx.tool_calls or []),
+                    provider=(result.provider if result else "fallback"),
+                    tokens_in=(result.tokens_in if result else 0),
+                    tokens_out=(result.tokens_out if result else 0),
+                    cost_usd=(result.cost_usd if result else 0.0),
+                    order=(fresh or {}).get("order_id"))
+        return
+
+    if draft_state in booking_flow.ACTIVE_STATES:
+        booking_row = active_draft
+        if (draft_state != booking_flow.RESUME_OR_NEW
+                and booking_flow.is_new_order_intent(text)
+                and booking_flow.has_progress(_booking(active_draft))):
+            reply = booking_flow.resume_or_new_prompt()
+        else:
+            reply = await booking_flow.advance(_booking(active_draft), inbound_obj,
+                                               today=_today(), available_slots=slots_repo.available_slots,
+                                               price_overrides=await _published_price_overrides())
+    else:
+        latest = await orders_repo.get_latest_for_conversation(convo["id"])
+        in_post_order = bool(latest and latest.get("conversation_state") == booking_flow.POST_ORDER)
+        action = booking_flow.resolve_post_order_action(inbound_obj, numbered=in_post_order)
+
+        if (action == booking_flow.NEW_ORDER
+                or booking_flow.is_book_pickup_intent(text)
+                or _is_booking_selection(sel)):
+            booking_row = await orders_repo.start_booking(convo["id"], customer)  # idempotent
+            opening_name = booking_flow.extract_name(text)
+            if opening_name and not booking_row.get("customer_name"):
+                updated = await orders_repo.apply_booking_updates(
+                    booking_row["id"], {"customer_name": opening_name},
+                    booking_row.get("conversation_state") or "waiting_for_service")
+                if updated:
+                    booking_row = updated
+                logger.info("customer_name_saved", sender=masked, source="provided")
+            logger.info("booking_intent_detected", sender=masked, order=booking_row["order_id"])
+            if _is_booking_selection(sel) or text.strip().isdigit():
+                reply = await booking_flow.advance(_booking(booking_row), inbound_obj,
+                                                   today=_today(), available_slots=slots_repo.available_slots,
+                                                   price_overrides=await _published_price_overrides())
+            else:
+                reply = booking_flow.begin_new_order() if latest else booking_flow.begin()
+        elif action == booking_flow.CHECK_ORDER_STATUS:
+            if live:
+                await _deliver(channel, phone, convo["id"], booking_flow.BookingReply(
+                    text=_order_status_text(latest), state=booking_flow.POST_ORDER))
+            logger.info("order_status_requested", sender=masked)
+            return
+        elif action == booking_flow.HUMAN_SUPPORT:
+            await _raise_support(convo["id"], latest["id"] if latest else None)
+            if last_inbound_msg:
+                await messages_repo.set_status(last_inbound_msg["id"], "human_needed")
+            if live:
+                await _deliver(channel, phone, convo["id"], booking_flow.BookingReply(
+                    text="Sure — I'll connect you with our team. They'll follow up "
+                         "with you shortly.", state=booking_flow.POST_ORDER))
+            logger.info("evolution_inbound_escalation", sender=masked, flag_type="handoff")
+            return
+        elif in_post_order:
+            if live:
+                await _deliver(channel, phone, convo["id"], booking_flow.post_order_actions())
+            return
+
+    if reply is not None:
+        order_uuid = booking_row["id"]
+        if reply.start_new_order:
+            await orders_repo.cancel_booking(order_uuid)
+            new_row = await orders_repo.start_booking(convo["id"], customer)
+            to_send = booking_flow.begin_new_order()
+            await orders_repo.apply_booking_updates(new_row["id"], to_send.updates, to_send.state)
+            logger.info("booking_restarted", sender=masked,
+                        old=booking_row["order_id"], new=new_row["order_id"])
+            if live:
+                await _deliver(channel, phone, convo["id"], to_send)
+            return
+        if reply.confirm_now:
+            row, created_now = await orders_repo.confirm_booking(order_uuid)
+            if row:
+                await orders_repo.set_conversation_state(row["id"], booking_flow.POST_ORDER)
+            logger.info("booking_confirmed", sender=masked,
+                        order=row["order_id"] if row else None, created_now=created_now)
+            if live:
+                await _deliver(channel, phone, convo["id"], booking_flow.BookingReply(
+                    text=_final_confirmation_text(row) if row else "Your booking is confirmed.",
+                    state=booking_flow.POST_ORDER))
+                await _deliver(channel, phone, convo["id"], booking_flow.post_order_actions())
+            return
+        elif reply.cancel_now:
+            await orders_repo.cancel_booking(order_uuid)
+            to_send = reply
+            logger.info("booking_cancelled", sender=masked, order=booking_row["order_id"])
+        else:
+            await orders_repo.apply_booking_updates(order_uuid, reply.updates, reply.state)
+            to_send = reply
+            if reply.log_event:
+                logger.info("booking_step", sender=masked,
+                            booking_event=reply.log_event, state=reply.state)
+
+        if live:
+            await _deliver(channel, phone, convo["id"], to_send)
+        return
+
+    # --- NON-BOOKING (greetings / general questions) -----------------------
+    prior = await messages_repo.list_messages(convo["id"])
+    history = [(m["sender_type"], m["message_text"]) for m in prior
+               if m["sender_type"] in ("customer", "agent")]
+    welcome_sent = any(m["sender_type"] == "agent" for m in prior)
+    decision = should_auto_reply(text, {"welcome_sent": welcome_sent})
+    will_send = bool(decision.send_reply and live)
+
+    if will_send:
+        agent_reply = await handle_message(text=text, history=history, db=None)
+        out_text = (agent_reply.text or "").strip() or _AI_FALLBACK_TEXT
+        try:
+            await EvolutionWhatsAppChannel.from_settings().send_text(
+                to_phone=phone, text=out_text)
+            await messages_repo.add_message(
+                convo["id"], "agent", out_text, status="sent",
+                metadata={
+                    "intent": decision.intent,
+                    "provider": agent_reply.provider,
+                    "model": agent_reply.model,
+                    "tokens_in": agent_reply.tokens_in,
+                    "tokens_out": agent_reply.tokens_out,
+                    "cost_usd": agent_reply.cost_usd,
+                    "tool_calls": agent_reply.tool_calls,
+                })
+            logger.info("evolution_auto_reply_sent", sender=masked,
+                        provider=agent_reply.provider, model=agent_reply.model,
+                        tokens_in=agent_reply.tokens_in, tokens_out=agent_reply.tokens_out,
+                        cost_usd=agent_reply.cost_usd, tool_calls=agent_reply.tool_calls)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("evolution_auto_reply_failed", sender=masked, error=str(exc))
+    else:
+        logger.info("evolution_inbound_held", sender=masked,
+                    no_auto_reply_reason=decision.reason)
+        if last_inbound_msg:
+            await messages_repo.set_status(last_inbound_msg["id"], "no_auto_reply")
+
+
 @router.post("/evolution")
 async def receive_evolution_webhook(request: Request):
     settings = get_settings()
@@ -298,8 +561,12 @@ async def receive_evolution_webhook(request: Request):
         stored_text = text or (msg.get("selection_id") or "shared location")
         inbound_msg = await messages_repo.add_message(
             convo["id"], "customer", stored_text, status="received", wa_message_id=wa_id,
+            # selection_id + location coords are stored so a turn can be
+            # reconstructed from the DB after a restart (turn aggregation §21).
             metadata={"selection_id": msg.get("selection_id"),
-                      "has_location": inbound_obj.is_location},
+                      "has_location": inbound_obj.is_location,
+                      "latitude": msg.get("latitude"),
+                      "longitude": msg.get("longitude")},
         )
         await conversations_repo.register_inbound(convo["id"], stored_text)
 
@@ -321,6 +588,10 @@ async def receive_evolution_webhook(request: Request):
                                                 order_uuid=order_uuid)
             if inbound_msg:
                 await messages_repo.set_status(inbound_msg["id"], "human_needed")
+            # Cancel any pending buffered turn so a delayed AI reply never talks
+            # over the human now handling this escalation (spec §24).
+            if settings.whatsapp_message_aggregation_enabled:
+                await get_turn_buffer().cancel(convo["id"])
             logger.info("evolution_inbound_escalation", sender=masked, flag_type=flag_type)
             processed += 1
             continue
@@ -343,226 +614,40 @@ async def receive_evolution_webhook(request: Request):
             processed += 1
             continue
 
-        # --- BOOKING routing (multi-order aware) --------------------------------
-        # Route by whether there is an IN-PROGRESS DRAFT (status='draft'). A
-        # confirmed/scheduled order is NOT an active workflow, so it never blocks a
-        # NEW order — a single conversation can hold many workflows/orders
-        # (spec §state-model).
-        active_draft = await orders_repo.get_active_draft(convo["id"])
-        draft_state = active_draft.get("conversation_state") if active_draft else None
-        sel = inbound_obj.selection_id
-        channel = EvolutionWhatsAppChannel.from_settings()
-        booking_row = None
-        reply = None
-        # Name context for the FSM: the UNVERIFIED WhatsApp profile name (offered
-        # for confirmation only) and any previously CONFIRMED name for this
-        # customer (offered for reuse). Neither is ever saved without confirmation.
-        profile_name = booking_flow.validate_name(customer.get("display_name") or msg.get("name"))
-        verified_name = await orders_repo.get_confirmed_customer_name(customer["id"])
+        # --- AGGREGATE fragments into one turn, or process this message inline ---
+        # Customers often send one thought as several quick fragments; buffer them
+        # per conversation and process the combined logical turn ONCE (spec
+        # §§14-23). When aggregation is off, process this single message inline
+        # (the legacy per-message behaviour).
+        if settings.whatsapp_message_aggregation_enabled:
+            buf = get_turn_buffer()
+            turn = await buf.add_fragment(
+                convo["id"], customer.get("id"),
+                message_id=(inbound_msg or {}).get("id"), message_at=_utcnow())
 
-        def _booking(row):
-            return _booking_from_row(row, profile_name=profile_name, verified_name=verified_name)
+            async def _processor(cid, combined, turn_row, *, _c=convo, _cust=customer,
+                                 _phone=msg["phone"], _masked=masked, _live=live,
+                                 _last=inbound_msg):
+                await _process_reply(_c, _cust, combined, phone=_phone, masked=_masked,
+                                     live=_live, last_inbound_msg=_last)
+                return None
 
-        # --- Claude-orchestrated conversation (natural language, default path) ---
-        # When ANTHROPIC_BOOKING_ORCHESTRATION is on AND a live Claude provider is
-        # configured, Claude understands the free-text message and drives the
-        # conversation via controlled tools: read-only GROUNDING tools answer
-        # questions (price/turnaround/area) with no order created, and validated
-        # WRITE tools capture booking fields — the backend validates + persists
-        # every field and the draft order is created lazily only when a booking
-        # field is actually saved (booking_tools.py). Same access, idempotency and
-        # takeover gates already ran above. reply_text is guaranteed non-empty.
-        if settings.anthropic_booking_orchestration and settings.live_llm_ready:
-            logger.info("anthropic_turn_started", sender=masked, conversation=convo["id"])
-            prior = await messages_repo.list_messages(convo["id"])
-            history = [(m["sender_type"], m["message_text"]) for m in prior
-                       if m["sender_type"] in ("customer", "agent")
-                       and m.get("message_text") and m["message_text"] != stored_text]
-            ctx = BookingContext(
-                conversation_id=convo["id"], order_uuid=None, repo=orders_repo,
-                today=_today(), available_slots=slots_repo.available_slots, customer=customer,
-                profile_name=profile_name, verified_name=verified_name)
-            try:
-                reply_text, result = await run_booking_turn(ctx, text=text, history=history)
-            except Exception as exc:  # noqa: BLE001 — never leave the customer in silence
-                logger.warning("anthropic_turn_failed", sender=masked, error=str(exc))
-                reply_text, result = _AI_FALLBACK_TEXT, None
-                await _raise_support(convo["id"],
-                                     (active_draft or {}).get("id"))
-                if inbound_msg:
-                    await messages_repo.set_status(inbound_msg["id"], "human_needed")
-                logger.info("human_attention_required", sender=masked, reason="ai_turn_failed")
-
-            # If Claude asked to hand off, wire the real escalation (the tool only
-            # signals intent — the backend owns flags/tickets/human status).
-            if result is not None and "request_human_support" in (ctx.tool_calls or []):
-                open_order = await orders_repo.get_open_for_conversation(convo["id"])
-                await _raise_support(convo["id"], open_order["id"] if open_order else None)
-                if inbound_msg:
-                    await messages_repo.set_status(inbound_msg["id"], "human_needed")
-                logger.info("human_attention_required", sender=masked, reason="model_requested")
-
-            fresh = await orders_repo.get_active_draft(convo["id"])
-            state = (fresh or {}).get("conversation_state") or booking_flow.WAITING_FOR_SERVICE
-            if live:
-                await _deliver(channel, msg["phone"], convo["id"],
-                               booking_flow.BookingReply(text=reply_text, state=state))
-            logger.info("anthropic_turn_delivered", sender=masked,
-                        tools=(ctx.tool_calls or []),
-                        provider=(result.provider if result else "fallback"),
-                        tokens_in=(result.tokens_in if result else 0),
-                        tokens_out=(result.tokens_out if result else 0),
-                        cost_usd=(result.cost_usd if result else 0.0),
-                        order=(fresh or {}).get("order_id"))
+            # A bare interactive selection or an explicit "that's all" is a complete
+            # turn — process now rather than waiting out the debounce (spec §§16/23).
+            bare_selection = bool(msg.get("selection_id")) and not text.strip()
+            if message_aggregation.is_explicit_send(text) or bare_selection:
+                await buf.flush(convo["id"], _processor)
+            else:
+                buf.schedule(convo["id"], turn, _processor)
             processed += 1
             continue
 
-        if draft_state in booking_flow.ACTIVE_STATES:
-            booking_row = active_draft
-            # An explicit new-order intent DURING a draft with progress asks the
-            # customer to continue or start over (active-draft protection).
-            if (draft_state != booking_flow.RESUME_OR_NEW
-                    and booking_flow.is_new_order_intent(text)
-                    and booking_flow.has_progress(_booking(active_draft))):
-                reply = booking_flow.resume_or_new_prompt()
-            else:
-                reply = await booking_flow.advance(_booking(active_draft), inbound_obj,
-                                                   today=_today(), available_slots=slots_repo.available_slots,
-                                                   price_overrides=await _published_price_overrides())
-        else:
-            # No in-progress draft — free to start a new order or handle next-actions.
-            latest = await orders_repo.get_latest_for_conversation(convo["id"])
-            in_post_order = bool(latest and latest.get("conversation_state") == booking_flow.POST_ORDER)
-            action = booking_flow.resolve_post_order_action(inbound_obj, numbered=in_post_order)
-
-            if (action == booking_flow.NEW_ORDER
-                    or booking_flow.is_book_pickup_intent(text)
-                    or _is_booking_selection(sel)):
-                booking_row = await orders_repo.start_booking(convo["id"], customer)  # idempotent
-                # Capture a name volunteered in the OPENING message ("My name is
-                # Sara. I need dry cleaning.") — persisted before the service list.
-                opening_name = booking_flow.extract_name(text)
-                if opening_name and not booking_row.get("customer_name"):
-                    updated = await orders_repo.apply_booking_updates(
-                        booking_row["id"], {"customer_name": opening_name},
-                        booking_row.get("conversation_state") or "waiting_for_service")
-                    if updated:
-                        booking_row = updated
-                    logger.info("customer_name_saved", sender=masked, source="provided")
-                logger.info("booking_intent_detected", sender=masked, order=booking_row["order_id"])
-                if _is_booking_selection(sel) or text.strip().isdigit():
-                    reply = await booking_flow.advance(_booking(booking_row), inbound_obj,
-                                                       today=_today(), available_slots=slots_repo.available_slots,
-                                                       price_overrides=await _published_price_overrides())
-                else:
-                    reply = booking_flow.begin_new_order() if latest else booking_flow.begin()
-            elif action == booking_flow.CHECK_ORDER_STATUS:
-                if live:
-                    await _deliver(channel, msg["phone"], convo["id"], booking_flow.BookingReply(
-                        text=_order_status_text(latest), state=booking_flow.POST_ORDER))
-                logger.info("order_status_requested", sender=masked)
-                processed += 1
-                continue
-            elif action == booking_flow.HUMAN_SUPPORT:
-                await _raise_support(convo["id"], latest["id"] if latest else None)
-                if inbound_msg:
-                    await messages_repo.set_status(inbound_msg["id"], "human_needed")
-                if live:
-                    await _deliver(channel, msg["phone"], convo["id"], booking_flow.BookingReply(
-                        text="Sure — I'll connect you with our team. They'll follow up "
-                             "with you shortly.", state=booking_flow.POST_ORDER))
-                logger.info("evolution_inbound_escalation", sender=masked, flag_type="handoff")
-                processed += 1
-                continue
-            elif in_post_order:
-                # Post-order context, message not understood -> re-show the actions.
-                if live:
-                    await _deliver(channel, msg["phone"], convo["id"], booking_flow.post_order_actions())
-                processed += 1
-                continue
-
-        if reply is not None:
-            order_uuid = booking_row["id"]
-            if reply.start_new_order:
-                # Abandon the current draft, spin up a fresh workflow, show services.
-                await orders_repo.cancel_booking(order_uuid)
-                new_row = await orders_repo.start_booking(convo["id"], customer)
-                to_send = booking_flow.begin_new_order()
-                await orders_repo.apply_booking_updates(new_row["id"], to_send.updates, to_send.state)
-                logger.info("booking_restarted", sender=masked,
-                            old=booking_row["order_id"], new=new_row["order_id"])
-                if live:
-                    await _deliver(channel, msg["phone"], convo["id"], to_send)
-                processed += 1
-                continue
-            if reply.confirm_now:
-                row, created_now = await orders_repo.confirm_booking(order_uuid)
-                if row:
-                    await orders_repo.set_conversation_state(row["id"], booking_flow.POST_ORDER)
-                logger.info("booking_confirmed", sender=masked,
-                            order=row["order_id"] if row else None, created_now=created_now)
-                if live:
-                    await _deliver(channel, msg["phone"], convo["id"], booking_flow.BookingReply(
-                        text=_final_confirmation_text(row) if row else "Your booking is confirmed.",
-                        state=booking_flow.POST_ORDER))
-                    # Offer next actions (place another order / status / support).
-                    await _deliver(channel, msg["phone"], convo["id"], booking_flow.post_order_actions())
-                processed += 1
-                continue
-            elif reply.cancel_now:
-                await orders_repo.cancel_booking(order_uuid)
-                to_send = reply
-                logger.info("booking_cancelled", sender=masked, order=booking_row["order_id"])
-            else:
-                await orders_repo.apply_booking_updates(order_uuid, reply.updates, reply.state)
-                to_send = reply
-                if reply.log_event:
-                    logger.info("booking_step", sender=masked,
-                                booking_event=reply.log_event, state=reply.state)
-
-            if live:
-                await _deliver(channel, msg["phone"], convo["id"], to_send)
-            processed += 1
-            continue
-
-        # --- NON-BOOKING (greetings / general questions) -----------------------
-        prior = await messages_repo.list_messages(convo["id"])
-        history = [(m["sender_type"], m["message_text"]) for m in prior
-                   if m["sender_type"] in ("customer", "agent")]
-        welcome_sent = any(m["sender_type"] == "agent" for m in prior)
-        decision = should_auto_reply(text, {"welcome_sent": welcome_sent})
-        will_send = bool(decision.send_reply and live)
-
-        if will_send:
-            agent_reply = await handle_message(text=text, history=history, db=None)
-            # Empty-text guard (spec §2): never send silence, even if the model
-            # returned no text.
-            out_text = (agent_reply.text or "").strip() or _AI_FALLBACK_TEXT
-            try:
-                await EvolutionWhatsAppChannel.from_settings().send_text(
-                    to_phone=msg["phone"], text=out_text)
-                await messages_repo.add_message(
-                    convo["id"], "agent", out_text, status="sent",
-                    metadata={
-                        "intent": decision.intent,
-                        "provider": agent_reply.provider,
-                        "model": agent_reply.model,
-                        "tokens_in": agent_reply.tokens_in,
-                        "tokens_out": agent_reply.tokens_out,
-                        "cost_usd": agent_reply.cost_usd,
-                        "tool_calls": agent_reply.tool_calls,
-                    })
-                logger.info("evolution_auto_reply_sent", sender=masked,
-                            provider=agent_reply.provider, model=agent_reply.model,
-                            tokens_in=agent_reply.tokens_in, tokens_out=agent_reply.tokens_out,
-                            cost_usd=agent_reply.cost_usd, tool_calls=agent_reply.tool_calls)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("evolution_auto_reply_failed", sender=masked, error=str(exc))
-        else:
-            logger.info("evolution_inbound_held", sender=masked,
-                        no_auto_reply_reason=decision.reason)
-            if inbound_msg:
-                await messages_repo.set_status(inbound_msg["id"], "no_auto_reply")
+        # Aggregation OFF -> handle this single message immediately (legacy path).
+        single = message_aggregation.combine_fragments([{
+            "text": text, "selection_id": msg.get("selection_id"),
+            "latitude": msg.get("latitude"), "longitude": msg.get("longitude")}])
+        await _process_reply(convo, customer, single, phone=msg["phone"],
+                             masked=masked, live=live, last_inbound_msg=inbound_msg)
         processed += 1
 
     return {"status": "ok", "stored": True, "processed": processed,

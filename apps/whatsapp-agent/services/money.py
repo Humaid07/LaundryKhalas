@@ -1,25 +1,28 @@
 """Currency-safe money math and the ONE definition of a customer-facing price.
 
-Every amount a customer ever sees is a "final customer price": the stored
-catalogue/base price with the 5% adjustment ALREADY included (task spec
-§§17-20). This module is the single shared utility for that calculation and for
-money rounding, so the 5% is applied in exactly one place and never twice
-(spec §18) and no component re-implements the arithmetic.
+Every published Laundry Khalas price (website, approved price-list image,
+catalogue, admin Pricing Management) is ALREADY a final, VAT-inclusive customer
+price. The customer-facing price is therefore the stored price UNCHANGED — no
+5% is ever added on top (task spec §§1-4). This module is the single shared
+money utility so that rule is enforced in exactly one place and no component
+re-implements price arithmetic.
 
 Rules:
-  * Decimal arithmetic only — never binary float — for money (spec §19).
+  * Decimal arithmetic only — never binary float — for money (spec §3/§6).
   * Round HALF-UP to 2 decimal places (the project's currency policy).
-  * If the stored price already includes the adjustment
-    (``prices_include_vat=True``) the final price is the stored price unchanged
-    — the 5% is NOT applied again.
-  * Per §20: the final UNIT price is rounded first, then the line total is
+  * ``prices_include_vat`` defaults to True: the stored price is already final
+    and is returned unchanged — AED 60 stays AED 60, AED 9 stays AED 9. The
+    legacy ``prices_include_vat=False`` branch (add 5%) is retained ONLY for
+    completeness; no live catalogue uses it, so the 5% is never added twice.
+  * Per §6: the final UNIT price is rounded first, then the line total is
     (final unit × quantity), and the order total is the sum of final line
     totals — so the customer total is internally consistent with the per-line
     figures shown.
 
 Customer-facing callers use ``final_*`` + ``format_money``; nothing here ever
 emits the words "VAT"/"tax" — that wording is forbidden on customer channels
-(spec §11). Internal accounting may still split base/vat via ``vat_breakdown``.
+(spec §4). Internal accounting may still split the tax component OUT of an
+inclusive total via ``vat_breakdown`` (never adding to the customer price).
 """
 from __future__ import annotations
 
@@ -40,11 +43,13 @@ def round_money(value) -> Decimal:
     return to_decimal(value).quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
 
 
-def final_unit_price(base_price, *, vat_rate, prices_include_vat: bool = False) -> Decimal:
-    """The customer-facing unit price with the 5% adjustment already applied.
+def final_unit_price(base_price, *, vat_rate, prices_include_vat: bool = True) -> Decimal:
+    """The final customer-facing unit price.
 
-    ``prices_include_vat=True`` → the stored price is already final, returned
-    (rounded) unchanged — the adjustment is never applied a second time (§18).
+    Published prices are VAT-inclusive, so ``prices_include_vat=True`` (the
+    default) returns the stored price (rounded) UNCHANGED — no 5% is added
+    (spec §§1-4). The legacy ``prices_include_vat=False`` branch (add 5%) is
+    retained only for completeness and is not used by any live catalogue.
     """
     base = to_decimal(base_price)
     if prices_include_vat:
@@ -52,8 +57,8 @@ def final_unit_price(base_price, *, vat_rate, prices_include_vat: bool = False) 
     return round_money(base * (Decimal(1) + to_decimal(vat_rate)))
 
 
-def final_line_total(unit_price, quantity, *, vat_rate, prices_include_vat: bool = False) -> Decimal:
-    """Final line total = round(final unit price) × quantity (§20)."""
+def final_line_total(unit_price, quantity, *, vat_rate, prices_include_vat: bool = True) -> Decimal:
+    """Final line total = round(final unit price) × quantity (§6)."""
     unit = final_unit_price(unit_price, vat_rate=vat_rate, prices_include_vat=prices_include_vat)
     return round_money(unit * to_decimal(quantity))
 

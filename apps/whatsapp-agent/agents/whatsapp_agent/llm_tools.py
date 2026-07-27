@@ -117,9 +117,10 @@ def _price_label_full(item: dict) -> dict:
     measured = bool(item.get("requires_measurement"))
     firm = not (inspection or starting or measured) and item.get("current_price") is not None
     guidance = (
-        "price_label is the FINAL customer price — the 5% adjustment is already "
-        "included. Quote it exactly as shown. NEVER mention VAT, tax, 'excluding', "
-        "'including', or a pre-adjustment amount to the customer."
+        "price_label is the FINAL customer price — already VAT-inclusive, so NEVER "
+        "add any percentage to it. Quote it exactly as shown. NEVER mention VAT, tax, "
+        "'excluding', or 'including' to the customer. (An order over AED 100 gets 15% "
+        "off automatically at checkout — mention that only when relevant.)"
         if firm
         else "This item is priced after inspection/measurement — do NOT quote an exact "
         "total; tell the customer the shown figure is a starting point and the team "

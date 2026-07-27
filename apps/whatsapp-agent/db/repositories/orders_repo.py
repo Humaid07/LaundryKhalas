@@ -46,17 +46,29 @@ def _pricing_block(row: dict) -> dict | None:
     total = _f("estimated_total")
     if total is None:
         total = _f("amount")
+    discount_amount = _f("discount_amount")
+    discount_applied = bool(discount_amount and discount_amount > 0)
     return {
         "currency": "AED",
-        # ``final_price`` is the customer-facing amount (5% already included); it
-        # is the ONLY money the customer UI should show (task spec §§17/23/24).
-        # The subtotal/vat split below is retained for INTERNAL accounting only.
+        # ``final_price`` is the customer-facing amount the customer PAYS (already
+        # VAT-inclusive, and net of any automatic order discount). It is the ONLY
+        # money the customer UI should show (task spec §§4/10/13). The subtotal/
+        # vat split below is retained for INTERNAL accounting only.
         "final_price": total,
         "vat_rate": _f("vat_rate") if row.get("vat_rate") is not None else 0.05,
-        "prices_include_vat": False,
+        # Published prices are already VAT-inclusive; the stored total IS the
+        # customer price with no 5% added (spec §§1-4).
+        "prices_include_vat": bool(row.get("prices_include_vat", True)),
         "subtotal_excluding_vat": _f("subtotal_amount"),
         "vat_amount": _f("vat_amount"),
         "estimated_total_including_vat": total,
+        # Automatic order-discount snapshot (spec §§10-11). eligible_subtotal is
+        # the pre-discount total; final_price is post-discount.
+        "eligible_subtotal": _f("eligible_subtotal"),
+        "discount_applied": discount_applied,
+        "discount_amount": discount_amount if discount_applied else None,
+        "discount_percentage": _f("discount_percentage") if discount_applied else None,
+        "discount_rule_code": row.get("discount_rule_code") if discount_applied else None,
         "is_estimated": bool(row.get("pricing_is_estimated")),
         "has_pending_inspection": any(
             (li or {}).get("line_kind") == "pending" for li in (line_items or [])
@@ -513,11 +525,14 @@ _BOOKING_COLS = frozenset({
     "pickup_slot", "pickup_start_time", "pickup_end_time", "pickup_address",
     "pickup_area", "area", "pickup_emirate", "pickup_latitude", "pickup_longitude",
     "address_source", "pickup_instruction_code", "pickup_instruction_text",
-    # Item-level catalogue + VAT-aware pricing snapshot (task spec §8-10).
+    # Item-level catalogue + VAT-inclusive pricing snapshot (task spec §8-10).
     "line_items", "browse_service_code", "pending_item_code",
     "catalogue_category_code", "catalogue_category_name",
     "subtotal_amount", "vat_rate", "vat_amount", "estimated_total", "amount",
     "pricing_is_estimated",
+    # Automatic order-discount snapshot (task spec §11).
+    "eligible_subtotal", "discount_rule_code", "discount_percentage",
+    "discount_threshold", "discount_amount",
 })
 # Columns written by the FSM that are jsonb and need an explicit cast.
 _JSONB_BOOKING_COLS = frozenset({"line_items"})

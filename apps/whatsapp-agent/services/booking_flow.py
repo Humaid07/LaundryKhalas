@@ -427,6 +427,14 @@ def _pricing_updates(raw_lines: list[dict], category_code: str | None,
         "subtotal_amount": q.subtotal_excluding_vat,
         "vat_rate": q.vat_rate,
         "vat_amount": q.vat_amount,
+        # Automatic order-discount snapshot (spec §11). eligible_subtotal is the
+        # pre-discount sum; estimated_total/amount are the FINAL post-discount
+        # amount the customer pays and Stripe would charge.
+        "eligible_subtotal": q.eligible_subtotal,
+        "discount_rule_code": q.discount_rule_code,
+        "discount_percentage": q.discount_percentage,
+        "discount_threshold": q.discount_threshold,
+        "discount_amount": q.discount_amount,
         "estimated_total": q.estimated_total_including_vat,
         "amount": q.estimated_total_including_vat,
         "pricing_is_estimated": q.is_estimated,
@@ -1567,6 +1575,8 @@ async def _on_edit_service(booking, inbound, available_slots) -> BookingReply:
         "line_items": None, "browse_service_code": reply.updates.get("browse_service_code"),
         "pending_item_code": None, "subtotal_amount": None, "vat_amount": None,
         "estimated_total": None, "amount": None, "pricing_is_estimated": None,
+        "eligible_subtotal": None, "discount_rule_code": None,
+        "discount_percentage": None, "discount_threshold": None, "discount_amount": None,
     }
     reply.log_event = "edit_service_reset_items"
     return reply

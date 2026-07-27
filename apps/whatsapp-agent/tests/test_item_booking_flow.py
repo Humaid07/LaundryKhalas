@@ -60,12 +60,15 @@ def test_full_item_collection_reaches_name_with_priced_summary():
     r = advance(b, Inbound(text="3"))
     assert r.state == bf.WAITING_FOR_MORE_ITEMS
     assert r.updates["line_items"][0]["item_code"] == "CLEAN_PRESS_SHIRT"
-    # line_total is the FINAL customer amount (3 × 9 × 1.05 = 28.35); base kept internal.
-    assert r.updates["line_items"][0]["line_total"] == 28.35
+    # line_total is the FINAL customer amount, already inclusive (3 × 9 = 27); no 5% added.
+    assert r.updates["line_items"][0]["line_total"] == 27.0
     assert r.updates["line_items"][0]["base_line_total"] == 27.0
-    assert r.updates["subtotal_amount"] == 27.0     # internal net
-    assert r.updates["vat_amount"] == 1.35          # internal tax
-    assert r.updates["estimated_total"] == 28.35    # final customer total
+    assert r.updates["estimated_total"] == 27.0     # final customer total (unchanged)
+    assert r.updates["amount"] == 27.0
+    # internal net split reconciles to the final total (never adds to it)
+    assert r.updates["subtotal_amount"] == 25.71
+    assert r.updates["vat_amount"] == 1.29
+    assert r.updates["subtotal_amount"] + r.updates["vat_amount"] == 27.0
     assert r.updates["pricing_is_estimated"] is False
     b = _apply(b, r)
     # 5) that's all -> name
@@ -77,9 +80,10 @@ def test_full_item_collection_reaches_name_with_priced_summary():
                    "pickup_address": "Marina Heights", "pickup_instruction_text": None,
                    "conversation_state": bf.WAITING_FOR_CONFIRMATION})
     summary = bf._summary_text(b)
-    # Customer summary: final line + final total, NO VAT/tax wording (spec §§11/23).
-    assert "3 × Shirt — AED 28.35" in summary
-    assert "Final price — AED 28.35" in summary
+    # Customer summary: final line + final total, NO VAT/tax wording (spec §4).
+    assert "3 × Shirt — AED 27" in summary
+    assert "Final price — AED 27" in summary
+    assert "28.35" not in summary
     assert "Prices may vary" in summary
     for banned in ("VAT", "vat", "tax", "excl", "incl", "Subtotal"):
         assert banned not in summary
@@ -90,7 +94,7 @@ def test_inline_quantity_skips_the_quantity_question():
                 browse_service_code="CLEAN_PRESS_EVERYDAY")
     r = advance(b, Inbound(text="3 shirts"))
     assert r.state == bf.WAITING_FOR_MORE_ITEMS         # quantity read inline
-    assert r.updates["subtotal_amount"] == 27.0
+    assert r.updates["estimated_total"] == 27.0         # 3 × 9, no 5% added
 
 
 def test_add_multiple_items_accumulates():
@@ -105,9 +109,9 @@ def test_add_multiple_items_accumulates():
     assert r2.state == bf.WAITING_FOR_MORE_ITEMS
     codes = [li["item_code"] for li in r2.updates["line_items"]]
     assert codes == ["CLEAN_PRESS_SHIRT", "CLEAN_PRESS_TROUSERS"]
-    assert r2.updates["subtotal_amount"] == 49.0        # 27 + 22
-    assert r2.updates["vat_amount"] == 2.45
-    assert r2.updates["estimated_total"] == 51.45
+    assert r2.updates["estimated_total"] == 49.0        # 27 + 22, no 5% added
+    assert r2.updates["subtotal_amount"] == 46.67       # internal net
+    assert r2.updates["vat_amount"] == 2.33
 
 
 # --- Wash & Fold (single sub-category -> straight to item/bag list) ----------
@@ -125,8 +129,9 @@ def test_wash_fold_6kg_bag_prices_at_60():
     assert r.state == bf.WAITING_FOR_ITEM_QUANTITY
     b = _apply(b, r)
     r2 = advance(b, Inbound(text="1"))
-    assert r2.updates["subtotal_amount"] == 60.0
-    assert r2.updates["vat_amount"] == 3.0
+    assert r2.updates["estimated_total"] == 60.0        # customer pays 60, no 5% added
+    assert r2.updates["subtotal_amount"] == 57.14       # internal net
+    assert r2.updates["vat_amount"] == 2.86
 
 
 # --- Per-sqm item asks for a measurement, prices as an estimate --------------
@@ -139,7 +144,7 @@ def test_curtain_asks_for_sqm_and_prices_as_estimate():
     r2 = advance(b, Inbound(text="4"))
     line = r2.updates["line_items"][0]
     assert line["line_kind"] == "estimate"
-    assert line["line_total"] == 84.0                  # FINAL: 4 sqm × (20 × 1.05)
+    assert line["line_total"] == 80.0                  # FINAL: 4 sqm × 20 (inclusive)
     assert line["base_line_total"] == 80.0
     assert r2.updates["pricing_is_estimated"] is True
 
@@ -154,7 +159,8 @@ def test_shoe_starting_price_never_a_total_in_summary():
     b = Booking(**{**b.__dict__, "line_items": r.updates["line_items"],
                    "customer_name": "Sara", "conversation_state": bf.WAITING_FOR_CONFIRMATION})
     summary = bf._summary_text(b)
-    assert "from aed 52.50" in summary.lower()          # FINAL starting price
+    assert "from aed 50" in summary.lower()             # FINAL starting price (inclusive)
+    assert "52.50" not in summary
     assert "inspection" in summary.lower()
 
 
@@ -162,7 +168,7 @@ def test_shoe_starting_price_never_a_total_in_summary():
 def test_23_confirmed_snapshot_unchanged_after_catalogue_update(monkeypatch):
     q = pricing.calculate_estimate([{"item_code": "CLEAN_PRESS_SHIRT", "quantity": 3}])
     snapshot = q.to_dict()["lines"]
-    assert snapshot[0]["line_total"] == 28.35   # FINAL customer line total
+    assert snapshot[0]["line_total"] == 27.0    # FINAL customer line total (inclusive)
 
     # reprice the shirt in the catalogue
     catalogue.reload_catalogue()
@@ -177,18 +183,18 @@ def test_23_confirmed_snapshot_unchanged_after_catalogue_update(monkeypatch):
     try:
         assert catalogue.item_by_code("CLEAN_PRESS_SHIRT")["current_price"] == 99
         # the frozen snapshot is stored data — it does NOT re-price
-        assert snapshot[0]["line_total"] == 28.35
-        assert snapshot[0]["unit_price"] == 9.45     # FINAL unit price
-        assert snapshot[0]["base_unit_price"] == 9   # internal base
+        assert snapshot[0]["line_total"] == 27.0
+        assert snapshot[0]["unit_price"] == 9.0      # FINAL unit price (inclusive)
+        assert snapshot[0]["base_unit_price"] == 9   # internal base (== final now)
         from db.repositories import orders_repo
         row = {"id": "x", "order_id": "LK-2026-000001", "status": "pickup_scheduled",
-               "line_items": snapshot, "subtotal_amount": 27.0, "vat_amount": 1.35,
-               "estimated_total": 28.35, "amount": 28.35, "pricing_is_estimated": False,
+               "line_items": snapshot, "subtotal_amount": 25.71, "vat_amount": 1.29,
+               "estimated_total": 27.0, "amount": 27.0, "pricing_is_estimated": False,
                "vat_rate": 0.05, "catalogue_category_name": "Clean & Press"}
         read = orders_repo.to_read(row)
-        assert read["line_items"][0]["line_total"] == 28.35
-        assert read["pricing"]["final_price"] == 28.35
-        assert read["pricing"]["estimated_total_including_vat"] == 28.35
+        assert read["line_items"][0]["line_total"] == 27.0
+        assert read["pricing"]["final_price"] == 27.0
+        assert read["pricing"]["estimated_total_including_vat"] == 27.0
     finally:
         catalogue._index.cache_clear()
         catalogue.reload_catalogue()
@@ -203,9 +209,9 @@ def test_24_two_numbers_same_catalogue_separate_order_state():
                         browse_service_code="CLEAN_PRESS_EVERYDAY",
                         pending_item_code="CLEAN_PRESS_TROUSERS"), Inbound(text="2"))
     assert a.updates["line_items"][0]["item_code"] == "CLEAN_PRESS_SHIRT"
-    assert a.updates["subtotal_amount"] == 27.0
+    assert a.updates["estimated_total"] == 27.0     # 3 × 9, no 5% added
     assert b.updates["line_items"][0]["item_code"] == "CLEAN_PRESS_TROUSERS"
-    assert b.updates["subtotal_amount"] == 22.0
+    assert b.updates["estimated_total"] == 22.0     # 2 × 11, no 5% added
     # both priced from the SAME catalogue values
     assert catalogue.item_by_code("CLEAN_PRESS_SHIRT")["current_price"] == 9
     assert catalogue.item_by_code("CLEAN_PRESS_TROUSERS")["current_price"] == 11

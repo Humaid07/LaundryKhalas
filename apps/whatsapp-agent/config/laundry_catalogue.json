@@ -1,10 +1,10 @@
 {
-  "_note": "REVIEWED STRUCTURED SEED/IMPORT DATA for the Laundry Khalas item-level catalogue, transcribed and visually verified against the approved Laundry Khalas price-list image (source of truth: the business, not the live marketing site). This file is IMPORT-TIME data only: scripts/seed_service_catalogue.py upserts it into PostgreSQL/Supabase (service_categories / services / service_items / service_aliases), and the DATABASE is the runtime source of truth for the agent, pricing APIs and dashboard. Pricing interpretation: the bold price on the image is `current_price` (active selling price); a smaller crossed-out price is stored as `regular_price` (previous/regular). 'From' prices set is_starting_price=true and MUST NEVER produce a guaranteed total. Prices are in AED and EXCLUDE 5% VAT. Prices may vary by item condition, material and brand. Stable `code`s are the identity used for idempotent upsert and interactive-list rowIds (never use display labels as identifiers).",
+  "_note": "REVIEWED STRUCTURED SEED/IMPORT DATA for the Laundry Khalas item-level catalogue, transcribed and visually verified against the approved Laundry Khalas price-list image (source of truth: the business, not the live marketing site). This file is IMPORT-TIME data only: scripts/seed_service_catalogue.py upserts it into PostgreSQL/Supabase (service_categories / services / service_items / service_aliases), and the DATABASE is the runtime source of truth for the agent, pricing APIs and dashboard. Pricing interpretation: the bold price on the image is `current_price` (active selling price); a smaller crossed-out price is stored as `regular_price` (previous/regular). 'From' prices set is_starting_price=true and MUST NEVER produce a guaranteed total. Prices are in AED and are ALREADY FINAL, VAT-INCLUSIVE customer prices (prices_include_vat=true) — the customer pays the stored price with NO 5% added on top. Prices may vary by item condition, material and brand. Stable `code`s are the identity used for idempotent upsert and interactive-list rowIds (never use display labels as identifiers).",
   "meta": {
     "catalogue": "Laundry Khalas UAE",
     "currency": "AED",
     "vat_rate": 0.05,
-    "prices_include_vat": false,
+    "prices_include_vat": true,
     "source": "Approved Laundry Khalas price-list image",
     "verified_at": "2026-07-23",
     "business": {

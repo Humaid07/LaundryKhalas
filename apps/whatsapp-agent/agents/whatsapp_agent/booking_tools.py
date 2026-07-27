@@ -235,9 +235,14 @@ def booking_system_prompt() -> str:
         "turnaround time, check_service_area for coverage, and the list_* tools for what's "
         "offered. NEVER state a price, turnaround, service, slot or availability you did "
         "not get from a tool.\n"
-        "- Prices returned by the tools are the FINAL customer price. Quote them exactly. "
-        "NEVER mention VAT, tax, 'excluding', 'including', or any pre-adjustment amount — "
-        "just say e.g. 'AED 63'.\n"
+        "- Prices returned by the tools are the FINAL customer price (already VAT-inclusive). "
+        "Quote them exactly as given — NEVER add any percentage, and NEVER mention VAT, tax, "
+        "'excluding' or 'including'. Just say e.g. 'AED 60'.\n"
+        "- Automatic discount: an order over AED 100 automatically gets 15% off. get_order_summary "
+        "returns discount_applied/discount_amount_aed and a final_price_aed already NET of it — "
+        "present it like 'Subtotal AED 120, 15% discount −AED 18, final AED 102'. For a 'from'/"
+        "inspection price where the exact total isn't known yet, do NOT promise a discounted "
+        "amount — you may say the 15% applies automatically IF the confirmed order is over AED 100.\n"
         "- Express (12h) is only offered when a tool says it's available. If it isn't, say "
         "so plainly and give the standard turnaround. Never overpromise a delivery time.\n\n"
         "Saving rules:\n"
@@ -520,6 +525,12 @@ def make_booking_executor(ctx: BookingContext):
             quote = pricing.calculate_estimate(bf._raw_lines(booking))
             return _ok({"summary_lines": pricing.format_quote_lines(quote),
                         "final_price_aed": quote.customer_total,
+                        # Automatic order discount (spec §10) so the model can
+                        # present the benefit. final_price_aed is already net of it.
+                        "eligible_subtotal_aed": quote.eligible_subtotal,
+                        "discount_applied": quote.discount_applied,
+                        "discount_percentage": quote.discount_percentage,
+                        "discount_amount_aed": quote.discount_amount,
                         "is_estimated": quote.is_estimated,
                         "workflow": workflow_state_block(row)})
 
