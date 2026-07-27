@@ -148,6 +148,9 @@ class Booking:
     pickup_area: str | None = None
     pickup_instruction_code: str | None = None
     pickup_instruction_text: str | None = None
+    # Sticky flag: the customer explicitly asked for a discount at some point in
+    # this order. Persisted on the order row; gates the 20%-over-200 discount tier.
+    discount_requested: bool = False
     # --- transient context (NOT persisted; supplied by the webhook per message) --
     # The unverified WhatsApp push/profile name — only ever offered for the
     # customer to confirm, never saved as the booking name automatically.
@@ -411,14 +414,17 @@ def _live_overrides() -> dict:
 
 def _pricing_updates(raw_lines: list[dict], category_code: str | None,
                      category_name: str | None,
-                     price_overrides: dict[str, float] | None = None) -> dict:
+                     price_overrides: dict[str, float] | None = None,
+                     *, discount_requested: bool = False) -> dict:
     """Recompute the quote from raw lines and return the order-row PATCH (priced
     line snapshot + VAT columns + amount mirror). ``price_overrides`` (from
     ``services.price_resolver.published_overrides``, defaulting to the per-turn
     published prices set by ``advance``) makes the snapshot use the CURRENT
-    published/promotional prices; absent → the static catalogue price."""
+    published/promotional prices; absent → the static catalogue price.
+    ``discount_requested`` gates the 20%-over-200 discount tier."""
     q = pricing.calculate_estimate(
-        raw_lines, price_overrides=price_overrides if price_overrides is not None else _live_overrides())
+        raw_lines, price_overrides=price_overrides if price_overrides is not None else _live_overrides(),
+        discount_requested=discount_requested)
     d = q.to_dict()
     return {
         "line_items": d["lines"],
@@ -431,6 +437,7 @@ def _pricing_updates(raw_lines: list[dict], category_code: str | None,
         # pre-discount sum; estimated_total/amount are the FINAL post-discount
         # amount the customer pays and Stripe would charge.
         "eligible_subtotal": q.eligible_subtotal,
+        "discount_requested": q.discount_requested,
         "discount_rule_code": q.discount_rule_code,
         "discount_percentage": q.discount_percentage,
         "discount_threshold": q.discount_threshold,
@@ -444,7 +451,8 @@ def _pricing_updates(raw_lines: list[dict], category_code: str | None,
 def _quote_for(booking: "Booking", price_overrides: dict[str, float] | None = None):
     return pricing.calculate_estimate(
         _raw_lines(booking),
-        price_overrides=price_overrides if price_overrides is not None else _live_overrides())
+        price_overrides=price_overrides if price_overrides is not None else _live_overrides(),
+        discount_requested=bool(getattr(booking, "discount_requested", False)))
 
 
 _QTY_WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4,
@@ -682,7 +690,8 @@ def _complete_line(booking: "Booking", item_code: str | None, quantity, measure)
         return _item_prompt(booking.service_id, booking.browse_service_code)
     raw = _raw_lines(booking) + [
         {"item_code": item_code, "quantity": quantity, "measure": measure}]
-    updates = _pricing_updates(raw, booking.service_id, booking.service_name_snapshot)
+    updates = _pricing_updates(raw, booking.service_id, booking.service_name_snapshot,
+                               discount_requested=bool(booking.discount_requested))
     updates["pending_item_code"] = None
     reply = _more_items_prompt(item_code, quantity)
     reply.updates = {**updates, **(reply.updates or {})}

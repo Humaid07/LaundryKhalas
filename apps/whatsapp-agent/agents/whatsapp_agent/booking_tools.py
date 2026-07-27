@@ -75,6 +75,7 @@ def _booking_from_row(row: dict, ctx: BookingContext) -> bf.Booking:
         pickup_area=row.get("pickup_area") or row.get("area"),
         pickup_instruction_code=row.get("pickup_instruction_code"),
         pickup_instruction_text=row.get("pickup_instruction_text"),
+        discount_requested=bool(row.get("discount_requested")),
         whatsapp_profile_name=ctx.profile_name,
         verified_name=ctx.verified_name,
     )
@@ -238,11 +239,18 @@ def booking_system_prompt() -> str:
         "- Prices returned by the tools are the FINAL customer price (already VAT-inclusive). "
         "Quote them exactly as given — NEVER add any percentage, and NEVER mention VAT, tax, "
         "'excluding' or 'including'. Just say e.g. 'AED 60'.\n"
-        "- Automatic discount: an order over AED 100 automatically gets 15% off. get_order_summary "
-        "returns discount_applied/discount_amount_aed and a final_price_aed already NET of it — "
-        "present it like 'Subtotal AED 120, 15% discount −AED 18, final AED 102'. For a 'from'/"
-        "inspection price where the exact total isn't known yet, do NOT promise a discounted "
-        "amount — you may say the 15% applies automatically IF the confirmed order is over AED 100.\n"
+        "- Automatic discount (applied by the backend, never by you): an exact order over AED 100 "
+        "gets 15% off; if the customer explicitly ASKED for a discount and the exact order is over "
+        "AED 200 it gets 20% instead (the tiers never stack). get_order_summary returns "
+        "discount_applied/discount_percentage/discount_amount_aed and a final_price_aed already NET "
+        "of it — present it like 'Subtotal AED 120, 15% discount −AED 18, final AED 102'. Read the "
+        "percentage from the tool; never compute or invent it.\n"
+        "- If the customer asks for a discount / better rate / says it's expensive: acknowledge "
+        "warmly and, once the exact order total is known, the right tier applies automatically — "
+        "e.g. 'Once your order is confirmed, any eligible discount is applied automatically.' Do "
+        "NOT promise a specific discount before the exact total is known, and do NOT invent a "
+        "cheaper rate. For a 'from'/inspection price with no exact total yet, say the discount is "
+        "calculated automatically once the final quotation is confirmed.\n"
         "- Express (12h) is only offered when a tool says it's available. If it isn't, say "
         "so plainly and give the standard turnaround. Never overpromise a delivery time.\n\n"
         "Saving rules:\n"
@@ -522,7 +530,8 @@ def make_booking_executor(ctx: BookingContext):
                 return _ok({"summary_lines": [], "final_price_aed": 0.0,
                             "is_estimated": False, "workflow": _NEW_STATE})
             booking = _booking_from_row(row, ctx)
-            quote = pricing.calculate_estimate(bf._raw_lines(booking))
+            quote = pricing.calculate_estimate(
+                bf._raw_lines(booking), discount_requested=bool(booking.discount_requested))
             return _ok({"summary_lines": pricing.format_quote_lines(quote),
                         "final_price_aed": quote.customer_total,
                         # Automatic order discount (spec §10) so the model can

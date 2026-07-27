@@ -1,21 +1,26 @@
-"""Automatic order-level discount engine (task spec §§5-11).
+"""Automatic order-level discount engine (task spec §§5-11 + discount precedence).
 
 ONE place that decides whether an order qualifies for an automatic discount and
-by how much. The rule (threshold, percentage, active) is loaded from
-``config/order_discounts.json`` — never hardcoded across components (spec §5).
+by how much. The rules (thresholds, percentages, active state) are loaded from
+``config/order_discounts.json`` — never hardcoded across components.
+
+Precedence (a SINGLE discount is ever applied — the tiers NEVER stack):
+  * If the customer explicitly asked for a discount AND the exact pre-discount
+    subtotal is strictly greater than AED 200 → 20%.
+  * Otherwise, if the exact pre-discount subtotal is strictly greater than
+    AED 100 → 15%.
+  * Otherwise → no order-level discount.
+
+Both thresholds are STRICTLY greater-than: AED 100.00 → none; AED 200.00 with a
+request → 15% (not 20%, since 200 is not > 200); AED 200.01 with a request → 20%.
 
 Contract:
-  * The eligible subtotal is the sum of FINAL, VAT-inclusive line totals (the
-    customer-facing money) — NOT an internal net figure.
-  * The threshold comparison is STRICTLY GREATER THAN (spec §5): AED 100.00 →
-    no discount; AED 100.01 → discount.
-  * All money is Decimal, HALF-UP to 2dp (spec §6) via ``services.money``.
-  * The discount is computed DETERMINISTICALLY from the current subtotal, so
-    recomputing (duplicate webhook, order reopen, summary regen) yields the same
-    result and never stacks/compounds (spec §9).
-  * When the exact total is unknown (a 'from'/inspection/measured line is
-    present), NO guaranteed discount is applied — the caller passes
-    ``total_is_known=False`` (spec §8).
+  * The eligible subtotal is the sum of FINAL, VAT-inclusive line totals.
+  * All money is Decimal, HALF-UP to 2dp via ``services.money``.
+  * Deterministic: recomputing the same (subtotal, discount_requested) yields the
+    same result and never stacks/compounds (spec §9).
+  * When the exact total is unknown (a 'from'/inspection/measured/bespoke line),
+    NO guaranteed discount is applied — the caller passes ``total_is_known=False``.
 """
 from __future__ import annotations
 
@@ -35,10 +40,13 @@ class DiscountRule:
     rule_code: str
     name: str
     threshold_amount: Decimal
-    discount_percentage: Decimal      # e.g. Decimal('15') for 15%
+    discount_percentage: Decimal          # e.g. Decimal('15') for 15%
     currency: str
     active: bool
     stacking: str
+    requires_discount_request: bool       # 20% tier only applies when the customer asked
+    priority: int                         # higher wins when >1 rule qualifies
+    version: str
 
     @property
     def discount_fraction(self) -> Decimal:
@@ -53,13 +61,15 @@ class DiscountResult:
     rule_code: str | None
     eligible_subtotal: Decimal
     threshold: Decimal | None
-    discount_percentage: Decimal | None   # snapshot, e.g. 15
-    discount_amount: Decimal              # 0.00 when not applied
-    final_total: Decimal                  # subtotal - discount_amount
+    discount_percentage: Decimal | None
+    discount_amount: Decimal
+    final_total: Decimal
+    discount_requested: bool = False
+    rule_version: str | None = None
 
     def to_snapshot(self) -> dict:
-        """Immutable snapshot fields for the order row (spec §11). Floats for the
-        numeric(12,2) columns; the customer-facing money already rounded."""
+        """Immutable snapshot fields for the order row (spec §11). Changing a rule
+        later never alters this frozen record."""
         return {
             "discount_rule_code": self.rule_code if self.applied else None,
             "discount_threshold": float(self.threshold) if self.threshold is not None else None,
@@ -67,6 +77,8 @@ class DiscountResult:
             "discount_amount": float(self.discount_amount),
             "eligible_subtotal": float(self.eligible_subtotal),
             "final_total": float(self.final_total),
+            "discount_requested": self.discount_requested,
+            "discount_rule_version": self.rule_version,
         }
 
 
@@ -82,18 +94,15 @@ def reload_rules() -> None:
         clear()
 
 
-def active_rule(*, market: str = "AE") -> DiscountRule | None:
-    """The single active automatic order-discount rule for a market, or None.
-
-    First active rule whose ``eligible_markets`` includes the market wins; the
-    config currently defines exactly one (ORDER_OVER_100_DISCOUNT)."""
+def _all_rules(*, market: str = "AE") -> list[DiscountRule]:
+    out: list[DiscountRule] = []
     for r in _raw().get("rules", []):
         if not r.get("active", False):
             continue
         markets = r.get("eligible_markets")
         if markets and market not in markets:
             continue
-        return DiscountRule(
+        out.append(DiscountRule(
             rule_code=r["rule_code"],
             name=r.get("name", r["rule_code"]),
             threshold_amount=money.to_decimal(r["threshold_amount"]),
@@ -101,31 +110,52 @@ def active_rule(*, market: str = "AE") -> DiscountRule | None:
             currency=r.get("currency", "AED"),
             active=True,
             stacking=r.get("stacking", "non_stackable"),
-        )
-    return None
+            requires_discount_request=bool(r.get("requires_discount_request", False)),
+            priority=int(r.get("priority", 0)),
+            version=str(r.get("version", "1")),
+        ))
+    return out
+
+
+def resolve_rule(eligible_subtotal, *, discount_requested: bool = False,
+                 market: str = "AE") -> DiscountRule | None:
+    """The SINGLE order-level rule that applies to ``eligible_subtotal`` under the
+    precedence, or None. A rule qualifies when it is active, its (strict) threshold
+    is exceeded, and — for a request-only rule — the customer actually asked for a
+    discount. Among qualifiers, the highest ``priority`` wins so the 20% tier
+    beats the 15% tier without ever stacking."""
+    subtotal = money.round_money(eligible_subtotal)
+    candidates = [
+        r for r in _all_rules(market=market)
+        if subtotal > r.threshold_amount
+        and (discount_requested or not r.requires_discount_request)
+    ]
+    if not candidates:
+        return None
+    # highest priority, then highest percentage as a stable tiebreak
+    return max(candidates, key=lambda r: (r.priority, r.discount_percentage))
 
 
 def evaluate(eligible_subtotal, *, total_is_known: bool = True,
-             market: str = "AE") -> DiscountResult:
-    """Evaluate the automatic order discount for ``eligible_subtotal``.
+             discount_requested: bool = False, market: str = "AE") -> DiscountResult:
+    """Evaluate the single applicable automatic order discount.
 
     ``eligible_subtotal`` is the sum of FINAL VAT-inclusive line totals. When
-    ``total_is_known`` is False (a 'from'/inspection/measured line makes the
-    exact total unknown) no guaranteed discount is applied (spec §8).
+    ``total_is_known`` is False (unknown exact total) no guaranteed discount is
+    applied (spec §8). ``discount_requested`` gates the 20%-over-200 tier.
     """
     subtotal = money.round_money(eligible_subtotal)
-    rule = active_rule(market=market)
+    zero = money.round_money(0)
 
-    if rule is None:
-        return DiscountResult(False, "no_rule", None, subtotal, None, None,
-                              money.round_money(0), subtotal)
     if not total_is_known:
-        return DiscountResult(False, "unknown_total", None, subtotal,
-                              rule.threshold_amount, None, money.round_money(0), subtotal)
-    # STRICT greater-than (spec §5): exactly-at-threshold does NOT qualify.
-    if subtotal <= rule.threshold_amount:
-        return DiscountResult(False, "below_threshold", None, subtotal,
-                              rule.threshold_amount, None, money.round_money(0), subtotal)
+        return DiscountResult(False, "unknown_total", None, subtotal, None, None,
+                              zero, subtotal, discount_requested, None)
+
+    rule = resolve_rule(subtotal, discount_requested=discount_requested, market=market)
+    if rule is None:
+        reason = "below_threshold" if _all_rules(market=market) else "no_rule"
+        return DiscountResult(False, reason, None, subtotal, None, None,
+                              zero, subtotal, discount_requested, None)
 
     discount_amount = money.round_money(subtotal * rule.discount_fraction)
     final_total = money.round_money(subtotal - discount_amount)
@@ -134,4 +164,31 @@ def evaluate(eligible_subtotal, *, total_is_known: bool = True,
         eligible_subtotal=subtotal, threshold=rule.threshold_amount,
         discount_percentage=rule.discount_percentage,
         discount_amount=discount_amount, final_total=final_total,
+        discount_requested=discount_requested, rule_version=rule.version,
     )
+
+
+# --------------------------------------------------------------------------
+# Natural-language discount-request detection (spec: recognise "make it cheaper",
+# "best rate", "that's expensive", "any offers", etc. -> discount_requested=true)
+# --------------------------------------------------------------------------
+_DISCOUNT_PHRASES = (
+    "discount", "cheaper", "cheapest", "best rate", "best price", "better price",
+    "better rate", "lower price", "lower rate", "reduce the price", "reduce price",
+    "good rate", "good price", "special price", "special rate", "any offer",
+    "any offers", "offer", "deal", "promo", "promotion", "too expensive",
+    "so expensive", "quite expensive", "very expensive", "thats expensive",
+    "that is expensive", "can you do better", "do better on", "less expensive",
+    "make it cheaper", "cheaper rate", "cheaper price", "better deal", "reduce it",
+)
+
+
+def detect_discount_request(text: str | None) -> bool:
+    """True when the customer is asking for a discount / a better rate. Phrase
+    match on a punctuation-normalised message; deliberately broad but anchored to
+    price-negotiation language so ordinary requests never trip it."""
+    if not text:
+        return False
+    cleaned = "".join(ch if ch.isalnum() else " " for ch in text.lower())
+    low = f" {' '.join(cleaned.split())} "
+    return any(f" {p} " in low for p in _DISCOUNT_PHRASES)

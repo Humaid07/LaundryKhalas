@@ -41,7 +41,7 @@ from db.repositories import (
     tickets_repo,
     turns_repo,
 )
-from services import booking_flow, message_aggregation, money, order_store
+from services import booking_flow, discount, message_aggregation, money, order_store
 from services.auto_reply import SENDER_NOT_ALLOWED, should_auto_reply
 from services.escalation import detect_escalation
 from services.privacy import mask_phone, normalize_e164
@@ -175,6 +175,7 @@ def _booking_from_row(row: dict, *, profile_name: str | None = None,
         pickup_area=row.get("pickup_area") or row.get("area"),
         pickup_instruction_code=row.get("pickup_instruction_code"),
         pickup_instruction_text=row.get("pickup_instruction_text"),
+        discount_requested=bool(row.get("discount_requested")),
         # transient context: an unverified profile name (offered, never auto-saved)
         # and a previously confirmed name for this customer (offered for reuse).
         whatsapp_profile_name=profile_name,
@@ -317,6 +318,20 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
     current_texts = set(combined.fragments)
 
     active_draft = await orders_repo.get_active_draft(convo["id"])
+
+    # Sticky discount-request flag: once the customer asks for a discount / better
+    # rate ("make it cheaper", "best rate", "that's expensive"), record it on the
+    # open order so the pricing engine can apply the 20%-over-AED-200 tier when the
+    # exact total is known. Never invents a discount here — only records intent.
+    if active_draft and not active_draft.get("discount_requested") \
+            and discount.detect_discount_request(text):
+        updated = await orders_repo.apply_booking_updates(
+            active_draft["id"], {"discount_requested": True},
+            active_draft.get("conversation_state") or booking_flow.WAITING_FOR_SERVICE)
+        if updated:
+            active_draft = updated
+        logger.info("discount_requested_flagged", sender=masked)
+
     draft_state = active_draft.get("conversation_state") if active_draft else None
     sel = inbound_obj.selection_id
     channel = EvolutionWhatsAppChannel.from_settings()

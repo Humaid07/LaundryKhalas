@@ -88,7 +88,9 @@ class Quote:
     eligible_subtotal: float = 0.0
     discount_applied: bool = False
     discount_reason: str = "below_threshold"
+    discount_requested: bool = False
     discount_rule_code: str | None = None
+    discount_rule_version: str | None = None
     discount_percentage: float | None = None
     discount_threshold: float | None = None
     discount_amount: float = 0.0
@@ -120,7 +122,9 @@ class Quote:
             "eligible_subtotal": self.eligible_subtotal,
             "discount_applied": self.discount_applied,
             "discount_reason": self.discount_reason,
+            "discount_requested": self.discount_requested,
             "discount_rule_code": self.discount_rule_code,
+            "discount_rule_version": self.discount_rule_version,
             "discount_percentage": self.discount_percentage,
             "discount_threshold": self.discount_threshold,
             "discount_amount": self.discount_amount,
@@ -190,7 +194,8 @@ def _line_for(item: dict, quantity: float, measure: float | None,
 
 
 def calculate_estimate(order_items: list[dict],
-                       price_overrides: dict[str, float] | None = None) -> Quote:
+                       price_overrides: dict[str, float] | None = None,
+                       *, discount_requested: bool = False) -> Quote:
     """Compute a quote for ``order_items`` with FINAL customer prices.
 
     Each entry: ``{"item_code": str, "quantity": number, "measure": number?}``
@@ -240,10 +245,13 @@ def calculate_estimate(order_items: list[dict],
         or quote.has_measured_estimate
         or any(ln.line_kind == "pending" for ln in quote.lines)
     )
-    # Automatic order-level discount (spec §§5-9). Only applied when the exact
-    # eligible total is KNOWN (no 'from'/inspection/measured line); computed
-    # deterministically so recomputation never stacks it (spec §9).
-    disc = discount.evaluate(eligible_subtotal, total_is_known=quote.is_final)
+    # Automatic order-level discount (spec §§5-9 + precedence). Only applied when
+    # the exact eligible total is KNOWN (no 'from'/inspection/measured line);
+    # computed deterministically so recomputation never stacks it (spec §9). The
+    # discount_requested flag gates the 20%-over-200 tier.
+    disc = discount.evaluate(eligible_subtotal, total_is_known=quote.is_final,
+                             discount_requested=discount_requested)
+    quote.discount_requested = discount_requested
     quote.eligible_subtotal = float(eligible_subtotal)
     quote.discount_applied = disc.applied
     quote.discount_reason = disc.reason
@@ -251,6 +259,7 @@ def calculate_estimate(order_items: list[dict],
     quote.discount_percentage = float(disc.discount_percentage) if disc.discount_percentage is not None else None
     quote.discount_threshold = float(disc.threshold) if disc.threshold is not None else None
     quote.discount_amount = float(disc.discount_amount)
+    quote.discount_rule_version = disc.rule_version
 
     total = money.round_money(disc.final_total)   # customer pays post-discount
     # Internal accounting split (never shown): net + tax == final total exactly.

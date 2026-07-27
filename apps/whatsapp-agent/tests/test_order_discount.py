@@ -49,6 +49,66 @@ def test_recompute_is_idempotent_never_stacks():
     assert again.final_total == Decimal("102.00")
 
 
+# --- Discount precedence: 15% over 100, 20% over 200 when requested ----------
+@pytest.mark.parametrize("subtotal, requested, applied, pct", [
+    ("100",    True,  False, None),   # at 100 -> none
+    ("100.01", False, True,  "15"),   # over 100 -> 15%
+    ("180",    False, True,  "15"),   # over 100, no request -> 15%
+    ("180",    True,  True,  "15"),   # 180 requested: not >200 -> still 15%
+    ("200",    True,  True,  "15"),   # exactly 200 requested: not >200 -> 15%
+    ("200.01", True,  True,  "20"),   # just over 200 requested -> 20%
+    ("250",    True,  True,  "20"),   # over 200 requested -> 20%
+    ("250",    False, True,  "15"),   # over 200 but NOT requested -> only 15%
+])
+def test_discount_precedence(subtotal, requested, applied, pct):
+    r = discount.evaluate(Decimal(subtotal), discount_requested=requested)
+    assert r.applied is applied
+    if applied:
+        assert r.discount_percentage == Decimal(pct)
+
+
+def test_20_percent_never_stacks_with_15():
+    # 250 requested -> a SINGLE 20% (50 off), not 15% then 20% (which would be 35%).
+    r = discount.evaluate(Decimal("250"), discount_requested=True)
+    assert r.discount_percentage == Decimal("20")
+    assert r.discount_amount == Decimal("50.00")     # 250 * 0.20, not 250*0.35
+    assert r.final_total == Decimal("200.00")
+
+
+def test_250_requested_20pct_vs_not_requested_15pct():
+    req = discount.evaluate(Decimal("250"), discount_requested=True)
+    noreq = discount.evaluate(Decimal("250"), discount_requested=False)
+    assert req.discount_amount == Decimal("50.00")   # 20%
+    assert noreq.discount_amount == Decimal("37.50")  # 15%
+
+
+def test_snapshot_records_discount_requested_and_version():
+    r = discount.evaluate(Decimal("250"), discount_requested=True)
+    snap = r.to_snapshot()
+    assert snap["discount_requested"] is True
+    assert snap["discount_rule_code"] == "ORDER_OVER_200_DISCOUNT_REQUESTED"
+    assert snap["discount_percentage"] == 20.0
+    assert snap["discount_rule_version"]
+
+
+# --- Discount-request NLU detection -----------------------------------------
+@pytest.mark.parametrize("text", [
+    "Can you give me a discount?", "Can you make it cheaper?", "What is your best rate?",
+    "That is expensive", "Can I get a better price?", "Do you have any offers?",
+    "that's too expensive", "can you do better", "any deal?",
+])
+def test_detect_discount_request_true(text):
+    assert discount.detect_discount_request(text) is True
+
+
+@pytest.mark.parametrize("text", [
+    "I need wash and fold", "3 shirts and 2 trousers", "tomorrow after 6",
+    "from Dubai Marina", "How much is the 6 kg bag?",
+])
+def test_detect_discount_request_false(text):
+    assert discount.detect_discount_request(text) is False
+
+
 # --- Quote-engine integration (spec §6 order of operations) ------------------
 def test_multi_item_order_over_100_discounts_to_88_40():
     # spec §7: 5×Shirt@9 (45) + 5×Trousers@11 (55) + 1×Hand Towel@4 (4) = 104.

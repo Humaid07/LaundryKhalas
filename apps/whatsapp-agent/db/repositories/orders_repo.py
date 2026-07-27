@@ -66,6 +66,7 @@ def _pricing_block(row: dict) -> dict | None:
         # the pre-discount total; final_price is post-discount.
         "eligible_subtotal": _f("eligible_subtotal"),
         "discount_applied": discount_applied,
+        "discount_requested": bool(row.get("discount_requested")),
         "discount_amount": discount_amount if discount_applied else None,
         "discount_percentage": _f("discount_percentage") if discount_applied else None,
         "discount_rule_code": row.get("discount_rule_code") if discount_applied else None,
@@ -530,9 +531,10 @@ _BOOKING_COLS = frozenset({
     "catalogue_category_code", "catalogue_category_name",
     "subtotal_amount", "vat_rate", "vat_amount", "estimated_total", "amount",
     "pricing_is_estimated",
-    # Automatic order-discount snapshot (task spec §11).
+    # Automatic order-discount snapshot (task spec §11) + the sticky
+    # discount-requested flag that gates the 20%-over-200 tier.
     "eligible_subtotal", "discount_rule_code", "discount_percentage",
-    "discount_threshold", "discount_amount",
+    "discount_threshold", "discount_amount", "discount_requested",
 })
 # Columns written by the FSM that are jsonb and need an explicit cast.
 _JSONB_BOOKING_COLS = frozenset({"line_items"})
