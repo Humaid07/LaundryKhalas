@@ -279,6 +279,46 @@ export interface ServiceTaxonomyHealth {
   mismatches: Array<string | { surface?: string; name?: string; detail?: string }>;
 }
 
+/**
+ * A human-intervention (abuse/threat takeover) queue entry
+ * (GET /api/human-intervention/queue). PII-safe: masked phone + a sanitized,
+ * non-graphic preview only; the full message lives behind the conversation view.
+ */
+export interface HumanInterventionDTO {
+  id: string;
+  conversation_id: string;
+  takeover_status:
+    | "WAITING_FOR_HUMAN" | "ASSIGNED" | "HUMAN_ACTIVE" | "RESOLVED" | "RELEASED_TO_AI" | "CLOSED";
+  takeover_reason: string;                 // ABUSIVE_LANGUAGE | THREAT | ...
+  abuse_category: string | null;
+  threat_severity: string | null;          // NONE | LOW | MEDIUM | HIGH | IMMINENT
+  internal_priority: "NORMAL" | "MEDIUM" | "HIGH" | "CRITICAL";
+  assigned_agent_id: string | null;
+  assigned_agent_name: string | null;
+  customer_notice_sent: boolean;
+  flagged_at: string;
+  accepted_at: string | null;
+  sanitized_preview: string | null;
+  customer_name: string | null;
+  masked_phone: string | null;
+  market: string | null;
+  linked_order_id: string | null;
+  unread_count: number;
+  conversation_status: string;
+}
+
+export interface HumanInterventionMetrics {
+  total?: number;
+  waiting?: number;
+  human_active?: number;
+  resolved?: number;
+  released_to_ai?: number;
+  threats?: number;
+  abusive?: number;
+  critical?: number;
+  avg_seconds_to_accept?: number | null;
+}
+
 export class AgentApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -365,6 +405,28 @@ export const agentApi = {
     }),
   resolveConversation: (id: string) =>
     request<InboxConversationDTO>(`/api/conversations/${id}/resolve`, { method: "POST" }),
+
+  // --- Human intervention (abuse/threat takeover) queue + actions ---
+  humanInterventionQueue: (params: { status?: string; reason?: string; severity?: string;
+    assigned_agent_id?: string; market?: string } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    });
+    const q = qs.toString();
+    return request<HumanInterventionDTO[]>(`/api/human-intervention/queue${q ? `?${q}` : ""}`);
+  },
+  humanInterventionMetrics: () =>
+    request<HumanInterventionMetrics>("/api/human-intervention/metrics"),
+  claimIntervention: (id: string) =>
+    request<HumanInterventionDTO>(`/api/human-intervention/${id}/claim`, { method: "POST" }),
+  resolveIntervention: (id: string, resolution_reason?: string, close?: boolean) =>
+    request<HumanInterventionDTO>(`/api/human-intervention/${id}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ resolution_reason, close }),
+    }),
+  releaseInterventionToAi: (id: string) =>
+    request<HumanInterventionDTO>(`/api/human-intervention/${id}/release-to-ai`, { method: "POST" }),
 
   // --- Flags ---
   listFlags: (status?: string) =>

@@ -22,6 +22,21 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — Post-confirmation terminal boundary (2026-07-28)
+
+[[2026-07-28-post-confirmation-terminal-boundary]] —
+`build-reports/2026-07-28-post-confirmation-terminal-boundary.md` — **fixes the agent sending
+a stream of extra messages (discount note, add-items invite, re-confirmation, apology, goodbye,
+repeated total) after one confirmation.** Root cause: once confirmed, `get_active_draft` → None,
+so `run_booking_turn` handed the model a `{"workflow_state":"new"}` block → every later turn (a
+re-driven stale turn, a duplicate "yes", or an ack) looked like a fresh booking. Fix: new
+`services/post_confirmation.py` (`is_confirmed_order` + `classify_post_confirmation_turn`) drives a
+**terminal guard** in the webhook Claude branch — a non-actionable post-confirmation turn is blocked
+(`POST_CONFIRMATION_AUTOMATION_BLOCKED`), gratitude gets one brief reply, only explicit new
+requests proceed; plus a new `confirmed_state_block` (ORDER_CONFIRMED, `missing_fields:[]`) so even
+follow-ups never re-book, and a HARD-STOP prompt block. No cron/upsell existed. 9 new tests + 82
+regressions, ruff clean. No migration.
+
 ## Latest — Service persistence & unsupported-service handling (2026-07-28)
 
 [[2026-07-28-service-persistence-unsupported-service-fix]] —

@@ -71,12 +71,18 @@ class CrmResult:
     lifecycle_stage: str
     funnel_stage: str
     segments: list[str] = field(default_factory=list)
+    # Backend-computed loyalty tier (NEW | REPEAT | REPEAT_BRONZE | REPEAT_SILVER |
+    # REPEAT_GOLD) + the rule version it was computed under (for snapshots/audit).
+    customer_tier: str = "NEW"
+    customer_tier_rule_version: str = "1"
 
     def as_dict(self) -> dict:
         return {
             "lifecycle_stage": self.lifecycle_stage,
             "funnel_stage": self.funnel_stage,
             "segments": list(self.segments),
+            "customer_tier": self.customer_tier,
+            "customer_tier_rule_version": self.customer_tier_rule_version,
         }
 
 
@@ -151,6 +157,36 @@ def compute_lifecycle_stage(facts: CustomerFacts, config: dict | None = None) ->
     return "lead"
 
 
+def _customer_tier_config(config: dict | None = None) -> dict:
+    return (config or _load_config()).get("customer_tiers", {"rule_version": "1", "tiers": []})
+
+
+def customer_tier_rule_version(config: dict | None = None) -> str:
+    return str(_customer_tier_config(config).get("rule_version", "1"))
+
+
+def compute_customer_tier(facts: CustomerFacts, config: dict | None = None) -> str:
+    """Backend-authoritative loyalty tier — the LLM NEVER assigns it (spec).
+
+    NEW when there is no legitimate completed order; otherwise the highest tier
+    whose minimum completed-order count OR minimum lifetime completed value is
+    met (precedence: Gold > Silver > Bronze), else REPEAT. Only legitimate
+    completed orders count — the repo already excludes drafts / cancelled /
+    refunded / test orders when it gathers ``confirmed_order_count`` and
+    ``lifetime_value``, so this pure function trusts those inputs. Deterministic +
+    idempotent: the same facts + rule version always yield the same tier."""
+    if facts.confirmed_order_count < 1:
+        return "NEW"
+    for tier in _customer_tier_config(config).get("tiers", []):
+        min_orders = int(tier.get("min_completed_orders", 0) or 0)
+        min_value = money.to_decimal(tier.get("min_lifetime_value", 0) or 0)
+        meets_orders = min_orders > 0 and facts.confirmed_order_count >= min_orders
+        meets_value = min_value > 0 and facts.lifetime_value >= min_value
+        if meets_orders or meets_value:
+            return str(tier["tier"])
+    return "REPEAT"
+
+
 def compute_funnel_stage(facts: CustomerFacts, config: dict | None = None) -> str:
     """Single position in the acquisition funnel (highest reached)."""
     if facts.confirmed_order_count >= 1:
@@ -168,4 +204,6 @@ def evaluate(facts: CustomerFacts, config: dict | None = None) -> CrmResult:
         lifecycle_stage=compute_lifecycle_stage(facts, config),
         funnel_stage=compute_funnel_stage(facts, config),
         segments=compute_segments(facts, config),
+        customer_tier=compute_customer_tier(facts, config),
+        customer_tier_rule_version=customer_tier_rule_version(config),
     )

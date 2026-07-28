@@ -12,6 +12,15 @@
     "inactive_days": 60,
     "campaign_attribution_days": 30
   },
+  "customer_tiers": {
+    "rule_version": "1",
+    "_note": "Backend-computed loyalty tier (New/Repeat/Bronze/Silver/Gold) from LEGITIMATE completed orders only (the repo excludes drafts/cancelled/refunded/test when gathering facts). A customer meets a tier when EITHER the completed-order count OR the lifetime completed value reaches the tier's minimum; precedence is highest-tier-first. Configurable per market; never hardcoded in the prompt and never assigned by the LLM.",
+    "tiers": [
+      {"tier": "REPEAT_GOLD",   "min_completed_orders": 20, "min_lifetime_value": 3000.0},
+      {"tier": "REPEAT_SILVER", "min_completed_orders": 10, "min_lifetime_value": 1500.0},
+      {"tier": "REPEAT_BRONZE", "min_completed_orders": 4,  "min_lifetime_value": 500.0}
+    ]
+  },
   "notes": {
     "repeat_customer": "confirmed_order_count >= repeat_min_confirmed_orders (two or more separate confirmed booking cycles).",
     "high_value": "lifetime_value >= high_value_lifetime_value.",
