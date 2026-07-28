@@ -23,6 +23,7 @@ Safety: non-approved senders are dropped before anything is stored. SQLite mode
 acknowledges but stores nothing. No raw phone/address is ever logged.
 """
 import datetime as _dt
+import hashlib as _hashlib
 
 import structlog
 from fastapi import APIRouter, Request
@@ -33,13 +34,12 @@ from channels.evolution_whatsapp import EvolutionWhatsAppChannel, parse_evolutio
 from db import database
 from db.repositories import (
     b2b_leads_repo,
-    campaigns_repo,
     complaints_repo,
     conversations_repo,
     crm_repo,
     customers_repo,
-    facility_orders_repo,
     flags_repo,
+    human_interventions_repo,
     messages_repo,
     orders_repo,
     pending_tasks_repo,
@@ -48,18 +48,22 @@ from db.repositories import (
     turns_repo,
 )
 from services import (
+    abuse_classification,
     b2b,
     booking_flow,
     complaints,
     discount,
-    facility_notifications,
-    facility_routing,
+    human_intervention,
     message_aggregation,
+    message_completeness,
     money,
+    order_confirmation,
     order_store,
+    post_confirmation,
 )
 from services.auto_reply import SENDER_NOT_ALLOWED, should_auto_reply
 from services.escalation import detect_escalation
+from services import clock
 from services.privacy import mask_phone, normalize_e164
 from services.turn_service import TurnBuffer
 from settings import get_settings
@@ -83,14 +87,15 @@ def get_turn_buffer() -> TurnBuffer:
     and startup recovery."""
     global _TURN_BUFFER
     s = get_settings()
+    # The buffer's ``debounce`` is only the FALLBACK wait (used by recovery / when a
+    # caller passes no adaptive value); the ACTIVE per-fragment wait is chosen by the
+    # completeness classifier and passed into add_fragment. ``max`` is the hard cap.
+    fallback = s.debounce_fragment_seconds
+    max_s = s.max_aggregation_seconds
     if (_TURN_BUFFER is None
-            or _TURN_BUFFER.debounce != float(s.whatsapp_message_debounce_seconds)
-            or _TURN_BUFFER.max != float(s.whatsapp_message_max_aggregation_seconds)):
-        _TURN_BUFFER = TurnBuffer(
-            turns_repo,
-            debounce_seconds=s.whatsapp_message_debounce_seconds,
-            max_seconds=s.whatsapp_message_max_aggregation_seconds,
-        )
+            or _TURN_BUFFER.debounce != float(fallback)
+            or _TURN_BUFFER.max != float(max_s)):
+        _TURN_BUFFER = TurnBuffer(turns_repo, debounce_seconds=fallback, max_seconds=max_s)
     return _TURN_BUFFER
 
 
@@ -114,7 +119,8 @@ async def recover_pending_turns() -> int:
             return None
         customer = {"id": convo.get("customer_id"), "display_name": None}
         await _process_reply(convo, customer, combined, phone=phone,
-                             masked=mask_phone(phone), live=live, last_inbound_msg=None)
+                             masked=mask_phone(phone), live=live, last_inbound_msg=None,
+                             turn_id=(turn or {}).get("turn_id"))
         return None
 
     return await buf.recover(_recovery_processor)
@@ -163,6 +169,14 @@ _AI_FALLBACK_TEXT = (
     "team and someone will follow up with you shortly."
 )
 
+# The ONE approved refund acknowledgement. A refund is NEVER handled by the AI:
+# the conversation is durably handed to Operations (human_takeover) and this is
+# the single calm notice sent — it never approves/promises/quotes a refund.
+_REFUND_ACK_TEXT = (
+    "I'm sorry about this. I've forwarded your refund request to our Operations team "
+    "for review. Please hold on while one of our executives gets in touch with you."
+)
+
 _BOOKING_SELECTION_PREFIXES = ("service:", "sub:", "item:", "slot:", "instruction:",
                                "date:", "change:")
 _BOOKING_SELECTION_IDS = {"confirm_booking", "change_details", "cancel_booking",
@@ -170,7 +184,8 @@ _BOOKING_SELECTION_IDS = {"confirm_booking", "change_details", "cancel_booking",
 
 
 def _today() -> _dt.date:
-    return _dt.datetime.now(_GST).date()
+    # Market-local calendar date via the central clock (business timezone).
+    return clock.today()
 
 
 def _is_booking_selection(selection_id: str | None) -> bool:
@@ -289,13 +304,41 @@ async def _send_reply(channel, phone: str, reply) -> str:
         return fallback
 
 
-async def _deliver(channel, phone: str, convo_id: str, reply) -> None:
+# Brief, deterministic gratitude reply after a confirmed order — no booking
+# content, no order summary, no upsell (spec: post-confirmation THANK_YOU_RESPONSE).
+_THANK_YOU_TEXT = "You're welcome! 😊"
+
+
+def _reply_idem_key(turn_id: str | None, reply) -> str | None:
+    """Deterministic outbound idempotency key for ONE logical reply of ONE turn:
+    sha1(turn_id | workflow_state | reply body). Returns None when there is no
+    logical turn id (aggregation-off legacy path), where wa_message_seen already
+    dedupes; keying on content alone there could wrongly drop a legitimate repeat.
+    Distinct replies within a turn (e.g. confirmation + next-actions) get distinct
+    keys via their differing body/state, so only a true re-send is suppressed."""
+    if not turn_id:
+        return None
+    body = reply.interactive.body if getattr(reply, "interactive", None) else (reply.text or "")
+    raw = f"{turn_id}|{reply.state or ''}|{(body or '').strip()}"
+    return _hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
+async def _deliver(channel, phone: str, convo_id: str, reply, *, turn_id: str | None = None) -> None:
     """Send a BookingReply and store it as an agent message. Never raises — a
-    provider send error is logged but must not fail the webhook."""
+    provider send error is logged but must not fail the webhook. Idempotent per
+    logical turn: a reply whose idem key was already delivered is skipped, so a
+    redelivered webhook / restart re-drive / retry never double-sends (spec §§
+    duplicate-prevention)."""
+    idem_key = _reply_idem_key(turn_id, reply)
     try:
+        if idem_key and await messages_repo.agent_reply_key_seen(convo_id, idem_key):
+            logger.info("duplicate_outbound_prevented", conversation=convo_id,
+                        idempotency_reused=True, response_state=reply.state)
+            return
         sent = await _send_reply(channel, phone, reply)
         await messages_repo.add_message(convo_id, "agent", sent, status="sent",
-                                        metadata={"booking_state": reply.state})
+                                        metadata={"booking_state": reply.state,
+                                                  "idem_key": idem_key, "turn_id": turn_id})
     except Exception as exc:  # noqa: BLE001
         logger.warning("evolution_send_failed", error=str(exc))
 
@@ -323,7 +366,8 @@ async def _raise_support(conversation_id: str, order_uuid) -> None:
 
 
 async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
-                         masked: str, live: bool, last_inbound_msg: dict | None) -> None:
+                         masked: str, live: bool, last_inbound_msg: dict | None,
+                         turn_id: str | None = None) -> None:
     """Generate + send ONE agent reply for a combined customer turn.
 
     The per-turn processor: runs the booking routing (Claude orchestration → FSM
@@ -333,6 +377,33 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
     takeover gates already ran per fragment in the webhook loop before this."""
     settings = get_settings()
     text = combined.text
+
+    # --- Abuse / threat safety gate (BEFORE any AI or booking work) ----------
+    # Classify the COMBINED turn deterministically (fast, no LLM). On a genuine
+    # abuse/threat: persist the human-intervention state + PAUSE the conversation
+    # in ONE committed transaction, THEN send the single calm holding message.
+    # Ordering matters — a concurrent later message must see the paused state and
+    # be stored, never answered. Idempotent: a duplicate turn / retry reuses the
+    # existing event and never resends the notice. Never crashes the turn.
+    if database.is_supabase_mode():
+        try:
+            prior = await human_interventions_repo.abuse_event_count(convo["id"])
+            classification = abuse_classification.classify(text, prior_abuse_event_count=prior)
+            if classification.human_intervention_required:
+                outcome = await human_intervention.trigger_from_classification(
+                    convo["id"], classification,
+                    flagged_message_id=(last_inbound_msg or {}).get("id"),
+                    flagged_turn_id=turn_id, combined_text=text)
+                if outcome.should_send_notice and live:
+                    await _deliver(
+                        EvolutionWhatsAppChannel.from_settings(), phone, convo["id"],
+                        booking_flow.BookingReply(text=outcome.holding_message,
+                                                  state="human_takeover"),
+                        turn_id=turn_id)
+                return  # AI paused — do NOT run booking / Anthropic for this turn
+        except Exception as exc:  # noqa: BLE001 — the safety gate must never crash a turn
+            logger.warning("abuse_gate_error", sender=masked, error=str(exc))
+
     inbound_obj = booking_flow.Inbound(
         text=text, selection_id=combined.selection_id,
         latitude=combined.latitude, longitude=combined.longitude,
@@ -348,12 +419,32 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
     # exact total is known. Never invents a discount here — only records intent.
     if active_draft and not active_draft.get("discount_requested") \
             and discount.detect_discount_request(text):
-        updated = await orders_repo.apply_booking_updates(
-            active_draft["id"], {"discount_requested": True},
-            active_draft.get("conversation_state") or booking_flow.WAITING_FOR_SERVICE)
+        logger.info("discount_request_detected", sender=masked, order=active_draft.get("order_id"))
+        # Record intent AND immediately re-price the persisted draft so the FINAL
+        # total reflects the applicable discount right away (spec: never leave the
+        # pre-discount amount active). The pricing engine — not this code — decides
+        # the rule/percentage; re-quoting is deterministic + idempotent (spec §9).
+        state = active_draft.get("conversation_state") or booking_flow.WAITING_FOR_SERVICE
+        updates: dict = {"discount_requested": True}
+        reprice = booking_flow.pricing_updates_for_row(active_draft, discount_requested=True)
+        if reprice:
+            updates.update(reprice)
+            logger.info(
+                "discount_rule_resolved", sender=masked, order=active_draft.get("order_id"),
+                rule_code=reprice.get("discount_rule_code"),
+                percentage=reprice.get("discount_percentage"),
+                pre_discount_total=reprice.get("eligible_subtotal"),
+                discount_amount=reprice.get("discount_amount"),
+                final_total=reprice.get("estimated_total"))
+            event = "discount_applied" if reprice.get("discount_amount") else "discount_not_applied"
+            logger.info(event, sender=masked, order=active_draft.get("order_id"),
+                        final_total=reprice.get("estimated_total"))
+        updated = await orders_repo.apply_booking_updates(active_draft["id"], updates, state)
         if updated:
             active_draft = updated
-        logger.info("discount_requested_flagged", sender=masked)
+            logger.info("order_total_recalculated", sender=masked,
+                        order=active_draft.get("order_id"),
+                        final_total=active_draft.get("estimated_total"))
 
     draft_state = active_draft.get("conversation_state") if active_draft else None
     sel = inbound_obj.selection_id
@@ -368,15 +459,45 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
 
     # --- Claude-orchestrated conversation (natural language, default path) ---
     if settings.anthropic_booking_orchestration and settings.live_llm_ready:
+        # POST-CONFIRMATION TERMINAL BOUNDARY (spec: a confirmed order is a hard
+        # stop). With NO active draft, the booking flow is over. A stale/duplicate
+        # confirmation, a bare ack, an empty/interactive-only turn, or a re-driven
+        # old turn must NOT run a booking turn — that is exactly what produced the
+        # spurious discount/upsell/re-confirm/goodbye chatter (a missing draft made
+        # the model think a NEW booking had started). Only an explicit new request
+        # (new order / edit / question) proceeds; gratitude gets one short reply.
+        if active_draft is None:
+            latest = await orders_repo.get_latest_for_conversation(convo["id"])
+            if post_confirmation.is_confirmed_order(latest):
+                kind = post_confirmation.classify_post_confirmation_turn(text, sel)
+                if not kind.is_actionable:
+                    if kind is post_confirmation.PostConfirmTurn.THANKS and live:
+                        await _deliver(channel, phone, convo["id"],
+                                       booking_flow.BookingReply(
+                                           text=_THANK_YOU_TEXT, state=booking_flow.POST_ORDER),
+                                       turn_id=turn_id)
+                        logger.info("logical_turn_completed", sender=masked,
+                                    conversation=convo["id"], order=latest.get("order_id"),
+                                    final_response_type="THANK_YOU_RESPONSE", turn=turn_id)
+                    else:
+                        if last_inbound_msg:
+                            await messages_repo.set_status(last_inbound_msg["id"], "no_auto_reply")
+                        logger.info("post_confirmation_automation_blocked", sender=masked,
+                                    conversation=convo["id"], order=latest.get("order_id"),
+                                    reason="POST_CONFIRMATION_AUTOMATION_BLOCKED",
+                                    turn_kind=kind.value, turn=turn_id)
+                    return
         logger.info("anthropic_turn_started", sender=masked, conversation=convo["id"])
         prior = await messages_repo.list_messages(convo["id"])
         history = [(m["sender_type"], m["message_text"]) for m in prior
                    if m["sender_type"] in ("customer", "agent")
                    and m.get("message_text") and m["message_text"] not in current_texts]
+        _market = (customer or {}).get("market")
         ctx = BookingContext(
             conversation_id=convo["id"], order_uuid=None, repo=orders_repo,
-            today=_today(), available_slots=slots_repo.available_slots, customer=customer,
-            profile_name=profile_name, verified_name=verified_name)
+            today=clock.today(_market), available_slots=slots_repo.available_slots,
+            customer=customer, profile_name=profile_name, verified_name=verified_name,
+            now=clock.now(_market), market=_market)
         try:
             reply_text, result = await run_booking_turn(ctx, text=text, history=history)
         except Exception as exc:  # noqa: BLE001 — never leave the customer in silence
@@ -398,7 +519,8 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
         state = (fresh or {}).get("conversation_state") or booking_flow.WAITING_FOR_SERVICE
         if live:
             await _deliver(channel, phone, convo["id"],
-                           booking_flow.BookingReply(text=reply_text, state=state))
+                           booking_flow.BookingReply(text=reply_text, state=state),
+                           turn_id=turn_id)
         logger.info("anthropic_turn_delivered", sender=masked,
                     tools=(ctx.tool_calls or []),
                     provider=(result.provider if result else "fallback"),
@@ -485,19 +607,12 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
             # Both steps are idempotent and never raise, so they can't break the
             # customer's confirmation reply.
             if row and created_now:
-                fac_id = await facility_routing.assign_facility_for_order(dict(row))
-                if fac_id:
-                    order_read = facility_orders_repo.to_facility_read(dict(row))
-                    order_read["id"] = str(row["id"])
-                    await facility_notifications.notify_new_order_assigned(fac_id, order_read)
-                # Last-touch campaign attribution (mock-first, best-effort).
-                try:
-                    await campaigns_repo.attribute_booking(customer["id"], str(row["id"]))
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("campaign_attribution_failed", sender=masked, error=str(exc))
-                # Recompute the customer's CRM lifecycle/segments (deterministic,
-                # best-effort — never raises into the confirmation reply).
-                await crm_repo.recompute_for_customer(customer["id"])
+                # First-confirm side effects (facility assign + notify, campaign
+                # attribution, CRM recompute). Shared with the Claude
+                # `confirm_order` path so both behave identically — see
+                # services/order_confirmation. Idempotent + never raises.
+                await order_confirmation.apply_post_confirmation_effects(
+                    dict(row), customer["id"])
             if live:
                 await _deliver(channel, phone, convo["id"], booking_flow.BookingReply(
                     text=_final_confirmation_text(row) if row else "Your booking is confirmed.",
@@ -627,6 +742,20 @@ async def receive_evolution_webhook(request: Request):
 
         # --- ESCALATION (interrupts everything, never auto-resolves) -----------
         category = detect_escalation(text)
+        # IDEMPOTENT HANDOVER: if a human already owns this conversation (e.g. a
+        # refund handover already paused the AI), do NOT create a second flag /
+        # complaint / acknowledgement and never run the model — just store the
+        # message for the operator. One notice per takeover (spec: idempotency key
+        # conversation + case + REFUND_HUMAN_INTERVENTION_NOTICE).
+        if category and convo.get("status") == "human_takeover":
+            if inbound_msg:
+                await messages_repo.set_status(inbound_msg["id"], "human_needed")
+            if category == "refund":
+                logger.info("refund_notice_duplicate_prevented", sender=masked)
+            logger.info("evolution_inbound_held", sender=masked,
+                        no_auto_reply_reason="human_takeover")
+            processed += 1
+            continue
         if category:
             flag_type, priority, team = _ESCALATION_FLAG.get(category, _DEFAULT_FLAG)
             reason = category.replace("_", " ")
@@ -671,11 +800,36 @@ async def receive_evolution_webhook(request: Request):
                 except Exception as exc:  # noqa: BLE001 - never break the handoff
                     logger.warning("complaint_create_failed", sender=masked, error=str(exc))
 
-                # One empathetic acknowledgement (deterministic, no compensation
-                # promise), only when we're actually allowed to reply.
+                # Reply eligibility is decided BEFORE we pause, so we can pause the
+                # automation and THEN send exactly one acknowledgement (spec order:
+                # create case → pause → commit → acknowledge).
                 can_reply = (live and mode != "paused"
                              and convo.get("status") != "human_takeover")
-                if can_reply:
+                if category == "refund":
+                    # A refund must NEVER be handled by the AI. Durably hand the
+                    # conversation to Operations (status=human_takeover) so every
+                    # LATER message is held for a human until an authorised release
+                    # — not just this turn. Then send the ONE approved refund notice
+                    # (never approves/promises/quotes a refund).
+                    logger.info("refund_intent_detected", sender=masked,
+                                order=order_ref, has_order_ref=has_order_ref)
+                    await conversations_repo.start_human_takeover(convo["id"], operator_name=None)
+                    logger.info("refund_human_intervention_created", sender=masked,
+                                order=order_ref, reason="REFUND_REQUEST")
+                    if can_reply:
+                        try:
+                            await EvolutionWhatsAppChannel.from_settings().send_text(
+                                to_phone=sender, text=_REFUND_ACK_TEXT)
+                            await messages_repo.add_message(
+                                convo["id"], "agent", _REFUND_ACK_TEXT, status="sent",
+                                metadata={"kind": "refund_ack",
+                                          "idempotency_key": f"{convo['id']}:refund:notice"})
+                            logger.info("refund_notice_sent", sender=masked)
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning("refund_ack_failed", sender=masked, error=str(exc))
+                elif can_reply:
+                    # Other complaints: one empathetic acknowledgement (no
+                    # compensation promise). These are NOT durably paused here.
                     ack = complaints.empathetic_ack(
                         complaints.classify_category(text, category),
                         has_order_ref=has_order_ref, has_photo=False)
@@ -759,15 +913,32 @@ async def receive_evolution_webhook(request: Request):
         # (the legacy per-message behaviour).
         if settings.whatsapp_message_aggregation_enabled:
             buf = get_turn_buffer()
+            # ADAPTIVE debounce: classify THIS fragment locally (no LLM call) and
+            # pick the inactivity wait — a complete message / structured action is
+            # processed quickly; a short fragment waits longer to be combined.
+            label = message_completeness.classify(
+                text, selection_id=msg.get("selection_id"),
+                has_location=(msg.get("latitude") is not None))
+            debounce_s = message_completeness.debounce_seconds(
+                label,
+                short_s=settings.debounce_short_seconds,
+                standard_s=settings.debounce_standard_seconds,
+                fragment_s=settings.debounce_fragment_seconds)
+            logger.info("message_completeness_classified", conversation=convo["id"],
+                        classification=label.value)
+            logger.info("adaptive_debounce_selected", conversation=convo["id"],
+                        classification=label.value, debounce_ms=int(debounce_s * 1000))
             turn = await buf.add_fragment(
                 convo["id"], customer.get("id"),
-                message_id=(inbound_msg or {}).get("id"), message_at=_utcnow())
+                message_id=(inbound_msg or {}).get("id"), message_at=_utcnow(),
+                debounce_seconds=debounce_s)
 
             async def _processor(cid, combined, turn_row, *, _c=convo, _cust=customer,
                                  _phone=msg["phone"], _masked=masked, _live=live,
                                  _last=inbound_msg):
                 await _process_reply(_c, _cust, combined, phone=_phone, masked=_masked,
-                                     live=_live, last_inbound_msg=_last)
+                                     live=_live, last_inbound_msg=_last,
+                                     turn_id=(turn_row or {}).get("turn_id"))
                 return None
 
             # A bare interactive selection or an explicit "that's all" is a complete

@@ -448,6 +448,30 @@ def _pricing_updates(raw_lines: list[dict], category_code: str | None,
     }
 
 
+def pricing_updates_for_row(row: dict, *, discount_requested: bool | None = None) -> dict | None:
+    """Re-price an order ROW from its stored ``line_items`` and return the
+    order-row pricing PATCH, so a change to ``discount_requested`` (or a re-quote)
+    is persisted as the new FINAL total — never leaving a stale pre-discount
+    amount on the draft. Returns None when there are no priced lines to re-quote.
+
+    ``discount_requested`` defaults to the row's own sticky flag; pass True to
+    force the requested tier (e.g. right after detecting a discount request).
+    Deterministic + idempotent: the same row + flag always yields the same PATCH,
+    so re-quoting on a duplicate/retry never stacks the discount (spec §9)."""
+    lines = row.get("line_items") or []
+    raw = [
+        {"item_code": ln.get("item_code"), "quantity": ln.get("quantity"),
+         "measure": ln.get("measure")}
+        for ln in lines if ln.get("item_code")
+    ]
+    if not raw:
+        return None
+    requested = row.get("discount_requested") if discount_requested is None else discount_requested
+    return _pricing_updates(
+        raw, row.get("catalogue_category_code"), row.get("catalogue_category_name"),
+        discount_requested=bool(requested))
+
+
 def _quote_for(booking: "Booking", price_overrides: dict[str, float] | None = None):
     return pricing.calculate_estimate(
         _raw_lines(booking),
@@ -732,9 +756,17 @@ _DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m", "%d-%m",
                  "%d %B", "%d %b", "%B %d", "%b %d", "%d %B %Y", "%d %b %Y")
 
 
-def parse_pickup_date(inbound: Inbound, today: _dt.date) -> tuple[_dt.date | None, str]:
+def parse_pickup_date(inbound: Inbound, today: _dt.date,
+                      *, now: _dt.datetime | None = None,
+                      market: str | None = None) -> tuple[_dt.date | None, str]:
     """Return (date, reason). reason: 'ok' | 'other' | 'past' | 'invalid'.
-    'other' means the customer asked to type a custom date."""
+    'other' means the customer asked to type a custom date.
+
+    Natural temporal phrases ("now", "asap", "today", "tomorrow morning",
+    "day after tomorrow", "in two hours", a named weekday, "yesterday") are
+    resolved by the deterministic backend resolver (services.pickup_datetime)
+    against the market-local ``now`` — never the LLM's clock. Explicit calendar
+    dates still flow through the strict format parser below."""
     sel = inbound.selection_id or ""
     if sel == "date:today":
         return today, "ok"
@@ -752,6 +784,22 @@ def parse_pickup_date(inbound: Inbound, today: _dt.date) -> tuple[_dt.date | Non
         return today + _dt.timedelta(days=1), "ok"
     if text == "3":                               # "3" = numbered-fallback "Choose another date"
         return None, "other"
+
+    # Natural relative phrases (now/asap/yesterday/weekday/day-after/relative time).
+    from services import clock as _clock
+    from services import pickup_datetime as _pdt
+    _now = now or _clock.combine(today, _dt.time(12, 0), market)
+    intent = _pdt.resolve(inbound.text or "", now=_now, market=market, existing_date=None)
+    if not intent.valid and intent.reason_code == _pdt.REASON_PAST_DATE_INVALID:
+        return None, "past"           # "yesterday" → politely rejected upstream
+    if intent.resolved_date is not None and intent.intent_type in (
+        _pdt.INTENT_IMMEDIATE, _pdt.INTENT_EARLIEST, _pdt.INTENT_FLEXIBLE_SAME_DAY,
+        _pdt.INTENT_DATE_ONLY, _pdt.INTENT_DAYPART, _pdt.INTENT_TIME_RANGE,
+        _pdt.INTENT_RELATIVE_TIME,
+    ):
+        if intent.resolved_date < today:
+            return None, "past"
+        return intent.resolved_date, "ok"
 
     raw = re.sub(r"(\d+)(st|nd|rd|th)\b", r"\1", inbound.text.strip(), flags=re.IGNORECASE)
     for fmt in _DATE_FORMATS:
@@ -786,6 +834,13 @@ def resolve_slot(inbound: Inbound, slots: list[dict]) -> tuple[dict | None, str]
         idx = int(text) - 1
         if 0 <= idx < len(slots):
             return slots[idx], "ok"
+    # Also accept an exact slot_id or (case-insensitive) label — the Claude tool
+    # passes the chosen window this way, and it only ever matches an OFFERED slot.
+    if text in by_id:
+        return by_id[text], "ok"
+    for s in slots:
+        if text.lower() == str(s.get("label", "")).strip().lower():
+            return s, "ok"
     return None, "invalid"
 
 

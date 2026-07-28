@@ -43,12 +43,16 @@ async def append_or_open(
     conversation_id: str, customer_id: str | None, *,
     message_id: str | None, message_at: datetime,
     deadline_at: datetime, first_deadline_at: datetime,
+    max_seconds: float | None = None,
 ) -> tuple[dict, bool]:
     """Add a fragment to the open turn, or open a new one. Returns (turn, opened).
 
-    ``deadline_at`` is the debounce deadline for THIS fragment (last + debounce,
-    capped at first + max); ``first_deadline_at`` is the hard cap used only when
-    opening a new turn. Links ``message_id`` to the turn (messages.turn_id).
+    ``deadline_at`` is the (adaptive) debounce deadline for THIS fragment
+    (last + debounce); ``first_deadline_at`` is the hard cap used when opening a
+    new turn. When ``max_seconds`` is given, an APPEND caps the new deadline at
+    ``first_message_at + max_seconds`` so the maximum aggregation window from the
+    FIRST fragment is preserved and continuous slow fragments can't postpone
+    processing indefinitely. Links ``message_id`` to the turn (messages.turn_id).
     """
     existing = await get_open_turn(conversation_id)
     if existing is not None:
@@ -56,11 +60,12 @@ async def append_or_open(
             "update conversation_turns set "
             "  status = 'aggregating', "
             "  last_message_at = $2, "
-            "  aggregation_deadline_at = $3, "
+            "  aggregation_deadline_at = case when $4::double precision is null then $3 "
+            "     else least($3, first_message_at + make_interval(secs => $4::double precision)) end, "
             "  message_count = message_count + 1, "
             "  updated_at = now() "
             "where id = $1 returning *",
-            existing["id"], message_at, deadline_at,
+            existing["id"], message_at, deadline_at, max_seconds,
         )
         if message_id:
             await link_message(message_id, row["turn_id"])

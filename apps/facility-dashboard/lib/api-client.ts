@@ -108,18 +108,21 @@ function normalizeOrder(raw: AnyRec): FacilityOrderDetail {
   const o = raw as Record<string, unknown> & {
     order_id?: string;
     id?: string;
-    items?: Array<{ name?: string; quantity?: number; measure?: string | null; note?: string | null }>;
+    items?: Array<{ name?: string; quantity?: unknown; measure?: unknown; note?: string | null }>;
     timeline?: FacilityOrderEvent[];
     events?: FacilityOrderEvent[];
     related_issues?: FacilityIssue[];
     issues?: FacilityIssue[];
     notes?: FacilityNote[];
   };
+  // Line items come straight from a Supabase order snapshot, so field shapes are
+  // untrusted: `measure` is usually a number (sqm/kg), `quantity` may be a float.
+  // Keep raw values here (no coercion) and let the render layer format defensively.
   const items = Array.isArray(o.items) ? o.items : [];
   const lineItems: FacilityLineItem[] = items.map((it) => ({
-    name: it?.name,
-    quantity: it?.quantity,
-    pricing_unit: it?.measure ?? undefined,
+    name: typeof it?.name === "string" ? it.name : undefined,
+    quantity: typeof it?.quantity === "number" ? it.quantity : undefined,
+    pricing_unit: (it?.measure ?? null) as string | number | null,
     note: it?.note ?? null,
   }));
   const orderId = (o.order_id ?? o.id) as string;
@@ -185,7 +188,9 @@ export interface FacilityOverview {
 export interface FacilityLineItem {
   name?: string;
   quantity?: number;
-  pricing_unit?: string;
+  /** Unit label ("kg") OR a numeric measure (30 sqm) from the order snapshot —
+   *  the value is not guaranteed to be a string. Render via `formatPricingUnit`. */
+  pricing_unit?: string | number | null;
   note?: string | null;
   [key: string]: unknown;
 }

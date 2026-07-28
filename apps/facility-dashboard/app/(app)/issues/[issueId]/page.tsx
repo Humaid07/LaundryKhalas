@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Send, CheckCircle2, Package } from "lucide-react";
 import { facilityApi } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/formatters";
-import { issueStatusTone, issueStatusLabel } from "@/lib/status";
+import { issueStatusTone, issueStatusLabel, statusToken } from "@/lib/status";
 import { DetailPageShell } from "@/components/minimal/DetailPageShell";
 import { DetailSectionCard, Field, FieldGrid } from "@/components/minimal/DetailSectionCard";
 import { StatusBadge } from "@/components/ui/primitives";
@@ -51,7 +51,7 @@ export default function IssueDetailPage({ params }: { params: Promise<{ issueId:
   }
 
   const iss = issue.data;
-  const resolved = (iss.status ?? "").toLowerCase() === "resolved";
+  const resolved = statusToken(iss.status) === "resolved";
   const thread = messages.data ?? [];
 
   return (

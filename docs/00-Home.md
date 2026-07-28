@@ -22,6 +22,70 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — Service persistence & unsupported-service handling (2026-07-28)
+
+[[2026-07-28-service-persistence-unsupported-service-fix]] —
+`build-reports/2026-07-28-service-persistence-unsupported-service-fix.md` — **fixes the agent
+re-asking "which service" after pickup scheduling, mishandling "haircut", and duplicate replies.**
+New authoritative `services/service_resolution.py` classifier (exact/alias/ambiguous/bespoke/
+**unsupported**/none) wired into the Claude `save_service_selection` tool: an unsupported non-laundry
+request (haircut) now politely declines, **preserves an in-progress booking**, and returns to the real
+next field instead of re-asking the service; a saved service is never re-requested or erased by a
+null/empty value; bespoke ("embroidered wedding dress") routes to the photo/quote flow. System prompt
+made state-authoritative (ask only `missing_fields`). Outbound **idempotency key** (`sha1(turn_id|state|body)`
+in `messages.metadata` + `messages_repo.agent_reply_key_seen`) in `_deliver` prevents duplicate replies
+per logical turn. 25 new tests + 190 booking/webhook regressions pass, ruff clean. No migration.
+
+## Latest — Timezone-aware pickup scheduling (2026-07-28)
+
+[[2026-07-28-pickup-scheduling-timezone-lead-time]] —
+`build-reports/2026-07-28-pickup-scheduling-timezone-lead-time.md` — **fixes "pickup now"
+re-asking the day and showing already-passed time slots.** The backend is now the authority
+for the current date/time (market timezone via `services/clock.py` + `ZoneInfo`/`tzdata`),
+relative-date resolution (`services/pickup_datetime.py`: now/today/tonight/after 6/in two
+hours/tomorrow morning/yesterday → date+intent+reason codes), and pickup availability
+(`services/pickup_availability.py`: drops passed / lead-time-violating windows using a
+configurable `PICKUP_MINIMUM_LEAD_TIME_MINUTES=60`, returns earliest-bookable + next-available
+date). Claude's context now carries `current_local_datetime`/`timezone`/lead-time; new
+`resolve_pickup_datetime_intent` tool; `get_available_pickup_slots` returns only eligible
+windows; `save_pickup_time` persists absolute window bounds; the FSM `parse_pickup_date`
+resolves "now"→today and "yesterday"→past. 31 new tests + 158 booking regressions pass, ruff
+clean, end-to-end verified. Provenance columns + driver-ETA data model honestly deferred
+(needs a migration; behavior is correct without them).
+
+## Latest — Carpet/measured-estimate discount fix (2026-07-28)
+
+[[2026-07-28-carpet-discount-pricing-fix]] —
+`build-reports/2026-07-28-carpet-discount-pricing-fix.md` — **fixes the AED 600 carpet
+discount scenario**: a customer asked for a discount on a 30 sqm carpet (AED 600) and the
+agent kept 600 and deferred the discount. Root cause was the **pricing engine** gating the
+discount off for *measured estimates* (`total_is_known` was tied to `is_final`, which is
+False for a per-sqm estimate) — so the 20%-over-200 rule was never evaluated. Fix:
+a measured estimate has a *known* amount (rate×sqm) → the discount now applies (still
+labelled ESTIMATED); added the authoritative `calculate_applicable_order_discount` tool,
+re-price-on-request persistence, a calm non-defensive price-objection prompt, and the
+`Original estimate / Special 20% discount: -AED 120 / Revised estimated price: AED 480`
+summary (no VAT). Result: 20% → −120 → **AED 480** persisted across draft, order, and
+dashboard read model. 138 tests pass, ruff clean, verified live end-to-end vs Supabase.
+Real Stripe + an explicit pricing-audit table are honestly deferred (Stripe isn't
+integrated; payable field is 480); no CRM/HubSpot added.
+
+## Latest — Facility auto-assign on the Claude confirm path (2026-07-28)
+
+[[2026-07-28-claude-path-facility-auto-assign]] —
+`build-reports/2026-07-28-claude-path-facility-auto-assign.md` — **fixes a live-test
+bug where confirmed orders reached the internal dashboard but never the facility
+dashboard**. The natural-language (Claude) `confirm_order` tool confirmed orders but
+skipped the first-confirm side effects (facility auto-assign + notify, campaign
+attribution, CRM recompute) that lived only in the deterministic FSM branch — and
+since Claude orchestration is the DEFAULT path, no live-booked order auto-reached a
+facility. Extracted those effects into one shared, idempotent, never-raises helper
+`services/order_confirmation.apply_post_confirmation_effects` and called it from BOTH
+paths. 33 tests pass (+1 regression), ruff clean, verified live end-to-end against
+Supabase (`facility_assigned` event + `facility_id` set via the Claude executor). Also
+fixed migration drift found during the same session (`conversation_turns` missing from
+dev Supabase → every inbound 500'd "agent cold"; applied migrations `000013`/`000012`).
+
 ## Latest — Facility Notifications & Drivers (2026-07-27)
 
 [[2026-07-27-facility-notifications-and-drivers]] —
@@ -174,6 +238,19 @@ Agent Fleet. Architecture: [[seo-agent-system]] · dashboard contract:
 [[seo-agent-dashboard-contract]] · test script: [[seo-agent-test-script]].
 
 ## Latest Build Report
+
+[[2026-07-28-facility-order-detail-crash-fix]] —
+`build-reports/2026-07-28-facility-order-detail-crash-fix.md` — **Fixed a Facility Dashboard
+order-detail crash** (`li.pricing_unit.toLowerCase is not a function` on
+`/orders/LK-2026-000005`). Root cause: the backend line-item `measure` field is numeric
+(sqm/kg), but the frontend aliased it to `pricing_unit` and called `.toLowerCase()` on it.
+Added defensive `formatPricingUnit`/`formatQuantity` formatters, hardened every `.toLowerCase()`
+status helper to accept `unknown` (`statusToken`), and made the backend
+`_item_breakdown` DTO type-coerce (`{name:str, quantity:float|None, measure:float|None}`).
+24 backend tests pass (+4); frontend typecheck/lint/build clean; Playwright-verified the page
+now renders "Carpet — Regular ×1 · 30" with no crash.
+
+## Earlier Build Report
 
 [[2026-07-26-natural-language-orchestration-and-final-pricing]] —
 `build-reports/2026-07-26-natural-language-orchestration-and-final-pricing.md` — **Fixed the

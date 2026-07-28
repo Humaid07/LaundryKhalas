@@ -29,11 +29,12 @@
     }
   },
   "include": [
-    "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
-    ".next-verify/types/**/*.ts"
+    "next-env.d.ts",
+    ".next-verify-fix/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

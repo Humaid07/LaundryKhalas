@@ -1,0 +1,69 @@
+{
+  "_meta": {
+    "description": "Term lists + thresholds for the deterministic abuse/threat classifier (services/abuse_classification.py). Backend is authoritative; Claude may only PROPOSE a classification. Tuned to distinguish genuine abuse/threats from ordinary dissatisfaction so unhappy-but-civil customers are NOT sent to human takeover.",
+    "notes": "Word lists are matched on word boundaries, lower-cased, with light leet/spacing normalisation. Keep this list conservative — false positives wrongly pause the AI.",
+    "version": 1
+  },
+  "thresholds": {
+    "repeated_abuse_min_events": 2,
+    "severe_hostility_min_events": 3,
+    "general_profanity_intervention_after_events": 3
+  },
+  "second_person_markers": [
+    "you", "your", "youre", "you're", "yourself", "ur", "u r", "you people",
+    "you guys", "you lot", "you all", "yall", "y'all"
+  ],
+  "staff_target_terms": {
+    "AI_AGENT": ["bot", "robot", "chatbot", "agent", "assistant", "ai"],
+    "HUMAN_STAFF": ["staff", "team", "people", "employee", "employees", "guys",
+                    "manager", "operator", "customer service", "support", "reps", "rep"],
+    "DRIVER": ["driver", "rider", "delivery guy", "pickup guy", "courier"],
+    "FACILITY": ["facility", "shop", "store", "office", "warehouse", "branch", "laundry"]
+  },
+  "profanity": [
+    "fuck", "fucking", "fucked", "fucker", "motherfucker", "mf", "stfu", "gtfo",
+    "shit", "shitty", "bullshit", "bs", "crap", "damn", "goddamn", "bloody hell",
+    "piss", "pissed", "arse", "ass", "asshole", "arsehole", "bastard", "bitch",
+    "dick", "prick", "wanker", "bollocks", "wtf", "af"
+  ],
+  "insult_nouns": [
+    "idiot", "idiots", "moron", "morons", "imbecile", "dumbass", "jackass",
+    "clown", "clowns", "loser", "losers", "fool", "fools", "buffoon",
+    "incompetent", "useless", "worthless", "pathetic", "joke", "scum", "scumbag",
+    "trash", "garbage", "rubbish", "disgrace", "coward", "liar", "liars",
+    "dumb", "stupid", "brainless", "braindead", "retard", "retarded"
+  ],
+  "slurs": [
+    "retard", "retards", "retarded", "spastic", "spastics"
+  ],
+  "sexual_harassment": [
+    "send nudes", "nudes", "sexy", "horny", "sleep with me", "hook up",
+    "your body", "kiss me", "make love", "sexual", "boobs", "dick pic"
+  ],
+  "threat_verbs": [
+    "kill", "murder", "hurt", "harm", "beat", "beat up", "stab", "shoot",
+    "attack", "destroy", "burn", "smash", "break your", "slap", "punch",
+    "strangle", "bury", "ruin you", "hunt you", "hunt down", "make you pay",
+    "teach you a lesson", "show you", "come after", "get you", "end you"
+  ],
+  "threat_presence_phrases": [
+    "i will come", "i'll come", "im coming", "i'm coming", "coming to your",
+    "come to your", "come there", "come to the", "be there", "find you",
+    "find your", "wait outside", "at your office", "at your shop", "outside your"
+  ],
+  "imminent_threat_phrases": [
+    "i will come", "i'll come", "im coming there", "i'm coming there",
+    "coming to your office", "come there and", "be there in", "outside your office",
+    "i will kill", "i'll kill", "i will hurt", "i'll hurt", "i will beat",
+    "i'll beat", "i will stab", "i will shoot", "i will burn"
+  ],
+  "dissatisfaction_terms": [
+    "expensive", "costly", "overpriced", "pricey", "too much", "rip off", "ripoff",
+    "slow", "late", "delay", "delayed", "too long", "taking forever", "forever",
+    "terrible", "awful", "horrible", "worst", "poor service", "bad service",
+    "disappointed", "disappointing", "unhappy", "not happy", "fed up", "frustrated",
+    "frustrating", "annoyed", "annoying", "unacceptable", "ridiculous",
+    "waste of time", "no one replied", "nobody replied", "nobody has helped",
+    "no response", "still waiting", "where is my order"
+  ]
+}

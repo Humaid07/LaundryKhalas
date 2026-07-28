@@ -39,20 +39,39 @@ def _first_name(name: str | None) -> str:
     return str(name).strip().split()[0]
 
 
+def _num(value) -> float | None:
+    """Coerce an untrusted snapshot value to a float, or None. Snapshots can hold
+    strings, Decimals, or junk; the facility DTO must only ever ship a clean
+    number|null so the frontend never receives an object where it expects a
+    scalar (``measure`` is a numeric sqm/kg measure, not a unit label)."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def _item_breakdown(row: dict) -> list[dict]:
-    """Operational item list: name + quantity only (no pricing leakage rules
-    needed, but we keep it minimal). Falls back to the legacy ``items`` array."""
+    """Operational item list — a clean, PII-safe DTO per line item:
+    ``{name: str, quantity: float|None, measure: float|None}``. ``measure`` is a
+    numeric sqm/kg measure (never a text unit). Falls back to the legacy
+    ``items`` array. All fields are type-coerced so the API never emits a
+    non-scalar the dashboard would choke on."""
     out: list[dict] = []
     line_items = row.get("line_items") or []
     if isinstance(line_items, list) and line_items:
         for li in line_items:
             if not isinstance(li, dict):
-                out.append({"name": str(li), "quantity": None})
+                out.append({"name": str(li), "quantity": None, "measure": None})
                 continue
+            name = li.get("name") or li.get("canonical_name") or li.get("item_code") or "Item"
             out.append({
-                "name": li.get("name") or li.get("canonical_name") or li.get("item_code") or "Item",
-                "quantity": li.get("quantity"),
-                "measure": li.get("measure"),
+                "name": str(name),
+                "quantity": _num(li.get("quantity")),
+                "measure": _num(li.get("measure")),
             })
         return out
     items = row.get("items") or []
@@ -60,10 +79,10 @@ def _item_breakdown(row: dict) -> list[dict]:
         items = [items]
     for it in items:
         if isinstance(it, dict):
-            out.append({"name": it.get("item") or it.get("name") or "Item",
-                        "quantity": it.get("quantity")})
+            name = it.get("item") or it.get("name") or "Item"
+            out.append({"name": str(name), "quantity": _num(it.get("quantity")), "measure": None})
         else:
-            out.append({"name": str(it), "quantity": None})
+            out.append({"name": str(it), "quantity": None, "measure": None})
     return out
 
 

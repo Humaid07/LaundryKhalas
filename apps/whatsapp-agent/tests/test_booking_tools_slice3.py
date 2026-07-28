@@ -61,7 +61,10 @@ async def test_get_available_pickup_slots_uses_draft_date():
     _, _, execute = _ctx()
     data, err = await _call(execute, "get_available_pickup_slots")
     assert not err
-    assert data["slots"] == ["9am – 12pm", "2pm – 5pm"]
+    # Rich, backend-authoritative output: timezone + current datetime + filtered windows.
+    assert data["timezone"] == "Asia/Dubai"
+    assert "current_local_datetime" in data and "minimum_lead_time_minutes" in data
+    assert [s["label"] for s in data["available_slots"]] == ["9am – 12pm", "2pm – 5pm"]
 
 
 async def test_get_available_pickup_slots_falls_back_on_unparseable_date():
@@ -69,7 +72,7 @@ async def test_get_available_pickup_slots_falls_back_on_unparseable_date():
     _, _, execute = _ctx()
     data, err = await _call(execute, "get_available_pickup_slots", {"date_text": "whenever"})
     assert not err
-    assert data["slots"] == ["9am – 12pm", "2pm – 5pm"]
+    assert [s["label"] for s in data["available_slots"]] == ["9am – 12pm", "2pm – 5pm"]
 
 
 async def test_get_customer_record_is_pii_safe():

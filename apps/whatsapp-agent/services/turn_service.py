@@ -81,18 +81,28 @@ class TurnBuffer:
         return message_at + timedelta(seconds=self.max)
 
     async def add_fragment(self, conversation_id: str, customer_id: str | None, *,
-                           message_id: str | None, message_at: datetime) -> dict:
+                           message_id: str | None, message_at: datetime,
+                           debounce_seconds: float | None = None) -> dict:
         """Append a fragment to (or open) the conversation's turn. Returns the
         turn row. Different conversations use INDEPENDENT turns/timers/locks, so
-        two customers never share a buffer (spec §17)."""
+        two customers never share a buffer (spec §17).
+
+        ``debounce_seconds`` is the ADAPTIVE per-fragment inactivity wait chosen by
+        the caller from the message-completeness classifier (falls back to the
+        buffer default). The turn's deadline is always capped at first_message_at +
+        ``self.max`` so continuous slow fragments can't postpone processing past
+        the hard aggregation window."""
+        from datetime import timedelta
+        debounce = self.debounce if debounce_seconds is None else max(0.0, float(debounce_seconds))
         # Serialize ingestion per conversation so two fragments racing in
         # separate webhook calls can't each open a duplicate turn (spec §17).
         async with self._lock(conversation_id):
             turn, opened = await self.repo.append_or_open(
                 conversation_id, customer_id,
                 message_id=message_id, message_at=message_at,
-                deadline_at=self.deadline_for(message_at),
+                deadline_at=message_at + timedelta(seconds=debounce),
                 first_deadline_at=self.hard_cap_for(message_at),
+                max_seconds=self.max,
             )
         logger.info("customer_turn_buffered" if not opened else "customer_turn_created",
                     conversation=conversation_id, turn=turn.get("turn_id"),

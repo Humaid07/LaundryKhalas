@@ -1,8 +1,28 @@
 /** Maps backend status strings to UI tones + friendly labels. Everything is
- *  defensive: unknown values fall back to a neutral chip and a title-cased label. */
+ *  defensive: values arrive from Supabase/API and are treated as `unknown`, so a
+ *  number/object/null never reaches a String method — it falls back to a neutral
+ *  chip and a title-cased (or em-dash) label instead of crashing the page. */
 import type { Tone } from "./types";
 
-function titleCase(s: string): string {
+/** Coerce any untrusted backend value to a lowercased token ("" when unusable).
+ *  Non-strings (object/array/null/undefined) yield "" so lookups miss cleanly;
+ *  finite numbers stringify. This is the single guard in front of every
+ *  `.toLowerCase()` in this module. */
+function norm(value: unknown): string {
+  if (typeof value === "string") return value.trim().toLowerCase();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
+}
+
+/** Safe lowercased token for equality checks / Set lookups against untrusted
+ *  backend status values (never throws on a number/object/null). */
+export function statusToken(value: unknown): string {
+  return norm(value);
+}
+
+function titleCase(value: unknown): string {
+  const s = typeof value === "string" ? value : norm(value);
+  if (!s) return "—";
   return s
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase())
@@ -31,17 +51,13 @@ const ORDER_TONE: Record<string, Tone> = {
   needs_attention: "danger",
 };
 
-export function orderStatusTone(status: string | null | undefined): Tone {
-  if (!status) return "neutral";
-  return ORDER_TONE[status.toLowerCase()] ?? "neutral";
+export function orderStatusTone(status: unknown): Tone {
+  return ORDER_TONE[norm(status)] ?? "neutral";
 }
 
-export function orderStatusLabel(
-  status: string | null | undefined,
-  fallbackLabel?: string | null,
-): string {
-  if (fallbackLabel) return fallbackLabel;
-  if (!status) return "—";
+export function orderStatusLabel(status: unknown, fallbackLabel?: string | null): string {
+  if (typeof fallbackLabel === "string" && fallbackLabel.trim()) return fallbackLabel;
+  if (!norm(status)) return "—";
   return titleCase(status);
 }
 
@@ -51,13 +67,12 @@ const SLA_TONE: Record<string, Tone> = {
   overdue: "danger",
 };
 
-export function slaTone(sla: string | null | undefined): Tone {
-  if (!sla) return "neutral";
-  return SLA_TONE[sla.toLowerCase()] ?? "neutral";
+export function slaTone(sla: unknown): Tone {
+  return SLA_TONE[norm(sla)] ?? "neutral";
 }
 
-export function slaLabel(sla: string | null | undefined): string {
-  if (!sla) return "—";
+export function slaLabel(sla: unknown): string {
+  if (!norm(sla)) return "—";
   return titleCase(sla);
 }
 
@@ -70,13 +85,12 @@ const ISSUE_TONE: Record<string, Tone> = {
   closed: "neutral",
 };
 
-export function issueStatusTone(status: string | null | undefined): Tone {
-  if (!status) return "neutral";
-  return ISSUE_TONE[status.toLowerCase()] ?? "neutral";
+export function issueStatusTone(status: unknown): Tone {
+  return ISSUE_TONE[norm(status)] ?? "neutral";
 }
 
-export function issueStatusLabel(status: string | null | undefined): string {
-  if (!status) return "—";
+export function issueStatusLabel(status: unknown): string {
+  if (!norm(status)) return "—";
   return titleCase(status);
 }
 
@@ -87,14 +101,13 @@ const OPERATING_TONE: Record<string, Tone> = {
   closed: "neutral",
 };
 
-export function operatingTone(status: string | null | undefined): Tone {
-  if (!status) return "neutral";
-  return OPERATING_TONE[status.toLowerCase()] ?? "neutral";
+export function operatingTone(status: unknown): Tone {
+  return OPERATING_TONE[norm(status)] ?? "neutral";
 }
 
-export function operatingLabel(status: string | null | undefined): string {
-  if (!status) return "Unknown";
-  const s = status.toLowerCase();
+export function operatingLabel(status: unknown): string {
+  const s = norm(status);
+  if (!s) return "Unknown";
   if (s === "accepting" || s === "open") return "Accepting orders";
   if (s === "paused") return "Paused";
   if (s === "closed") return "Closed";
@@ -115,9 +128,8 @@ const DRIVER_TONE: Record<string, Tone> = {
 };
 
 /** Tone for a driver's effective/raw status (free/on_job/on_break/offline/issue). */
-export function driverStatusTone(status: string | null | undefined): Tone {
-  if (!status) return "neutral";
-  return DRIVER_TONE[status.toLowerCase()] ?? "neutral";
+export function driverStatusTone(status: unknown): Tone {
+  return DRIVER_TONE[norm(status)] ?? "neutral";
 }
 
 const DRIVER_STATUS_LABELS: Record<string, string> = {
@@ -129,9 +141,10 @@ const DRIVER_STATUS_LABELS: Record<string, string> = {
   issue: "Issue",
 };
 
-export function driverStatusLabel(status: string | null | undefined): string {
-  if (!status) return "—";
-  return DRIVER_STATUS_LABELS[status.toLowerCase()] ?? titleCase(status);
+export function driverStatusLabel(status: unknown): string {
+  const s = norm(status);
+  if (!s) return "—";
+  return DRIVER_STATUS_LABELS[s] ?? titleCase(status);
 }
 
 const TASK_TONE: Record<string, Tone> = {
@@ -141,9 +154,8 @@ const TASK_TONE: Record<string, Tone> = {
   return: "warning",
 };
 
-export function taskTypeTone(task: string | null | undefined): Tone {
-  if (!task) return "neutral";
-  return TASK_TONE[task.toLowerCase()] ?? "neutral";
+export function taskTypeTone(task: unknown): Tone {
+  return TASK_TONE[norm(task)] ?? "neutral";
 }
 
 const TASK_LABELS: Record<string, string> = {
@@ -153,9 +165,10 @@ const TASK_LABELS: Record<string, string> = {
   return: "Return",
 };
 
-export function taskTypeLabel(task: string | null | undefined): string {
-  if (!task) return "—";
-  return TASK_LABELS[task.toLowerCase()] ?? titleCase(task);
+export function taskTypeLabel(task: unknown): string {
+  const s = norm(task);
+  if (!s) return "—";
+  return TASK_LABELS[s] ?? titleCase(task);
 }
 
 const ASSIGNMENT_TONE: Record<string, Tone> = {
@@ -166,13 +179,12 @@ const ASSIGNMENT_TONE: Record<string, Tone> = {
   issue: "danger",
 };
 
-export function assignmentStatusTone(status: string | null | undefined): Tone {
-  if (!status) return "neutral";
-  return ASSIGNMENT_TONE[status.toLowerCase()] ?? "neutral";
+export function assignmentStatusTone(status: unknown): Tone {
+  return ASSIGNMENT_TONE[norm(status)] ?? "neutral";
 }
 
-export function assignmentStatusLabel(status: string | null | undefined): string {
-  if (!status) return "—";
+export function assignmentStatusLabel(status: unknown): string {
+  if (!norm(status)) return "—";
   return titleCase(status);
 }
 
@@ -183,9 +195,10 @@ const DRIVER_ROLE_LABELS: Record<string, string> = {
   pickup_partner: "Pickup Partner",
 };
 
-export function driverRoleLabel(role: string | null | undefined): string {
-  if (!role) return "Driver";
-  return DRIVER_ROLE_LABELS[role.toLowerCase()] ?? titleCase(role);
+export function driverRoleLabel(role: unknown): string {
+  const s = norm(role);
+  if (!s) return "Driver";
+  return DRIVER_ROLE_LABELS[s] ?? titleCase(role);
 }
 
 /** Human labels for the status action verbs the backend accepts on an order. */
@@ -198,6 +211,7 @@ export const ACTION_LABELS: Record<string, string> = {
   confirm_handoff: "Confirm Handoff",
 };
 
-export function actionLabel(action: string): string {
-  return ACTION_LABELS[action] ?? titleCase(action);
+export function actionLabel(action: unknown): string {
+  const s = norm(action);
+  return ACTION_LABELS[s] ?? titleCase(action);
 }

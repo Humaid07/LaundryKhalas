@@ -101,6 +101,33 @@ class Settings(BaseSettings):
     # Claude is never the source of truth for business data.
     anthropic_booking_orchestration: bool = True
 
+    # --- Pickup scheduling (timezone-aware, backend-authoritative) -----------
+    # The business timezone used for ALL customer-facing scheduling (current
+    # date/time, relative-date resolution, slot filtering). Gulf markets have no
+    # DST so this is stable, but it is resolved via ZoneInfo (tzdata) so a future
+    # DST market is handled correctly. NEVER use the server's UTC clock for
+    # customer scheduling. Per-market overrides live in MARKET_TIMEZONES
+    # (services/clock.py); this is the default.
+    business_timezone: str = "Asia/Dubai"
+
+    # Minimum operational lead time (minutes) between "now" and the START of a
+    # bookable pickup window. The earliest bookable time = now + this. A window
+    # that starts sooner is filtered out (unless allow-active-slot booking is
+    # explicitly enabled, which it is not by default). Single source of truth —
+    # never hardcode this in the availability/booking code.
+    pickup_minimum_lead_time_minutes: int = 60
+
+    # When true, a customer may still book a window that has already STARTED as
+    # long as its start still satisfies the lead time (it never will once started,
+    # so this effectively allows booking inside an active window ignoring lead
+    # time). Off by default: we only offer windows that start >= now + lead.
+    pickup_allow_active_slot_booking: bool = False
+
+    # Test/dev ONLY: freeze the scheduling clock to this ISO-8601 instant so
+    # slot-filtering and relative-date resolution are deterministic. Empty in
+    # production (real market-local time is used). Example: "2026-07-28T13:03:00+04:00".
+    mock_now_iso: str = ""
+
     # Humanized typing indicator (frontend uses these to hold a "typing..."
     # bubble for a natural amount of time before showing the reply). The
     # backend only surfaces the values via /api/settings/status - it does
@@ -182,11 +209,57 @@ class Settings(BaseSettings):
     # inactivity window, then makes ONE Anthropic call and sends ONE reply.
     whatsapp_message_aggregation_enabled: bool = True
     # Wait ~this many seconds of inactivity after the LATEST fragment before
-    # processing (the debounce window). Each new fragment resets it.
+    # processing (the debounce window). Each new fragment resets it. NOTE: this is
+    # now only the FALLBACK/legacy window — the ACTIVE per-fragment wait is chosen
+    # ADAPTIVELY from the message-completeness classifier (the *_MS knobs below).
     whatsapp_message_debounce_seconds: float = 5.0
     # Never wait longer than this from the FIRST fragment of a turn — a hard cap
-    # so a customer who keeps typing still gets a timely reply.
+    # so a customer who keeps typing still gets a timely reply. Superseded by
+    # WHATSAPP_MAX_AGGREGATION_MS when set (see max_aggregation_seconds).
     whatsapp_message_max_aggregation_seconds: float = 15.0
+
+    # --- ADAPTIVE per-conversation debounce (response-timing spec) -----------
+    # One fixed window makes complete messages feel slow AND can still split
+    # fragments. The wait is now chosen from a fast, LOCAL completeness classifier
+    # (services/message_completeness) per fragment. All durations live HERE (never
+    # hardcoded across files) and are tuned through real testing. Milliseconds.
+    #   short    -> structured selections / explicit confirm-cancel (~300-700ms)
+    #   standard -> a clearly complete natural-language message (~800-1500ms)
+    #   fragment -> a short/incomplete-looking fragment likely followed by more (~2500-4000ms)
+    #   max      -> hard cap from the FIRST fragment; process even if fragments continue (~7-10s)
+    whatsapp_debounce_short_ms: int = 500
+    whatsapp_debounce_standard_ms: int = 1000
+    whatsapp_debounce_fragment_ms: int = 3000
+    whatsapp_max_aggregation_ms: int = 8000
+    # A composing/typing presence indicator during a legitimately slow turn
+    # (default off — only enabled where Evolution + the connected provider render
+    # it reliably). Never a filler text message.
+    whatsapp_typing_indicator_enabled: bool = False
+    # A turn slower than this is logged (slow_response_detected) + marked for
+    # review; it never triggers a second/duplicate reply.
+    whatsapp_slow_response_threshold_ms: int = 8000
+    # Overall per-turn response budget (used by timeout handling).
+    whatsapp_response_timeout_ms: int = 30000
+
+    @property
+    def debounce_short_seconds(self) -> float:
+        return max(0.0, self.whatsapp_debounce_short_ms / 1000.0)
+
+    @property
+    def debounce_standard_seconds(self) -> float:
+        return max(0.0, self.whatsapp_debounce_standard_ms / 1000.0)
+
+    @property
+    def debounce_fragment_seconds(self) -> float:
+        return max(0.0, self.whatsapp_debounce_fragment_ms / 1000.0)
+
+    @property
+    def max_aggregation_seconds(self) -> float:
+        """Hard cap from the first fragment (seconds). Prefers the *_MS knob; falls
+        back to the legacy whatsapp_message_max_aggregation_seconds."""
+        if self.whatsapp_max_aggregation_ms:
+            return max(0.5, self.whatsapp_max_aggregation_ms / 1000.0)
+        return float(self.whatsapp_message_max_aggregation_seconds)
 
     # --- Auth / RBAC ---
     # When true, every dashboard /api/* endpoint requires a valid JWT + role.

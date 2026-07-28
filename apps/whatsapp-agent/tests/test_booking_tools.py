@@ -9,6 +9,7 @@ import json
 
 import pytest
 
+from agents.whatsapp_agent import booking_tools
 from agents.whatsapp_agent.booking_tools import (
     BookingContext,
     make_booking_executor,
@@ -16,6 +17,24 @@ from agents.whatsapp_agent.booking_tools import (
 )
 from services import booking_flow as bf
 from services import catalogue, order_store
+
+
+@pytest.fixture(autouse=True)
+def spy_post_confirm(monkeypatch):
+    """Keep these tests offline AND observable: replace the first-confirm
+    side-effects helper (facility assign / notify / campaign / CRM — all hit the
+    real DB) with an in-memory spy. Returns the list of (order_row, customer_id)
+    it was called with, so a test can assert the Claude confirm path wires it."""
+    calls: list[tuple[dict, object]] = []
+
+    async def _spy(order_row, customer_id):
+        calls.append((order_row, customer_id))
+        return None
+
+    monkeypatch.setattr(
+        booking_tools.order_confirmation, "apply_post_confirmation_effects", _spy
+    )
+    return calls
 
 
 # --- Fake persistence adapter (mirrors orders_repo's surface) ---------------
@@ -129,6 +148,78 @@ async def test_full_booking_via_write_tools_then_idempotent_confirm():
     assert data["created_now"] is False
     assert repo.confirm_calls == 1
     assert repo.row["status"] == order_store.PICKUP_SCHEDULED
+
+
+async def test_calculate_applicable_order_discount_tool_carpet_600():
+    """The authoritative discount tool: for a 30 sqm carpet estimate (AED 600)
+    with a discount request it returns the 20% tier (AED 120 off → AED 480),
+    labels it ESTIMATED, and PERSISTS AED 480 as the draft's final total."""
+    repo = FakeOrdersRepo("conv-disc")
+    repo.row.update({
+        "line_items": [{"item_code": "HOME_CARE_CARPET_REGULAR_SQM", "quantity": 1,
+                        "measure": 30, "line_kind": "estimate"}],
+        "catalogue_category_code": "HOME_CARE", "catalogue_category_name": "Home & Care",
+        "discount_requested": False, "estimated_total": 600.0, "amount": 600.0,
+    })
+    execute = make_booking_executor(_ctx(repo))
+
+    data, err = await _call(execute, "calculate_applicable_order_discount")
+    assert err is False
+    assert data["eligible"] is True
+    assert data["applied_discount_rule_code"] == "ORDER_OVER_200_DISCOUNT_REQUESTED"
+    assert data["applied_percentage"] == 20.0
+    assert data["pre_discount_total"] == 600.0
+    assert data["discount_amount"] == 120.0
+    assert data["final_total"] == 480.0
+    assert data["currency"] == "AED"
+    assert data["pricing_status"] == "ESTIMATED"
+    assert "480" in data["customer_safe_summary"] and "600" in data["customer_safe_summary"]
+
+    # PERSISTED: the draft now stores AED 480 as the final total (not 600).
+    assert repo.row["discount_requested"] is True
+    assert repo.row["estimated_total"] == 480.0
+    assert repo.row["amount"] == 480.0
+    assert repo.row["discount_amount"] == 120.0
+
+    # Idempotent: calling again does not stack — still 480.
+    data2, _ = await _call(execute, "calculate_applicable_order_discount")
+    assert data2["final_total"] == 480.0 and repo.row["estimated_total"] == 480.0
+
+
+async def test_claude_confirm_triggers_post_confirmation_effects(spy_post_confirm):
+    """The Claude `confirm_order` tool must run the SAME first-confirm side
+    effects (facility auto-assign + notify, campaign attribution, CRM recompute)
+    as the deterministic FSM path — once, on first confirm only. Regression for
+    orders confirmed via natural language never reaching a facility."""
+    category, item = _pick_category_and_item()
+    if not category:
+        pytest.skip("no unambiguous category/item pair in the catalogue")
+    repo = FakeOrdersRepo("conv-eff")
+    ctx = BookingContext(
+        conversation_id=repo.conversation_id, order_uuid=repo.row["id"], repo=repo,
+        today=_dt.date(2026, 7, 25), available_slots=_slots,
+        customer={"id": "cust-uuid-9"},
+    )
+    execute = make_booking_executor(ctx)
+
+    await _call(execute, "save_customer_name", name="Sara Ahmed")
+    await _call(execute, "save_service_selection", service=category["name"])
+    await _call(execute, "save_order_item", item=item["canonical_name"], quantity=3)
+    await _call(execute, "save_pickup_date", date_text="tomorrow")
+    await _call(execute, "save_pickup_time", slot="1")
+    await _call(execute, "save_pickup_address", address="Villa 12, Dubai Marina")
+
+    data, err = await _call(execute, "confirm_order")
+    assert err is False and data["created_now"] is True
+    # Ran exactly once, with the confirmed order row + the customer id.
+    assert len(spy_post_confirm) == 1
+    order_row, customer_id = spy_post_confirm[0]
+    assert order_row["order_id"] == "LK-2026-000999"
+    assert customer_id == "cust-uuid-9"
+
+    # Duplicate confirm (idempotent) must NOT re-run the side effects.
+    await _call(execute, "confirm_order")
+    assert len(spy_post_confirm) == 1
 
 
 async def test_confirm_rejected_when_fields_missing():

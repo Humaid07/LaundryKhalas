@@ -64,6 +64,21 @@ async def wa_message_seen(wa_message_id: str | None) -> bool:
     ))
 
 
+async def agent_reply_key_seen(conversation_id: str, idem_key: str | None) -> bool:
+    """True if an agent reply carrying this idempotency key was already stored for
+    the conversation. The OUTBOUND dedupe guard: the same logical reply for the
+    same turn is never sent twice (webhook redelivery, restart re-drive, provider
+    timeout/retry, tool-loop continuation). Complements wa_message_seen (inbound)
+    and the turn claim (single-processing)."""
+    if not idem_key:
+        return False
+    return bool(await database.fetchval(
+        "select 1 from messages where conversation_id = $1 and sender_type = 'agent' "
+        "and metadata->>'idem_key' = $2 limit 1",
+        conversation_id, idem_key,
+    ))
+
+
 async def has_agent_reply(conversation_id: str) -> bool:
     """True if the agent has already sent at least one message in this
     conversation — used to enforce 'welcome only once' so the auto-reply never

@@ -148,6 +148,56 @@ def test_editing_quantity_recalculates_eligibility():
     assert above.customer_total == round(109.0 * 0.85, 2)   # 92.65
 
 
+_CARPET = "HOME_CARE_CARPET_REGULAR_SQM"   # PER_SQM @ AED 20/sqm (measured estimate)
+
+
+@pytest.mark.parametrize("sqm, requested, applied, pct, amount, final", [
+    (30, True,  True,  20.0, 120.0, 480.0),   # 600 + request -> 20% -> 480 (the reported bug)
+    (25, True,  True,  20.0, 100.0, 400.0),   # 500 + request -> 20% -> 400
+    (10, True,  True,  15.0, 30.0,  170.0),   # 200 + request -> 15% (not >200) -> 170
+    (5,  True,  False, None, 0.0,   100.0),   # 100 + request -> none
+    (30, False, True,  15.0, 90.0,  510.0),   # 600, no request -> 15% -> 510
+])
+def test_measured_carpet_estimate_gets_discount(sqm, requested, applied, pct, amount, final):
+    # A per-sqm carpet with a supplied measurement is a KNOWN (if estimated) total,
+    # so it qualifies for the order discount — the bug was treating it as unknown.
+    q = pricing.calculate_estimate([{"item_code": _CARPET, "quantity": 1, "measure": sqm}],
+                                   discount_requested=requested)
+    assert q.is_estimated is True                    # still labelled an estimate
+    assert q.discount_applied is applied
+    assert q.discount_amount == amount
+    assert q.customer_total == final
+    if applied:
+        assert q.discount_percentage == pct
+
+
+def test_carpet_600_discount_request_matches_spec_scenario():
+    q = pricing.calculate_estimate([{"item_code": _CARPET, "quantity": 1, "measure": 30}],
+                                   discount_requested=True)
+    assert q.eligible_subtotal == 600.0
+    assert q.discount_rule_code == "ORDER_OVER_200_DISCOUNT_REQUESTED"   # == spec DISCOUNT_REQUEST_OVER_200
+    assert q.discount_percentage == 20.0
+    assert q.discount_amount == 120.0
+    assert q.customer_total == 480.0
+    summary = pricing.format_quote_summary(q)
+    assert "Original estimate: AED 600" in summary
+    assert "Special 20% discount: -AED 120" in summary
+    assert "Revised estimated price: AED 480" in summary
+    assert "AED 600" in summary and "Revised estimated price: AED 480" in summary
+    for banned in ("VAT", "vat", "tax", "Final price — AED 600"):
+        assert banned not in summary
+
+
+def test_measured_carpet_discount_is_idempotent():
+    # Recomputing the same measured estimate never stacks / changes the result.
+    a = pricing.calculate_estimate([{"item_code": _CARPET, "quantity": 1, "measure": 30}],
+                                   discount_requested=True)
+    b = pricing.calculate_estimate([{"item_code": _CARPET, "quantity": 1, "measure": 30}],
+                                   discount_requested=True)
+    assert a.customer_total == b.customer_total == 480.0
+    assert a.discount_amount == b.discount_amount == 120.0
+
+
 def test_starting_price_order_has_no_guaranteed_discount():
     # 2 pairs of sneakers 'from 50' = pending -> exact total unknown -> no
     # guaranteed discount even though 2×50 would exceed 100 (spec §8).
@@ -166,10 +216,11 @@ def test_summary_shows_discount_block_and_no_vat():
         {"item_code": "CLEAN_PRESS_HAND_TOWEL", "quantity": 1},
     ])
     summary = pricing.format_quote_summary(q)
-    assert "Subtotal — AED 104" in summary
-    assert "Automatic 15% discount — AED 15.60 off" in summary
-    assert "Final price — AED 88.40" in summary
-    for banned in ("VAT", "vat", "tax", "excl", "incl"):
+    # Exact (non-estimate) order → "Original price / Special X% discount / Revised price".
+    assert "Original price: AED 104" in summary
+    assert "Special 15% discount: -AED 15.60" in summary
+    assert "Revised price: AED 88.40" in summary
+    for banned in ("VAT", "vat", "tax", "excl", "incl", "Subtotal"):
         assert banned not in summary
 
 

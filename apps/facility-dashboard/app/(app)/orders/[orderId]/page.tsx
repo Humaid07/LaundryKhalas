@@ -24,7 +24,7 @@ import {
 } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { canManageFacility } from "@/lib/roles";
-import { formatDateTime, formatMoney } from "@/lib/formatters";
+import { formatDateTime, formatMoney, formatPricingUnit, formatQuantity } from "@/lib/formatters";
 import {
   orderStatusLabel,
   orderStatusTone,
@@ -34,6 +34,7 @@ import {
   taskTypeLabel,
   assignmentStatusLabel,
   assignmentStatusTone,
+  statusToken,
 } from "@/lib/status";
 import { DetailPageShell, DetailColumns } from "@/components/minimal/DetailPageShell";
 import { DetailSectionCard, Field, FieldGrid } from "@/components/minimal/DetailSectionCard";
@@ -120,11 +121,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const order: FacilityOrderDetail = data;
   const displayId = order.order_id ?? order.id;
   const service = order.service_display_name ?? order.service ?? "Order";
+  const statusKey = statusToken(order.status);
   const actions =
     order.available_actions && order.available_actions.length > 0
       ? order.available_actions
-      : order.status && NEXT_ACTION[order.status.toLowerCase()]
-        ? [NEXT_ACTION[order.status.toLowerCase()]]
+      : statusKey && NEXT_ACTION[statusKey]
+        ? [NEXT_ACTION[statusKey]]
         : [];
   const primaryAction = actions[0];
   const secondaryActions = actions.slice(1);
@@ -193,18 +195,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
             {order.line_items && order.line_items.length > 0 && (
               <DetailSectionCard title="Items" icon={ClipboardList}>
                 <ul className="divide-y divide-border/60">
-                  {order.line_items.map((li, i) => (
-                    <li key={i} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-ink">{li.name ?? "Item"}</p>
-                        {li.note && <p className="truncate text-xxs text-ink-muted">{li.note}</p>}
-                      </div>
-                      <span className="shrink-0 font-mono text-sm text-ink-muted tnum">
-                        ×{li.quantity ?? 1}
-                        {li.pricing_unit ? ` ${li.pricing_unit.toLowerCase()}` : ""}
-                      </span>
-                    </li>
-                  ))}
+                  {order.line_items.map((li, i) => {
+                    const pricingUnit = formatPricingUnit(li.pricing_unit);
+                    return (
+                      <li key={i} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-ink">{li.name ?? "Item"}</p>
+                          {li.note && <p className="truncate text-xxs text-ink-muted">{li.note}</p>}
+                        </div>
+                        <span className="shrink-0 font-mono text-sm text-ink-muted tnum">
+                          ×{formatQuantity(li.quantity)}
+                          {pricingUnit ? ` · ${pricingUnit}` : ""}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </DetailSectionCard>
             )}

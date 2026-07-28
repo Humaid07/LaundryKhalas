@@ -67,3 +67,28 @@ export function formatDate(iso: string | null | undefined): string {
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
+
+/**
+ * Safely format a line-item's pricing unit / measure for display.
+ *
+ * Line items come from Supabase order snapshots, so this value is genuinely
+ * `unknown` at runtime: it may be a string unit ("kg"), a numeric measure
+ * (30 sqm), null/undefined, or a malformed object in older snapshots. Calling
+ * `.toLowerCase()` on a non-string crashed the order detail page — so everything
+ * routes through here. Returns "" for anything we can't render, so callers can
+ * hide the separator instead of showing junk.
+ */
+export function formatPricingUnit(value: unknown): string {
+  if (typeof value === "string") return value.trim().toLowerCase();
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+  if (typeof value === "object") return "";
+  return String(value).toLowerCase();
+}
+
+/** Safe quantity for display: numeric → its value, else 1. Never renders an object. */
+export function formatQuantity(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "string" && value.trim() !== "") return value.trim();
+  return "1";
+}

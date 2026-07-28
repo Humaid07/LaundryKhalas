@@ -20,6 +20,7 @@ import {
 } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { canManageFacility } from "@/lib/roles";
+import { statusToken } from "@/lib/status";
 import { DetailPageShell, DetailColumns } from "@/components/minimal/DetailPageShell";
 import { DetailSectionCard } from "@/components/minimal/DetailSectionCard";
 import { StatusBadge } from "@/components/ui/primitives";
@@ -74,7 +75,7 @@ export default function DriverDetailPage({ params }: { params: Promise<{ driverI
   const currentAssignment = useMemo(
     () =>
       data?.current_assignment ??
-      assignments.find((a) => ACTIVE_STATUSES.has((a.status ?? "").toLowerCase())) ??
+      assignments.find((a) => ACTIVE_STATUSES.has(statusToken(a.status))) ??
       null,
     [data, assignments],
   );

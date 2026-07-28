@@ -33,12 +33,16 @@ class FakeRepo:
              "latitude": latitude, "longitude": longitude}})
 
     async def append_or_open(self, convo, cust, *, message_id, message_at,
-                             deadline_at, first_deadline_at):
+                             deadline_at, first_deadline_at, max_seconds=None):
         t = self._open_for(convo)
         if t is not None:
             t["message_count"] += 1
             t["last_message_at"] = message_at
-            t["aggregation_deadline_at"] = deadline_at
+            dl = deadline_at
+            if max_seconds is not None:  # preserve the max window from the FIRST fragment
+                cap = t["first_message_at"] + timedelta(seconds=max_seconds)
+                dl = min(deadline_at, cap)
+            t["aggregation_deadline_at"] = dl
             t["status"] = "aggregating"
             return t, False
         self._seq += 1
@@ -209,6 +213,42 @@ async def test_recover_processes_pending_turns():
     assert n == 1
     assert len(proc.calls) == 1 and proc.calls[0][1] == "left mid-flight"
     assert repo.turns["pk1"]["status"] == "completed"
+
+
+# --- Adaptive per-fragment debounce + max-window preservation ---------------
+@pytest.mark.asyncio
+async def test_adaptive_debounce_sets_short_deadline_for_complete_message():
+    repo = FakeRepo()
+    buf = _buffer(repo)   # now_fn=T0
+    # A complete message uses a SHORT wait -> deadline is T0 + 0.5s, not T0 + 5s.
+    t = await buf.add_fragment("c1", "cust1", message_id="m1", message_at=T0,
+                               debounce_seconds=0.5)
+    assert t["aggregation_deadline_at"] == T0 + timedelta(seconds=0.5)
+
+
+@pytest.mark.asyncio
+async def test_adaptive_debounce_fragment_waits_longer_than_complete():
+    repo = FakeRepo()
+    buf = _buffer(repo)
+    complete = await buf.add_fragment("cA", "x", message_id="a1", message_at=T0,
+                                      debounce_seconds=0.5)
+    fragment = await buf.add_fragment("cB", "y", message_id="b1", message_at=T0,
+                                      debounce_seconds=3.0)
+    assert complete["aggregation_deadline_at"] < fragment["aggregation_deadline_at"]
+
+
+@pytest.mark.asyncio
+async def test_max_aggregation_window_preserved_across_slow_fragments():
+    repo = FakeRepo()
+    # max window = 4s from the first fragment; each fragment asks for a 3s wait.
+    buf = TurnBuffer(repo, debounce_seconds=3, max_seconds=4, now_fn=lambda: T0)
+    t = await buf.add_fragment("c1", "cust1", message_id="m1", message_at=T0,
+                               debounce_seconds=3.0)
+    # a slow fragment at T0+3 would push the naive deadline to T0+6, but the hard
+    # cap (first + 4s) wins -> processing can't be postponed indefinitely.
+    t = await buf.add_fragment("c1", "cust1", message_id="m2",
+                               message_at=T0 + timedelta(seconds=3), debounce_seconds=3.0)
+    assert t["aggregation_deadline_at"] == T0 + timedelta(seconds=4)
 
 
 # --- Debounce timer actually fires a single flush (real asyncio) ------------

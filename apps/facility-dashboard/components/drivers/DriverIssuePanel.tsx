@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import type { DriverAssignment } from "@/lib/api-client";
+import { statusToken } from "@/lib/status";
 import { DriverAssignmentCard } from "./DriverAssignmentCard";
 
 /**
@@ -8,7 +9,7 @@ import { DriverAssignmentCard } from "./DriverAssignmentCard";
  */
 export function DriverIssuePanel({ assignments }: { assignments: DriverAssignment[] }) {
   const flagged = (assignments ?? []).filter(
-    (a) => (a.status ?? "").toLowerCase() === "issue",
+    (a) => statusToken(a.status) === "issue",
   );
 
   if (flagged.length === 0) {

@@ -239,17 +239,23 @@ def calculate_estimate(order_items: list[dict],
             quote.has_measured_estimate = True
 
     eligible_subtotal = money.round_money(customer_total)
-    # Not final if anything can't be firmly totalled yet.
-    quote.is_final = not (
-        quote.has_pending_inspection
-        or quote.has_measured_estimate
-        or any(ln.line_kind == "pending" for ln in quote.lines)
-    )
-    # Automatic order-level discount (spec §§5-9 + precedence). Only applied when
-    # the exact eligible total is KNOWN (no 'from'/inspection/measured line);
-    # computed deterministically so recomputation never stacks it (spec §9). The
-    # discount_requested flag gates the 20%-over-200 tier.
-    disc = discount.evaluate(eligible_subtotal, total_is_known=quote.is_final,
+    has_pending = quote.has_pending_inspection or any(
+        ln.line_kind == "pending" for ln in quote.lines)
+    # LABEL: an order is "final" only when every line is a firm exact total. A
+    # measured estimate (per-sqm/per-kg with a supplied measurement) is still an
+    # ESTIMATE for labelling — the final quantity is confirmed at pickup.
+    quote.is_final = not (has_pending or quote.has_measured_estimate)
+    # DISCOUNT ELIGIBILITY (spec §§5-9 + precedence). The exact total is KNOWN
+    # whenever there is no 'from'/inspection ('pending') line and the subtotal is
+    # positive — INCLUDING a measured estimate, whose amount is firmly derived
+    # from the supplied measurement (rate × sqm/kg). Only a genuinely-unknown
+    # 'from'/inspection total is excluded from a guaranteed discount (spec §8).
+    # So a 30 sqm carpet at AED 600 with a discount request DOES get the 20%
+    # tier; the result is simply labelled ESTIMATED and recalculated if the
+    # confirmed measurement changes. Computed deterministically so recomputation
+    # never stacks the discount (spec §9); discount_requested gates the 20% tier.
+    total_is_known = (not has_pending) and eligible_subtotal > money.round_money(0)
+    disc = discount.evaluate(eligible_subtotal, total_is_known=total_is_known,
                              discount_requested=discount_requested)
     quote.discount_requested = discount_requested
     quote.eligible_subtotal = float(eligible_subtotal)
@@ -313,12 +319,15 @@ def format_quote_summary(quote: Quote) -> str:
     body = "\n".join(lines)
     label = "Estimated price" if quote.is_estimated else "Final price"
     if quote.discount_applied and quote.discount_amount > 0:
-        # Show the benefit of the automatic discount (spec §10). No VAT line.
-        pct = money.format_money(quote.discount_percentage)
-        body += f"\nSubtotal — AED {money.format_money(quote.eligible_subtotal)}"
-        body += (f"\nAutomatic {pct}% discount — AED "
-                 f"{money.format_money(quote.discount_amount)} off")
-        body += f"\n{label} — AED {money.format_money(quote.estimated_total_including_vat)}"
+        # Show the applied discount clearly: pre-discount estimate, the discount
+        # off, then the revised amount the customer actually pays (spec §10). The
+        # pre-discount figure is labelled "Original …", never the payable amount.
+        # No VAT line anywhere (spec §4).
+        revised_label = "Revised estimated price" if quote.is_estimated else "Revised price"
+        pct = _fmt_qty(quote.discount_percentage)
+        body += f"\nOriginal {'estimate' if quote.is_estimated else 'price'}: AED {money.format_money(quote.eligible_subtotal)}"
+        body += f"\nSpecial {pct}% discount: -AED {money.format_money(quote.discount_amount)}"
+        body += f"\n{revised_label}: AED {money.format_money(quote.estimated_total_including_vat)}"
     elif quote.estimated_total_including_vat > 0:
         body += f"\n{label} — AED {money.format_money(quote.estimated_total_including_vat)}"
     if quote.has_pending_inspection or any(ln.line_kind == "pending" for ln in quote.lines):

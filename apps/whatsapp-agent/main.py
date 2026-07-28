@@ -16,6 +16,7 @@ from api import (
     facility,
     flags,
     health,
+    human_intervention,
     internal_facility_issues,
     internal_metrics,
     orders,
@@ -118,6 +119,8 @@ app.include_router(facility.router, dependencies=[Depends(deps.require_facility_
 # Internal ops view of facility-raised issues (operations + admin).
 app.include_router(internal_facility_issues.router, dependencies=_OPS)
 app.include_router(internal_metrics.router, dependencies=_OPS)
+# Operations Human-Intervention queue + takeover actions (abuse/threat).
+app.include_router(human_intervention.router, dependencies=_OPS)
 app.include_router(health.router)
 
 

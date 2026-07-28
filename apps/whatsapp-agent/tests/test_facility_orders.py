@@ -134,6 +134,61 @@ def test_facility_serializer_blank_name_is_generic_label():
     assert repo.to_facility_read(row)["customer_label"] == "Customer"
 
 
+# --------------------------- item breakdown normalization ----------------
+# Line-item snapshots are untrusted: `measure` (a numeric sqm/kg measure) has
+# been observed as a float in live orders, which crashed the dashboard when it
+# was rendered as a text unit. The DTO must always ship name:str + numeric-or-
+# None scalars so no consumer receives a non-scalar in these fields.
+def test_num_coercion_handles_all_shapes():
+    assert repo._num(30.0) == 30.0
+    assert repo._num(2) == 2.0
+    assert repo._num("15") == 15.0
+    assert repo._num(None) is None
+    assert repo._num("kg") is None       # non-numeric string → None
+    assert repo._num({"x": 1}) is None   # object → None (never leaks a dict)
+    assert repo._num([1, 2]) is None     # list → None
+    assert repo._num(True) is None       # bool is not a measure
+
+
+def test_item_breakdown_measure_is_numeric_or_none():
+    # The real LK-2026-000005 shape: measure comes through as a float.
+    row = {"line_items": [{"name": "Carpet — Regular", "quantity": 1.0, "measure": 30.0}]}
+    out = repo._item_breakdown(row)
+    assert out == [{"name": "Carpet — Regular", "quantity": 1.0, "measure": 30.0}]
+    assert isinstance(out[0]["measure"], float)
+
+
+def test_item_breakdown_normalizes_junk_measure_to_none():
+    row = {"line_items": [
+        {"name": "A", "quantity": "2", "measure": {"bad": 1}},   # object measure
+        {"name": "B", "measure": "kg"},                          # non-numeric string
+        {"item_code": "SHIRT"},                                  # name from item_code, no qty/measure
+        "loose-string-item",                                     # non-dict line item
+    ]}
+    out = repo._item_breakdown(row)
+    assert out[0] == {"name": "A", "quantity": 2.0, "measure": None}
+    assert out[1] == {"name": "B", "quantity": None, "measure": None}
+    assert out[2] == {"name": "SHIRT", "quantity": None, "measure": None}
+    assert out[3] == {"name": "loose-string-item", "quantity": None, "measure": None}
+    # Every emitted field is a scalar the dashboard can render safely.
+    for it in out:
+        assert isinstance(it["name"], str)
+        assert it["quantity"] is None or isinstance(it["quantity"], float)
+        assert it["measure"] is None or isinstance(it["measure"], float)
+
+
+def test_item_breakdown_falls_back_to_legacy_items_array():
+    row = {"items": [{"item": "Blanket", "quantity": 4}]}
+    out = repo._item_breakdown(row)
+    assert out == [{"name": "Blanket", "quantity": 4.0, "measure": None}]
+
+
+def test_item_breakdown_empty_and_missing():
+    assert repo._item_breakdown({}) == []
+    assert repo._item_breakdown({"line_items": [], "items": []}) == []
+    assert repo._item_breakdown({"line_items": None}) == []
+
+
 # --------------------------- action allow-list (13) ----------------------
 @pytest.mark.parametrize("action", ["cancel", "refund", "change_price", "complete",
                                     "mark_completed", "mark_delivered", "reassign"])
