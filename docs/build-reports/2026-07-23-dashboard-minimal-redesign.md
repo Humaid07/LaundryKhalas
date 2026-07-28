@@ -1,7 +1,7 @@
 # Build Report — Dashboard Minimal Redesign
 
 **Date:** 2026-07-23
-**Branch:** orders-vertical-slice
+**Branch:** main (work originally on `orders-vertical-slice`; consolidated into main 2026-07-28)
 **Related:** [[minimal-dashboard-design-system]]
 
 ## 1. Task objective

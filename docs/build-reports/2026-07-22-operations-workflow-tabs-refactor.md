@@ -1,7 +1,7 @@
 # Build Report — Operations Workflow Tabs Refactor
 
 **Date:** 2026-07-22
-**Branch:** `seo-agent-foundation`
+**Branch:** main (work originally on `seo-agent-foundation`; consolidated into main 2026-07-28)
 **Area:** Admin dashboard → Operations
 
 ## 1. Task objective

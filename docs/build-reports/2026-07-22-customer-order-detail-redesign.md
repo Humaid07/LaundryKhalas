@@ -1,7 +1,7 @@
 # Build Report — Customer Order Detail Redesign (drawer → full page)
 
 **Date:** 2026-07-22
-**Branch:** `seo-agent-foundation`
+**Branch:** main (work originally on `seo-agent-foundation`; consolidated into main 2026-07-28)
 **Area:** Admin dashboard · Operations · Customer Orders
 
 ## 1. Objective
