@@ -22,6 +22,16 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — Order-state trigger + RLS hardening (migration 000029, 2026-07-28)
+
+Closed the "Week 2" DB gaps: a **DB-level order-state trigger**
+(`trg_orders_status_transition` — vocabulary + terminal-immutability + no-resurrection)
+and explicit **RLS deny policies on orders/messages/customers** (mirrors users/000008;
+service role bypasses, so backend unaffected). Applied + smoke-verified on dev/test
+Supabase (legit confirm transition passes; illegal ones blocked). Re-check:
+`apps/whatsapp-agent/scripts/verify_order_state_and_rls.py`. Report:
+`build-reports/2026-07-28-order-state-trigger-and-rls.md`.
+
 ## ★ Canonical backend (read first) — 2026-07-28
 
 **The single canonical backend/runtime is `apps/whatsapp-agent/` (port 8100).** The

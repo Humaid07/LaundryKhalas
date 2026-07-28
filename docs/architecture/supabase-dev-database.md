@@ -104,6 +104,14 @@ service role (direct Postgres) which bypasses RLS. This enforces "frontend must
 go through FastAPI." Production will get a proper RLS/auth design in its own
 project — intentionally **not** built here.
 
+**Explicit deny policies** (belt-and-suspenders, `REVOKE` + `restrictive`
+`using(false)`): `users` (migration 000008) and `orders` / `messages` /
+`customers` (migration **000029**). Migration 000029 also adds the **order-state
+transition trigger** (`trg_orders_status_transition`) enforcing status vocabulary,
+terminal immutability, and no-resurrection at the DB (defence-in-depth behind the
+app guards). Verify with `apps/whatsapp-agent/scripts/verify_order_state_and_rls.py`.
+Granular per-user/market row policies remain deferred to the production project.
+
 ## What is NOT done here (deferred)
 
 - Production Supabase project, secrets, policies, deployment.
