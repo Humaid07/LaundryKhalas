@@ -1,7 +1,7 @@
 # Build Report — WhatsApp Agent Production Hardening (modes, takeover, notifications, expiry)
 
 **Date:** 2026-07-22
-**Related:** [[2026-07-22-whatsapp-booking-state-machine]] · [[2026-07-22-orders-vertical-slice]]
+**Related:** [[2026-07-22-whatsapp-booking-state-machine]]
 
 ## Audit result
 Most of the production spec was already delivered (booking FSM, idempotency, TEST allowlist, phone normalization, message persistence, Orders section + cards + detail + timeline, **Open Chat in Operations** deep-link, order-events, demo-guarding, order APIs, 268 tests). **"Laundry Coloss"** — grep found **zero** matches; the repo already uses "LaundryKhalas", nothing to rename. Genuine gaps: no TEST/LIVE/PAUSED mode with a safe default, no human-takeover gating on the reply path, no status-change customer notification, no draft-expiry, no transition validation, no RBAC.
