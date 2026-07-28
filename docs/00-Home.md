@@ -22,6 +22,19 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## ★ Canonical backend (read first) — 2026-07-28
+
+**The single canonical backend/runtime is `apps/whatsapp-agent/` (port 8100).** The
+old root `app/` prototype was archived to `legacy/root-app/`. Do not run or extend it.
+- Decision: [[ADR-canonical-backend-runtime]] (`decisions/ADR-canonical-backend-runtime.md`)
+- Audit: `audits/backend-consolidation-audit.md`
+- Structure: `architecture/repo-structure.md` · Runtime: `architecture/canonical-backend-runtime.md`
+- Build report: `build-reports/2026-07-28-backend-consolidation.md`
+
+Run: backend `cd apps/whatsapp-agent && ./.venv/Scripts/python.exe -m uvicorn main:app --host 0.0.0.0 --port 8100`;
+admin `cd apps/admin && npx next dev -p 3005`; facility `cd apps/facility-dashboard && npx next dev -p 3010`.
+DB source of truth: `supabase/migrations/`.
+
 ## Latest — Post-confirmation terminal boundary (2026-07-28)
 
 [[2026-07-28-post-confirmation-terminal-boundary]] —
