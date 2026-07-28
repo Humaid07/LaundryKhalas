@@ -11,9 +11,10 @@ models, two API surfaces, two booking flows, and two sources of truth.
 
 - `apps/admin` (internal dashboard) and `apps/facility-dashboard` (partner
   dashboard) must call **only** this backend (`http://localhost:8100`, env-controlled).
-- Root `app/` is **deprecated/reference only** and has been archived to
-  `legacy/root-app/`.
-- **No new business logic** may be added to `legacy/root-app/`.
+- Root `app/` is **deprecated** — it was archived to `legacy/root-app/` during
+  consolidation and then **removed from the tree** (2026-07-28); it is recoverable
+  from git history only.
+- **No new business logic** may reintroduce or extend the old root `app/`.
 - All future agent, booking, order, pricing, discount, facility, notification, and
   LLM work happens in `apps/whatsapp-agent/`.
 - The single database source of truth is **Supabase**, with migrations in root
@@ -46,8 +47,9 @@ npx next dev -p 3010
 
 ## Consequences
 - One runtime, one API surface, one booking/order/pricing/facility path.
-- The legacy `docker compose up` (:8000) stack is no longer at the repo root; it is
-  archived intact under `legacy/root-app/` for reference only.
+- The legacy `docker compose up` (:8000) stack is gone from the repo root; it was
+  archived under `legacy/root-app/` and then removed (2026-07-28), recoverable from
+  git history only.
 - Any legacy LangGraph orchestration is **intentionally discarded** (not migrated)
   to avoid a second live implementation; its concepts already exist in the canonical
   backend (domain guard, escalation/human-takeover, approval flow).

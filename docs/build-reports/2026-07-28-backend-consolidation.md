@@ -92,5 +92,7 @@ resolve there), but is no longer a runnable second backend at the repo root.
   runtime subset rather than a full end-to-end run in this session.
 - Root `.env.example` left in place (legacy-leaning but harmless, not runnable);
   could be pruned later.
-- **Deletion** of `legacy/root-app/` is deferred pending owner approval — archived
-  first per the task's "prefer archive over deletion" rule.
+- **Deletion** of `legacy/root-app/` was deferred pending owner approval (archived
+  first per the task's "prefer archive over deletion" rule). **Update 2026-07-28:**
+  owner approved and the archive was subsequently **removed from the tree** — the
+  legacy code lives in git history only.

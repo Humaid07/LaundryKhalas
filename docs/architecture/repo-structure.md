@@ -27,10 +27,6 @@ LaundryKhalas/
 ├── supabase/
 │   └── migrations/          # ★ SINGLE DB source of truth (000001–000028, asyncpg-applied)
 ├── docs/                    # audits, decisions (ADRs), architecture, build-reports, …
-├── legacy/
-│   └── root-app/            # ⛔ ARCHIVED legacy prototype backend — reference only
-│                            #   (old app/, alembic/, docker-compose.yml, Dockerfile,
-│                            #    pyproject.toml, scripts/) — do NOT run or edit
 ├── CLAUDE.md                # project engineering rules
 └── README.md               # points at the canonical backend
 ```
@@ -41,4 +37,5 @@ LaundryKhalas/
   dashboard never accesses Supabase directly.
 - DB changes go through `supabase/migrations/` (applied via asyncpg — no generic
   runner; apply `.sql` manually).
-- `legacy/root-app/` is frozen reference; never add logic there.
+- The old root `app/` prototype backend was consolidated away and removed
+  (2026-07-28); recover from git history if ever needed. Never reintroduce it.

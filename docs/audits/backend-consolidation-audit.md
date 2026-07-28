@@ -72,11 +72,13 @@ not migrated, because:
 - The legacy graph's *concepts* (safety filter, human approval before send) already
   exist in the canonical backend as the domain guard, escalation/human-takeover, and
   the (MVP) approval flow.
-The legacy graph remains readable in `legacy/root-app/app/agents/whatsapp_operations/graph.py`
-for reference.
+The legacy graph was archived (and later removed with the rest of `legacy/root-app/`,
+2026-07-28); it remains readable in git history at
+`legacy/root-app/app/agents/whatsapp_operations/graph.py` for reference.
 
 ## Outcome
 - Canonical runtime: **`apps/whatsapp-agent/`**.
-- Legacy stack archived to `legacy/root-app/` (see its README).
+- Legacy stack archived to `legacy/root-app/`, then **removed from the tree**
+  (2026-07-28, owner-approved) — recoverable from git history only.
 - Single DB source of truth: root `supabase/migrations/`.
 - No remaining runnable second backend; no dashboard depends on `app/`.

@@ -35,7 +35,8 @@ Supabase (legit confirm transition passes; illegal ones blocked). Re-check:
 ## ★ Canonical backend (read first) — 2026-07-28
 
 **The single canonical backend/runtime is `apps/whatsapp-agent/` (port 8100).** The
-old root `app/` prototype was archived to `legacy/root-app/`. Do not run or extend it.
+old root `app/` prototype was consolidated away and removed from the tree (2026-07-28;
+recoverable from git history). Do not reintroduce it.
 - Decision: [[ADR-canonical-backend-runtime]] (`decisions/ADR-canonical-backend-runtime.md`)
 - Audit: `audits/backend-consolidation-audit.md`
 - Structure: `architecture/repo-structure.md` · Runtime: `architecture/canonical-backend-runtime.md`

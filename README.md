@@ -12,7 +12,6 @@ internal operations dashboard, and a partner/facility dashboard.
 | `apps/facility-dashboard/` | Partner/facility dashboard (Next.js). Calls the canonical backend. Runs on **:3010**. |
 | `supabase/migrations/` | Single database source of truth (applied via asyncpg). |
 | `docs/` | Audits, decisions (ADRs), architecture, build reports, checklists. |
-| `legacy/root-app/` | ⛔ Archived legacy prototype backend (old `:8000` Docker stack). Reference only — do not run or edit. |
 
 See [`docs/architecture/repo-structure.md`](docs/architecture/repo-structure.md) and
 [`docs/decisions/ADR-canonical-backend-runtime.md`](docs/decisions/ADR-canonical-backend-runtime.md).
@@ -55,5 +54,7 @@ cd apps/whatsapp-agent
 ## Legacy
 
 The original mock-first prototype backend (FastAPI + SQLAlchemy/Alembic + Celery,
-`docker compose` on :8000) is archived under `legacy/root-app/` for reference. It is
-not part of the runtime; see its README before touching it.
+`docker compose` on :8000) was consolidated away and **removed** from the tree on
+2026-07-28. It is recoverable from git history if ever needed (see
+`docs/decisions/ADR-canonical-backend-runtime.md` and the consolidation build report).
+The canonical backend is `apps/whatsapp-agent/`.

@@ -48,6 +48,7 @@ cd apps/whatsapp-agent
   against :8100.
 
 ## Do not
-- Run or extend `legacy/root-app/` (the archived :8000 prototype).
+- Reintroduce the old root `app/` prototype (:8000) — it was consolidated away and
+  removed on 2026-07-28 (recoverable from git history).
 - Add a third backend structure.
 - Give a dashboard direct Supabase access (it must go through the backend API).
