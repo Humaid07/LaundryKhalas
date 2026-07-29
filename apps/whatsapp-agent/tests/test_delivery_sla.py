@@ -53,8 +53,8 @@ def test_bag_care_2_3_days():
     assert _hours(BAG) == (48, 72)
 
 
-def test_carpet_3_4_days():
-    assert _hours(CARPET) == (72, 96)
+def test_carpet_2_5_days():
+    assert _hours(CARPET) == (48, 120)
 
 
 def test_alterations_2_days():
@@ -117,9 +117,9 @@ def test_combined_order_uses_slowest_sla():
     t = delivery.order_turnaround([WASH_FOLD, SHOE])
     assert (t["min_hours"], t["max_hours"]) == (48, 72)
     assert t["display_text"] == "2–3 days"
-    # + carpet (3-4 days) -> 3-4 days
+    # + carpet (2-5 days) -> 2-5 days (slowest max_hours wins)
     t2 = delivery.order_turnaround([WASH_FOLD, SHOE, CARPET])
-    assert (t2["min_hours"], t2["max_hours"]) == (72, 96)
+    assert (t2["min_hours"], t2["max_hours"]) == (48, 120)
 
 
 # --- Delivery estimate off the pickup end time -------------------------------

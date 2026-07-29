@@ -31,10 +31,20 @@ def test_ambiguous_ironing_asks_for_clarification():
     assert _kind("I need ironing") is K.AMBIGUOUS
 
 
-def test_bespoke_specialty_request_routes_to_bespoke_flow():
+def test_wedding_dress_routes_to_specialist():
+    # Spec §2.8: wedding dresses are handled by a specialist (route-to-human),
+    # NOT quoted — routing wins over both the bespoke photo-flow and Clean & Press.
     res = sr.classify_service_request("Can you clean a heavily embroidered wedding dress?")
+    assert res.kind is K.ROUTE
+    assert res.routing_category == "WEDDING_DRESS"
+    assert not res.is_supported  # routed, not booked/quoted as a standard service
+
+
+def test_bespoke_specialty_marker_still_routes_to_bespoke_flow():
+    # A specialty marker with no route-to-human category → the bespoke photo-quote flow.
+    res = sr.classify_service_request("beaded custom-made gown")
     assert res.kind is K.BESPOKE
-    assert not res.is_supported  # bespoke is quoted, not booked as a standard service
+    assert not res.is_supported
 
 
 def test_restoration_category_is_not_swept_up_as_bespoke():

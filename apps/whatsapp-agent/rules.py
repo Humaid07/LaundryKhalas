@@ -47,6 +47,17 @@ def tone_rules() -> dict:
     return _load("agent_tone_rules.json")
 
 
+def persona() -> dict:
+    """Single WhatsApp agent persona (spec §1): name, reveal_ai flag, languages,
+    voice. Source of truth: config/persona.json."""
+    return _load("persona.json")
+
+
+def persona_languages() -> dict:
+    """{native: [...], best_effort: [...], fallback: '...'} language policy."""
+    return persona().get("languages", {"native": ["en"], "best_effort": [], "fallback": "en"})
+
+
 def pickup_instructions() -> list[dict]:
     """Stable [{code, label}] pickup-instruction options for the booking flow's
     instructions step. Source of truth: config/pickup_instructions.json."""

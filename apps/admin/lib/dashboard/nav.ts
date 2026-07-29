@@ -11,6 +11,7 @@ import {
   FileBarChart,
   Settings,
   ClipboardList,
+  Factory,
 } from "lucide-react";
 import { subsectionsOf } from "./sections";
 
@@ -77,6 +78,13 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/orders",
     icon: ClipboardList,
     description: "Live WhatsApp orders — cards, details & operational status",
+  },
+  {
+    label: "Facilities",
+    href: "/facilities",
+    icon: Factory,
+    description: "Partner cleaning facilities — capacity, coverage, rates & compliance",
+    children: childrenOf("facilities", "/facilities"),
   },
   {
     label: "Sales",

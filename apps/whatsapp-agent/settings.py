@@ -101,6 +101,22 @@ class Settings(BaseSettings):
     # Claude is never the source of truth for business data.
     anthropic_booking_orchestration: bool = True
 
+    # --- Discount model (founder decision 2026-07-29: NEGOTIATION-ONLY) -------
+    # The agent quotes the full website/baseline price and only discounts when the
+    # customer haggles, via services/negotiation (the ladder + facility-floor tool).
+    # The legacy AUTOMATIC order discount (15%-over-100 / 20%-over-200) is retired
+    # by default; set this True only to restore that automatic behaviour (rollback).
+    auto_order_discount_enabled: bool = False
+
+    # --- WhatsApp AI-agent personas (persistent per customer) ----------------
+    # ONE approved persona name is pinned to a customer for life (chosen once on
+    # first contact, never changed across orders/conversations/restarts). Only the
+    # displayed name differs; all behaviour/rules/tools are identical. Claude may
+    # never invent a name outside this list.
+    agent_persona_names: str = "Sara,Maya,Zoya,Hanna,Sofia,Max,Ben"
+    agent_persona_assignment_mode: str = "PERSISTENT_PER_CUSTOMER"
+    agent_persona_assignment_version: int = 1
+
     # --- Pickup scheduling (timezone-aware, backend-authoritative) -----------
     # The business timezone used for ALL customer-facing scheduling (current
     # date/time, relative-date resolution, slot filtering). Gulf markets have no

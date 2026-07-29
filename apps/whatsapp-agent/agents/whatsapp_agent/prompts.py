@@ -10,7 +10,12 @@ the area gazetteer + market/pickup notes in config/laundrykhalas_knowledge.json.
 import json
 from pathlib import Path
 
-from rules import agent_rules, service_catalog, tone_rules
+from rules import (
+    agent_rules,
+    persona_languages,
+    service_catalog,
+    tone_rules,
+)
 
 _KNOWLEDGE_PATH = Path(__file__).resolve().parents[2] / "config" / "laundrykhalas_knowledge.json"
 
@@ -29,8 +34,16 @@ def build_system_prompt() -> str:
     domain = rules["domain"]
     guidelines = "\n".join(f"- {g}" for g in tone["guidelines"])
 
+    who = (f"You are {rules['brand_name']}'s WhatsApp virtual assistant. Use the exact "
+           "persona name the backend assigns you (assistant_identity.display_name); never "
+           "select, change or invent your own name.")
+    lang = (" You are fluent in English and Arabic — reply in the customer's language "
+            "(naturally in Arabic if they write in Arabic); other languages best-effort "
+            "with a clear English fallback."
+            if "ar" in set(persona_languages().get("native", [])) else "")
+
     return (
-        f"You are the {rules['brand_name']} WhatsApp assistant. "
+        f"{who} Never reveal or imply you are an AI or automated.{lang} "
         f"{domain['description']} If the user asks anything unrelated, "
         "politely refuse and redirect them to laundry/cleaning services. "
         "Never answer unrelated questions.\n\n"

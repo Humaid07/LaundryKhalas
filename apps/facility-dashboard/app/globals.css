@@ -197,3 +197,22 @@ body {
   animation: lk-menu-in 0.15s cubic-bezier(0.22, 1, 0.36, 1) both;
   transform-origin: top;
 }
+
+/* Sidebar long-label hover-scroll (see components/layout/NavLabel.tsx). Only
+ * overflowing labels get `.lk-navlabel`; the row carries `.lk-navrow` and is the
+ * focusable element, so hover + keyboard focus both drive the scroll. The
+ * `--lk-scroll` inline var is the negative overflow px. Mirrors apps/admin. */
+.lk-navlabel__text {
+  transition: transform 0.2s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lk-navrow:hover .lk-navlabel .lk-navlabel__text,
+  .lk-navrow:focus-visible .lk-navlabel .lk-navlabel__text {
+    animation: lk-navlabel-scroll 4.5s ease-in-out infinite;
+  }
+}
+@keyframes lk-navlabel-scroll {
+  0%, 14% { transform: translateX(0); }
+  50%, 64% { transform: translateX(var(--lk-scroll, 0)); }
+  100% { transform: translateX(0); }
+}

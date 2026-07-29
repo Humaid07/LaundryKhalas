@@ -21,8 +21,10 @@ import json
 
 import structlog
 
+from agents.whatsapp_agent import facility_tools
 from agents.whatsapp_agent import tools as slot_tools
-from services import catalogue, delivery
+from db import database
+from services import catalogue, delivery, money
 
 logger = structlog.get_logger(__name__)
 
@@ -104,23 +106,41 @@ TOOL_SCHEMAS: list[dict] = [
             "additionalProperties": False,
         },
     },
+    # Grounded, read-only facility directory tools (DB is the source of truth).
+    *facility_tools.READ_TOOL_SCHEMAS,
 ]
 
 _TOOL_NAMES = {t["name"] for t in TOOL_SCHEMAS}
 
 
 # --- Individual tool implementations ---------------------------------------
-def _price_label_full(item: dict) -> dict:
-    """Structured, honest price view of a single resolved catalogue item."""
-    inspection = bool(item.get("requires_inspection"))
+def _market_label(item: dict, market: str) -> tuple[str, str, bool]:
+    """(price_label, currency, is_market_priced_but_unlisted). For a non-AE market
+    with its own price list (e.g. QA/QAR), the market's price is authoritative and an
+    item it does NOT price is inspection-only — NEVER quoted with the AE number."""
+    if not catalogue.has_market_pricing(market):
+        return catalogue.item_price_label(item), (item.get("currency") or catalogue.currency()), False
+    cur = catalogue.market_currency(market)
+    prices = catalogue.market_prices(market)
+    code = item["item_code"]
+    if code in prices:
+        return f"{cur} {money.format_money(prices[code])}", cur, False
+    return "Priced after inspection", cur, True
+
+
+def _price_label_full(item: dict, *, market: str = "AE") -> dict:
+    """Structured, honest price view of a single resolved catalogue item, in the
+    customer's market currency (spec §8)."""
+    price_label, cur, market_unlisted = _market_label(item, market)
+    inspection = bool(item.get("requires_inspection")) or market_unlisted
     starting = bool(item.get("is_starting_price"))
     measured = bool(item.get("requires_measurement"))
-    firm = not (inspection or starting or measured) and item.get("current_price") is not None
+    firm = not (inspection or starting or measured)
     guidance = (
         "price_label is the FINAL customer price — already VAT-inclusive, so NEVER "
-        "add any percentage to it. Quote it exactly as shown. NEVER mention VAT, tax, "
-        "'excluding', or 'including' to the customer. (An order over AED 100 gets 15% "
-        "off automatically at checkout — mention that only when relevant.)"
+        "add any percentage to it. Quote it exactly as shown, in the currency shown. "
+        "NEVER mention VAT, tax, 'excluding', or 'including'. Discounts come only from "
+        "negotiate_order_price when the customer haggles — never volunteer one."
         if firm
         else "This item is priced after inspection/measurement — do NOT quote an exact "
         "total; tell the customer the shown figure is a starting point and the team "
@@ -130,8 +150,8 @@ def _price_label_full(item: dict) -> dict:
         "match": "ok",
         "item_code": item["item_code"],
         "name": item["canonical_name"],
-        "price_label": catalogue.item_price_label(item),
-        "currency": item.get("currency") or catalogue.currency(),
+        "price_label": price_label,
+        "currency": cur,
         "is_firm_price": firm,
         "requires_inspection": inspection,
         "is_starting_price": starting,
@@ -140,7 +160,7 @@ def _price_label_full(item: dict) -> dict:
     }
 
 
-def _lookup_item_price(query: str) -> dict:
+def _lookup_item_price(query: str, *, market: str = "AE") -> dict:
     codes, reason = catalogue.resolve_item_alias(query)
     if reason == "none" or not codes:
         return {
@@ -155,7 +175,7 @@ def _lookup_item_price(query: str) -> dict:
             {
                 "item_code": c,
                 "name": (catalogue.item_by_code(c) or {}).get("canonical_name", c),
-                "price_label": catalogue.item_price_label(catalogue.item_by_code(c) or {}),
+                "price_label": _market_label(catalogue.item_by_code(c) or {}, market)[0],
             }
             for c in codes
         ]
@@ -167,7 +187,7 @@ def _lookup_item_price(query: str) -> dict:
     item = catalogue.item_by_code(codes[0])
     if not item:
         return {"match": "none", "guidance": "Item not found; ask the customer to clarify."}
-    return _price_label_full(item)
+    return _price_label_full(item, market=market)
 
 
 def _list_service_categories() -> dict:
@@ -228,7 +248,7 @@ def _check_service_area(area: str) -> dict:
 
 
 # --- Dispatch --------------------------------------------------------------
-async def execute_tool(name: str, tool_input: dict) -> tuple[str, bool]:
+async def execute_tool(name: str, tool_input: dict, *, market: str = "AE") -> tuple[str, bool]:
     """Validate + run one tool call. Returns (result_json, is_error).
 
     This is the ONLY bridge between the model and the deterministic engines.
@@ -244,7 +264,7 @@ async def execute_tool(name: str, tool_input: dict) -> tuple[str, bool]:
             query = str(tool_input.get("query", "")).strip()
             if not query:
                 return json.dumps({"error": "query is required."}), True
-            result = _lookup_item_price(query)
+            result = _lookup_item_price(query, market=market)
         elif name == "list_service_categories":
             result = _list_service_categories()
         elif name == "estimate_turnaround":
@@ -257,6 +277,13 @@ async def execute_tool(name: str, tool_input: dict) -> tuple[str, bool]:
             if not area:
                 return json.dumps({"error": "area is required."}), True
             result = _check_service_area(area)
+        elif name in facility_tools.READ_TOOL_NAMES:
+            # Facility directory tools require the Supabase-backed facility tables.
+            if not database.is_supabase_mode():
+                result = {"available": False,
+                          "guidance": "The facility directory is not available in this environment."}
+            else:
+                result = await facility_tools.dispatch(name, tool_input)
         else:  # pragma: no cover - guarded by _TOOL_NAMES above
             return json.dumps({"error": f"Unhandled tool '{name}'."}), True
     except Exception as exc:  # noqa: BLE001 - a tool must never crash the reply path

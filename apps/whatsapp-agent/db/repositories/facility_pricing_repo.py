@@ -74,3 +74,56 @@ async def quote_for_service(service_code: str, *, market: str | None = None,
     rule = await get_margin_rule(bespoke=bespoke, service_code=service_code) or {
         "margin_type": "percentage", "margin_value": 0}
     return facility_pricing.customer_quote(chosen, rule)
+
+
+# ---------------------------------------------------------------------------
+# Internal rate management (facility_rates) — INTERNAL/ADMIN ONLY.
+# These values are the facility's payable cost and NEVER leave the internal API
+# (excluded from every partner serializer + customer-facing output).
+# ---------------------------------------------------------------------------
+_RATE_COLS = "id, facility_id, service_code, rate, currency, active, valid_from, valid_to, updated_at"
+
+
+async def list_rates(facility_id: str) -> list[dict]:
+    rows = await database.fetch(
+        f"select {_RATE_COLS} from facility_rates where facility_id = $1 order by service_code",
+        facility_id,
+    )
+    return [
+        {
+            "id": str(r["id"]),
+            "service_code": r["service_code"],
+            "rate": float(r["rate"]) if r["rate"] is not None else None,
+            "currency": r["currency"],
+            "active": bool(r["active"]),
+            "valid_from": r["valid_from"],
+            "valid_to": r["valid_to"],
+            "updated_at": r["updated_at"],
+        }
+        for r in rows
+    ]
+
+
+async def upsert_rate(
+    facility_id: str, service_code: str, *, rate, currency: str = "AED", active: bool = True
+) -> dict | None:
+    row = await database.fetchrow(
+        f"""
+        insert into facility_rates (facility_id, service_code, rate, currency, active)
+        values ($1, $2, $3::text::numeric, $4, $5)
+        on conflict (facility_id, service_code) do update set
+            rate = excluded.rate, currency = excluded.currency,
+            active = excluded.active, updated_at = now()
+        returning {_RATE_COLS}
+        """,
+        facility_id, service_code, str(rate), currency, active,
+    )
+    return dict(row) if row else None
+
+
+async def delete_rate(facility_id: str, service_code: str) -> bool:
+    result = await database.execute(
+        "delete from facility_rates where facility_id = $1 and service_code = $2",
+        facility_id, service_code,
+    )
+    return result.upper().startswith("DELETE") and not result.endswith("0")

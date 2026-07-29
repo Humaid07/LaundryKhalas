@@ -14,9 +14,11 @@ from api import (
     deps,
     evolution_webhooks,
     facility,
+    facility_management,
     flags,
     health,
     human_intervention,
+    internal_facilities,
     internal_facility_issues,
     internal_metrics,
     orders,
@@ -116,6 +118,12 @@ app.include_router(admin_pricing.router)
 app.include_router(public_pricing.router)
 # Facility (partner) dashboard — every endpoint scoped to the caller's facility.
 app.include_router(facility.router, dependencies=[Depends(deps.require_facility_scope)])
+# Partner Facilities Management — each endpoint self-guards (scope for view/edit,
+# facility-role for self-onboarding create), so no blanket router-level guard.
+app.include_router(facility_management.router)
+# Internal Facilities Management (admin dashboard) — operations + admin; the
+# internal-rate endpoints add their own require_admin guard.
+app.include_router(internal_facilities.router, dependencies=_OPS)
 # Internal ops view of facility-raised issues (operations + admin).
 app.include_router(internal_facility_issues.router, dependencies=_OPS)
 app.include_router(internal_metrics.router, dependencies=_OPS)

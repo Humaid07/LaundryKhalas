@@ -38,13 +38,14 @@ export const ROLES: Record<UserRole, RoleDef> = {
     id: "operations",
     label: "Operations",
     description: "Day-to-day order & operations work only — no settings or admin areas.",
-    allowedPrefixes: ["/orders", "/operations"],
+    allowedPrefixes: ["/orders", "/operations", "/facilities"],
     access: [
       "Orders",
       "Operations · Customer Facing",
       "Operations · Facility Facing",
       "Operations · Drivers",
       "Operations · Customer Orders",
+      "Facilities (internal rates & quality are admin-only)",
     ],
   },
   // Facility-app roles — NO access to this internal admin dashboard. They exist

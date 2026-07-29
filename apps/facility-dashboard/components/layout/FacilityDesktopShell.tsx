@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { roleLabel } from "@/lib/roles";
 import { accentClasses, accentForHref } from "@/lib/accents";
 import { NAV_ITEMS, isActive, type NavItem } from "./nav-items";
+import { NavLabel } from "./NavLabel";
 import { useUnreadCount } from "@/lib/use-notifications";
 import { BrandWordmark } from "@/components/shell/Brand";
 
@@ -25,13 +26,13 @@ function SidebarLink({ item, badge }: { item: NavItem; badge?: number }) {
       aria-current={on ? "page" : undefined}
       title={item.label}
       className={cn(
-        "group relative grid h-11 grid-cols-[24px_1fr_auto] items-center gap-2.5 rounded-xl px-3 text-sm font-medium transition-colors duration-200",
+        "lk-navrow group relative grid h-11 grid-cols-[24px_1fr_auto] items-center gap-2.5 rounded-xl px-3 text-sm font-medium transition-colors duration-200",
         on ? cn(accent.softBg, accent.text) : cn("text-ink-muted", accent.hoverBg, "hover:text-ink"),
       )}
     >
       {on && <span className={cn("absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full", accent.rail)} />}
       <Icon className={cn("h-[18px] w-[18px] justify-self-center transition-all duration-200", accent.text, on ? "opacity-100" : "opacity-60 group-hover:opacity-100")} />
-      <span className="min-w-0 truncate">{item.label}</span>
+      <NavLabel label={item.label} />
       <span className="flex justify-end">
         {typeof badge === "number" && badge > 0 && (
           <span className={cn("grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-xxs font-bold tnum", on ? cn(accent.strongBg, accent.text) : "bg-rose text-rose-contrast")}>

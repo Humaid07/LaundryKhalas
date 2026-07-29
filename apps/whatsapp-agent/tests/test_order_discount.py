@@ -1,5 +1,11 @@
 """Automatic 15%-over-AED-100 order discount (task spec §§5-11, tests 13-30).
 
+NOTE (2026-07-29): the automatic order discount is RETIRED by default — the agent
+now quotes full price and only discounts via negotiation (services.negotiation,
+see test_negotiation.py + test_negotiate_tool.py). The automatic engine is
+preserved behind the ``auto_order_discount_enabled`` setting for rollback, and this
+suite validates that preserved path by enabling the flag for the module.
+
 Hermetic: pure Decimal engine (services.discount) + the quote engine
 (services.pricing) over the static catalogue. No DB, no network.
 """
@@ -8,6 +14,14 @@ from decimal import Decimal
 import pytest
 
 from services import discount, pricing
+
+
+@pytest.fixture(autouse=True)
+def _enable_auto_discount(monkeypatch):
+    """This suite exercises the legacy automatic-discount path (off by default)."""
+    from settings import get_settings
+    monkeypatch.setattr(get_settings(), "auto_order_discount_enabled", True, raising=False)
+    yield
 
 
 # --- Pure engine: threshold is STRICTLY greater-than (spec §5) ---------------

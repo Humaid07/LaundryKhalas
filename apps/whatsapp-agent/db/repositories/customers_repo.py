@@ -58,6 +58,30 @@ _CUSTOMER_FIELD_COLUMNS = {
 }
 
 
+async def assign_ai_persona(customer_id: str, persona_id: str, persona_name: str,
+                            version: int) -> dict | None:
+    """Pin an approved AI persona to a customer ON FIRST CONTACT only.
+
+    The UPDATE is CONDITIONAL (``where assigned_ai_persona_id is null``) so an
+    already-assigned persona is NEVER overwritten — under two simultaneous first
+    messages the first write wins and the second is a no-op; both then read the same
+    persisted persona. Returns the current customer row (assigned either way)."""
+    if not customer_id:
+        return None
+    await database.execute(
+        """
+        update customers
+           set assigned_ai_persona_id       = $2,
+               assigned_ai_persona_name      = $3,
+               ai_persona_assigned_at        = now(),
+               ai_persona_assignment_version = $4
+         where id = $1 and assigned_ai_persona_id is null
+        """,
+        customer_id, persona_id, persona_name, int(version),
+    )
+    return await database.fetchrow("select * from customers where id = $1", customer_id)
+
+
 async def update_customer_details(customer_id: str, fields: dict) -> dict | None:
     """Backfill customer-profile fields extracted from the conversation.
 

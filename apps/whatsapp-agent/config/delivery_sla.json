@@ -1,10 +1,12 @@
 {
-  "_note": "Delivery SLA / turnaround rules for Laundry Khalas (task spec §§23-25). DB-driven: scripts/seed_delivery_sla.py imports this into the `delivery_sla_rules` table (runtime source of truth); services/delivery.py reads the DB (JSON fallback) and computes each item's turnaround, Express eligibility and the order-level delivery estimate. Rules are matched most-specific-first: an item-level rule (item_codes) overrides its category default. `day_type` is CALENDAR by default (see meta.day_type) — whether 'days' means calendar or working days is a BUSINESS DECISION kept configurable here, NOT buried in the LLM prompt. Express = 12h, eligible ONLY for Wash & Fold / Clean & Press / Press Only; the Express surcharge is intentionally NULL (not invented — the business must configure express_surcharge_aed before it is charged).",
+  "_note": "Delivery SLA / turnaround rules for Laundry Khalas (task spec §§23-25). DB-driven: scripts/seed_delivery_sla.py imports this into the `delivery_sla_rules` table (runtime source of truth); services/delivery.py reads the DB (JSON fallback) and computes each item's turnaround, Express eligibility and the order-level delivery estimate. Rules are matched most-specific-first: an item-level rule (item_codes) overrides its category default. `day_type` is CALENDAR by default (see meta.day_type) — whether 'days' means calendar or working days is a BUSINESS DECISION kept configurable here, NOT buried in the LLM prompt. Express = 12h, eligible ONLY for Wash & Fold / Clean & Press / Press Only. The Express surcharge is founder-approved at +50% (express_surcharge_pct=0.5) with a 3 PM local cut-off (express_cutoff_local); a same-day request AFTER the cut-off is NOT auto-rejected — the agent checks facility capacity and, if unavailable, offers the standard 24h window (spec §2.4). The legacy fixed express_surcharge_aed stays null (the +50% percentage supersedes it).",
   "meta": {
     "timezone": "Asia/Dubai",
     "day_type": "CALENDAR",
     "express_hours": 12,
     "express_surcharge_aed": null,
+    "express_surcharge_pct": 0.5,
+    "express_cutoff_local": "15:00",
     "express_eligible_categories": ["WASH_FOLD", "CLEAN_PRESS", "PRESS_ONLY"],
     "source": "Laundry Khalas standard turnaround rules (task spec §23)",
     "verified_at": "2026-07-23"
@@ -20,7 +22,7 @@
     {"code": "SLA_ALTERATIONS", "match": {"category_code": "ALTERATIONS"}, "min_hours": 48, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "2 days"},
     {"code": "SLA_RESTORATION", "match": {"category_code": "RESTORATION"}, "min_hours": 48, "max_hours": 72, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "2–3 days"},
 
-    {"code": "SLA_CARPET", "match": {"item_codes": ["HOME_CARE_CARPET_REGULAR_SQM", "HOME_CARE_CARPET_WOOL_SQM"]}, "min_hours": 72, "max_hours": 96, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "3–4 days"},
+    {"code": "SLA_CARPET", "match": {"item_codes": ["HOME_CARE_CARPET_REGULAR_SQM", "HOME_CARE_CARPET_WOOL_SQM"]}, "min_hours": 48, "max_hours": 120, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "2–5 days"},
     {"code": "SLA_SOFA_COVER", "match": {"item_codes": ["HOME_CARE_SOFA_COVER_REGULAR", "HOME_CARE_SOFA_COVER_LARGE"]}, "min_hours": 24, "max_hours": 24, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "24 hours"},
     {"code": "SLA_DUVET_BLANKET", "match": {"item_codes": ["HOME_CARE_DUVET", "HOME_CARE_COMFORTER", "HOME_CARE_COMFORTER_COVER", "HOME_CARE_BLANKET", "HOME_CARE_BLANKET_LARGE"]}, "min_hours": 24, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "1–2 days"},
     {"code": "SLA_MASCOT", "match": {"item_codes": ["SOFT_TOY_MASCOT"]}, "min_hours": 48, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "2 days"},

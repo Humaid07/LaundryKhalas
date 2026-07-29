@@ -75,6 +75,65 @@ class BookingContext:
         return clock.combine(self.today, _dt.time(12, 0), self.market)
 
 
+def _negotiated_total(row: dict | None) -> float | None:
+    """The persisted AGREED negotiated total for an order, or None. Encoded in the
+    existing discount columns: a NEGOTIATED / NEG_FLOOR rule marks a negotiated
+    price so re-quoting reproduces it exactly instead of reverting to full price."""
+    if not row:
+        return None
+    if row.get("discount_rule_code") in ("NEGOTIATED", "NEG_FLOOR"):
+        total = row.get("estimated_total")
+        return float(total) if total is not None else None
+    return None
+
+
+async def _facility_cost_for_order(ctx: "BookingContext", row: dict, booking) -> float | None:
+    """Closest facility COST for the itemised order (founder model 2026-07-29): the
+    selected facility's active service-rate × the correct pricing unit per line,
+    summed (bespoke/inspection lines use a facility quotation). It flows ONLY into
+    the backend floor computation and is NEVER surfaced to the model/customer
+    (CLAUDE.md §7). Returns None when the cost is INCOMPLETE — no valid facility rate
+    or quotation for some line — so the caller raises a durable facility-quotation
+    request and marks the price pending rather than inventing a number. Best-effort
+    and fully guarded: any DB/offline failure also yields None (→ pending)."""
+    try:
+        from db.repositories import facility_pricing_repo
+        from services import catalogue as _cat
+        from services import facility_cost as fc
+        from services import facility_pricing
+        lines: list[dict] = []
+        service_codes: set[str] = set()
+        for li in (row.get("line_items") or []):
+            code = li.get("item_code")
+            if not code:
+                continue
+            item = _cat.item_by_code(code) or {}
+            sc = item.get("category_code")
+            if sc:
+                service_codes.add(sc)
+            lines.append({
+                "item_code": code, "service_code": sc,
+                "pricing_type": item.get("pricing_type"),
+                "quantity": li.get("quantity"), "measure": li.get("measure"),
+                "requires_inspection": item.get("requires_inspection"),
+                "is_starting_price": item.get("is_starting_price"),
+            })
+        if not lines:
+            return None
+        rates: dict[str, float] = {}
+        for sc in service_codes:
+            candidates = await facility_pricing_repo.candidates_for_service(sc, market=ctx.market)
+            chosen = facility_pricing.pick_lowest(candidates)
+            if chosen and chosen.get("rate") is not None:
+                rates[sc] = float(chosen["rate"])
+        result = fc.compute_facility_cost(lines, rates)
+        logger.info("facility_cost_computed", conversation=ctx.conversation_id, **result.to_snapshot())
+        return float(result.facility_cost) if (result.complete and result.facility_cost is not None) else None
+    except Exception as exc:  # noqa: BLE001 — no facility cost → pending, never a guess
+        logger.info("facility_cost_unavailable", conversation=ctx.conversation_id, error=str(exc))
+        return None
+
+
 # --- Structured workflow-state block (spec §7) ------------------------------
 def _booking_from_row(row: dict, ctx: BookingContext) -> bf.Booking:
     return bf.Booking(
@@ -181,17 +240,28 @@ def confirmed_state_block(row: dict) -> dict:
 
 
 def _clock_block(ctx: BookingContext) -> dict:
-    """Backend-authoritative current datetime for the model (spec §7). The LLM
-    must NEVER use its own clock to resolve now/today/tomorrow — it uses this."""
-    from services import clock
+    """Backend-authoritative context for the model (spec §7): current datetime
+    (the LLM must NEVER use its own clock to resolve now/today/tomorrow) AND the
+    customer's market/currency (spec §8), so a quote is always in the right
+    currency and an unpriced market (QAR) is routed to a human instead of guessed."""
+    from services import clock, market as market_svc
+    from services import persona_assignment
     from settings import get_settings
     now = ctx.local_now()
-    return {
+    mkt = market_svc.get_market(ctx.market)
+    # Backend-assigned persona identity (spec: loaded before every Anthropic request).
+    persona = persona_assignment.persona_from_customer(ctx.customer)
+    block = {
         "timezone": clock.timezone_name_for_market(ctx.market),
         "current_local_datetime": now.isoformat(),
         "current_local_date": now.date().isoformat(),
         "minimum_lead_time_minutes": int(get_settings().pickup_minimum_lead_time_minutes),
+        "market": mkt.code,
+        "currency": mkt.currency,
+        "pricing_configured": mkt.pricing_configured,
     }
+    block.update(persona_assignment.assistant_identity(persona))
+    return block
 
 
 # --- Tool schemas -----------------------------------------------------------
@@ -246,15 +316,25 @@ BOOKING_TOOL_SCHEMAS: list[dict] = [
     {"name": "get_order_summary",
      "description": "Return the itemised order summary with the final customer price (5% already included).",
      "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
-    {"name": "calculate_applicable_order_discount",
-     "description": "AUTHORITATIVE order-discount calculation — call this whenever the customer asks for a "
-                    "discount / a better or best price / says it's expensive / asks you to reduce it, or to "
-                    "re-state the price after such a request. The BACKEND (never you) reads this order's current "
-                    "total and decides the single applicable rule, then returns pre_discount_total, "
-                    "applied_percentage, discount_amount, final_total, currency, pricing_status and a "
-                    "customer_safe_summary. Present the returned final_total as the active amount and never "
-                    "restate the pre_discount_total as what the customer pays. Operates only on this "
-                    "conversation's own order; no inputs needed.",
+    {"name": "negotiate_order_price",
+     "description": "AUTHORITATIVE price negotiation — call this whenever the customer haggles: asks for a "
+                    "discount / a better or best price / says it's expensive / asks you to reduce it, or keeps "
+                    "pushing after a prior offer. The BACKEND (never you) decides the next move from this order's "
+                    "full baseline total and what was already offered, then returns action, offered_percentage, "
+                    "offered_price, pre_discount_total, currency, pricing_status and a customer_safe_summary. "
+                    "action is one of: 'offer' (present offered_price as the new total), 'ask_itemisation' (ask "
+                    "the customer to list every item + service so a deeper price can be checked), or 'escalate' "
+                    "(this is our best price — for anything lower, acknowledge and call request_human_support). "
+                    "Never invent a discount or a price; present exactly what the tool returns. Operates only on "
+                    "this conversation's own order; no inputs needed.",
+     "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
+    {"name": "quote_express",
+     "description": "Same-day / Express pricing for THIS order. Call when the customer asks for same-day, "
+                    "express, urgent or 'today' delivery. The BACKEND returns eligible (every item must be "
+                    "Express-eligible), surcharge_pct, express_total, requires_facility_check (true when the "
+                    "request is after the 3 PM cut-off — then say you'll confirm capacity with the facility and "
+                    "create a pending task; NEVER auto-reject a post-cut-off request) and standard fallback text. "
+                    "Present only what it returns; never invent an express price or promise a time a tool didn't give.",
      "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
     {"name": "confirm_order",
      "description": "Confirm the booking. ONLY call after the customer has explicitly confirmed AND all required "
@@ -318,6 +398,16 @@ BOOKING_TOOL_SCHEMAS: list[dict] = [
                     "offer — apply ONLY what this returns as eligible.",
      "input_schema": {"type": "object", "properties": {"offer_code": {"type": "string"}},
                       "additionalProperties": False}},
+    {"name": "route_to_specialist",
+     "description": "Hand a NON-quotable request to the specialist team (spec §2.8): villa/home/deep cleaning "
+                    "(HOME_CLEANING), wedding dresses (WEDDING_DRESS), or luxury/couture garment care "
+                    "(LUXURY_BESPOKE). Call this after save_service_selection returns route_to_specialist and you "
+                    "have collected the details. Pass category and a details string with what the customer gave. "
+                    "The backend logs a follow-up task; you then tell the customer a specialist will be in touch. "
+                    "NEVER quote a price for these yourself.",
+     "input_schema": {"type": "object",
+                      "properties": {"category": {"type": "string"}, "details": {"type": "string"}},
+                      "required": ["category"], "additionalProperties": False}},
     {"name": "request_human_support",
      "description": "Escalate this conversation to a human agent (complaints, refunds, anything unsafe or out of scope).",
      "input_schema": {"type": "object", "properties": {"reason": {"type": "string"}},
@@ -342,12 +432,43 @@ _TOOL_NAMES = {t["name"] for t in BOOKING_TOOL_SCHEMAS}
 
 
 # --- Booking orchestration system prompt (spec §8) --------------------------
+def _persona_intro() -> str:
+    """STABLE persona + language header (founder persona spec). The persona NAME is
+    NOT baked in here — it is per-customer and arrives each turn in the context as
+    assistant_identity.display_name, so this stable text (prompt-cache prefix) simply
+    instructs the model to use exactly that backend-assigned name and never invent
+    one. Language policy comes from config/persona.json."""
+    from rules import persona_languages
+    native = set(persona_languages().get("native", ["en"]))
+    lang = ""
+    if "ar" in native:
+        lang = ("Detect the customer's language and reply in it: you are fluent in English "
+                "AND Arabic, so if they write in Arabic reply naturally in Arabic (same warm, "
+                "concise persona). For other languages do your best and fall back to clear, "
+                "simple English. ")
+    return (
+        "You are {{assigned_ai_persona_name}}, the Laundry Khalaas WhatsApp virtual assistant. "
+        "Your exact name is given by the backend as assistant_identity.display_name in the "
+        "context — ALWAYS use that exact name and NEVER select, change or invent your own name, "
+        "and never use a name that isn't the one the backend assigned. Do not introduce yourself "
+        "in every message: introduce yourself naturally on the first meaningful interaction or "
+        "when the customer asks who they're speaking with (e.g. \"Hi, I'm {name}, the Laundry "
+        "Khalaas virtual assistant. How may I help you today?\"). After that, do not keep "
+        "repeating your name in normal replies. Never reveal or imply that you are an AI, a bot "
+        "or automated; never say 'I am an AI'. You are an AI assistant persona and are SEPARATE "
+        "from the human Operations team — never use a human staff member's name as your own, and "
+        "if a human colleague has taken over the conversation, stay silent until it is handed "
+        "back to you. " + lang + "\n\n"
+    )
+
+
 def booking_system_prompt() -> str:
     """Stable booking-orchestration instructions. The volatile structured state
     is supplied separately each turn (get_current_workflow / the state block),
     never baked in here (spec §7)."""
     return (
-        "You are the Laundry Khalas WhatsApp assistant. You do two things: (1) answer "
+        _persona_intro() +
+        "You do two things: (1) answer "
         "customers' questions about services, prices and turnaround, and (2) help them "
         "book a laundry/cleaning pickup. Talk like a helpful human on WhatsApp — natural, "
         "warm and concise. The customer types freely in normal language; there are NO "
@@ -380,7 +501,12 @@ def booking_system_prompt() -> str:
         "service they need again. Send ONE reply that handles the unsupported request and then "
         "asks only for the real next detail.\n"
         "- Bespoke/specialty items (bespoke:true): don't quote a price — ask for a photo + the "
-        "customer's area and create the AWAITING_CUSTOMER_PHOTO task so the team quotes it.\n\n"
+        "customer's area and create the AWAITING_CUSTOMER_PHOTO task so the team quotes it.\n"
+        "- Route-to-specialist (route_to_specialist:true): villa/home/deep cleaning, wedding dresses, or "
+        "luxury/couture care are handled by a specialist team — NEVER quote them. Warmly acknowledge, ask for "
+        "the capture_fields the tool lists (in one short message), then call route_to_specialist with the "
+        "category and details. Tell the customer a specialist will follow up, and don't keep making "
+        "commitments or improvising a price.\n\n"
         "Grounding (never guess business facts):\n"
         "- Use lookup_item_price for any price, estimate_turnaround for any delivery/"
         "turnaround time, check_service_area for coverage, and the list_* tools for what's "
@@ -389,17 +515,26 @@ def booking_system_prompt() -> str:
         "- Prices returned by the tools are the FINAL customer price (already VAT-inclusive). "
         "Quote them exactly as given — NEVER add any percentage, and NEVER mention VAT, tax, "
         "'excluding' or 'including'. Just say e.g. 'AED 60'.\n"
-        "- Order discounts are decided by the BACKEND, never by you. When the customer asks for a "
-        "discount, a better/best price, says it's expensive/too much, or asks you to reduce it, "
-        "IMMEDIATELY call calculate_applicable_order_discount. It returns eligible, "
-        "applied_percentage, pre_discount_total, discount_amount, final_total and a "
-        "customer_safe_summary. Then reply by (1) briefly and warmly acknowledging the concern, "
-        "(2) stating the applied discount and the revised final_total as the CURRENT amount, and "
-        "(3) at most ONE calm follow-up question. Use the tool's final_total as the active price — "
-        "never restate the pre-discount total as what they pay. Read the percentage/amount from the "
-        "tool; never compute or invent them. The precedence (tiers NEVER stack): a discount request "
-        "on an order over AED 200 → 20%; otherwise over AED 100 → 15%; otherwise none. A prior "
-        "AED 600 figure may be shown only as the pre-discount estimate.\n"
+        "- Currency & market (from the state block): quote and take payment ONLY in the "
+        "customer's own currency — the state block's 'currency' (AED for the UAE, QAR for "
+        "Qatar). Never mix currencies or send a quote/payment in a currency that isn't theirs. "
+        "If the state block shows pricing_configured=false (a market we have not priced yet, "
+        "e.g. Qatar), do NOT quote a made-up price — say a specialist will confirm pricing for "
+        "their country and call request_human_support.\n"
+        "- Price is negotiated by the BACKEND, never by you. Always quote the FULL website price "
+        "first. ONLY when the customer haggles — asks for a discount / a better or best price, says "
+        "it's expensive/too much, asks you to reduce it, or keeps pushing after a prior offer — call "
+        "negotiate_order_price. It returns an action: 'offer' (present offered_price as the new "
+        "current total and briefly, warmly acknowledge — never restate pre_discount_total as what "
+        "they pay), 'ask_itemisation' (warmly ask them to list every item + the service for each so "
+        "a deeper price can be checked — you cannot go lower until they do), 'pending' (tell the "
+        "customer you're getting the very best price from the facility and you'll come back — a "
+        "request has been logged; do NOT invent a number), or 'escalate' (this is our best price; "
+        "acknowledge warmly and call request_human_support for anything lower). Read every number "
+        "from the tool; NEVER compute, invent, stack, or free-lance a discount, and never go below "
+        "what the tool offers. A human only steps in when a facility doesn't respond in time, a quote "
+        "needs commercial approval, the customer keeps pushing below our minimum, or cost data is "
+        "missing/conflicting — the tool decides that; you just relay it.\n"
         "- Tone on any price objection: polite, calm, helpful, non-defensive, concise. Do NOT argue "
         "or debate, do NOT re-explain the pricing policy, do NOT say the discount will only apply "
         "later or after confirmation, do NOT say the price is fixed or that they 'don't need to "
@@ -408,8 +543,44 @@ def booking_system_prompt() -> str:
         "- get_order_summary's final_price_aed is already NET of any discount — present it as the "
         "final amount. For a genuine 'from'/inspection line with NO measured or exact total yet, "
         "explain the price is confirmed after inspection; never invent a cheaper rate.\n"
-        "- Express (12h) is only offered when a tool says it's available. If it isn't, say "
-        "so plainly and give the standard turnaround. Never overpromise a delivery time.\n\n"
+        "- Express / same-day: when the customer asks for same-day, express, urgent or 'today', call "
+        "quote_express. Offer Express ONLY when it returns eligible=true, and present its express_total "
+        "(a surcharge applies). If requires_facility_check=true (after the 3 PM cut-off) do NOT auto-reject "
+        "and do NOT promise same-day — say you'll confirm capacity with the facility, create the pending task, "
+        "and offer the standard 24-hour window as the fallback. If not eligible, say so plainly and give the "
+        "standard turnaround. Never overpromise a delivery time.\n\n"
+        "Booking the pickup — what to collect and the expectations to set (spec §2.12):\n"
+        "- Identify the service class first. Wash & Fold (bulk, priced by weight) and Clean & "
+        "Press / Dry Cleaning (per garment) are commonly confused — if it's unclear, ask one "
+        "quick question to pin it down before quoting.\n"
+        "- Specialty items — shoes, bags/leather, carpets & rugs, curtains, soft toys, and "
+        "alterations — need a PHOTO before any quote. Ask for a clear photo first; do not quote "
+        "a specialty item from description alone.\n"
+        "- Alterations: we don't measure on site and there's no tailor visit — ask for a "
+        "well-fitting sample garment OR exact measurements, and always confirm whether numbers "
+        "are in cm or inches. Say some jobs can only be confirmed (or may be declined) after the "
+        "tailor inspects; never hard-promise a timeline before that.\n"
+        "- Address: collect the FULL address plus the building/villa/flat number (and room "
+        "number for hotels) and the customer's name (the name is the order reference). Don't "
+        "confirm a booking without them.\n"
+        "- Set delivery expectations honestly: the driver contacts the customer 15–30 minutes "
+        "before arrival; a proof photo is taken on collection/drop-off. If no one will be home, "
+        "offer leaving with reception/security or at the door — but note reception drop-off is "
+        "not always allowed and the driver cannot enter empty premises, so confirm rather than "
+        "assume. Capture any of this via save_special_instructions.\n"
+        "- Capture special-care notes (fold vs hang, separate darks/lights, no strong scent, "
+        "steam-only, 'don't ring the bell', etc.) with save_special_instructions so they reach "
+        "the facility/driver.\n"
+        "- Pickup & delivery are free for qualifying orders; if a small-order delivery fee "
+        "applies it will appear in the order summary — never invent or state a fee the summary "
+        "didn't show.\n"
+        "- Steer customers to free pickup & delivery rather than walking in; only discuss a "
+        "walk-in (usually for alterations) if the customer really insists.\n"
+        "- Payment: prefer secure online card payment; if the customer would rather pay cash on "
+        "collection, that's fine — never lose an order over the payment method. Payment is taken "
+        "through the proper flow after the order is processed and before dispatch; do NOT create "
+        "or promise a payment link yourself, and NEVER arrange cash off-system directly with the "
+        "driver.\n\n"
         "Scheduling (dates & pickup windows) — the BACKEND owns the clock:\n"
         "- The state block gives you current_local_datetime, timezone and "
         "minimum_lead_time_minutes. Resolve 'now', 'today', 'tonight', 'this evening', "
@@ -471,6 +642,9 @@ def booking_system_prompt() -> str:
         "of the affected item if not already given, and NEVER promise a refund, replacement or "
         "compensation — Operations decides that. For refunds or anything unsafe/out of scope, "
         "also call request_human_support.\n"
+        "- NEVER send a review request, referral prompt, promotion or upsell while a complaint or "
+        "unresolved issue is open — resolve the problem first. The review→discount and referral "
+        "prompts belong only after a successfully delivered order, never during a complaint.\n"
         "- REFUNDS require a human. Any genuine request for a refund, money back, payment "
         "reversal, being charged twice or charged incorrectly is handled by Operations, NOT by "
         "you. Never approve, reject, calculate or process a refund; never promise a refund "
@@ -668,7 +842,9 @@ def make_booking_executor(ctx: BookingContext):
         # grounded engines; they never touch the order, so no draft is created.
         if name in _GROUNDING_TOOL_NAMES:
             from agents.whatsapp_agent import llm_tools
-            return await llm_tools.execute_tool(name, ti)
+            from services import market as market_svc
+            return await llm_tools.execute_tool(
+                name, ti, market=market_svc.get_market(ctx.market).code)
 
         # Write tools ensure a draft exists; reads use whatever draft there is.
         row = await _ensure_draft() if name in _WRITE_TOOLS else await _current_row()
@@ -711,6 +887,29 @@ def make_booking_executor(ctx: BookingContext):
             _svc_log = {"conversation": ctx.conversation_id, "order": cur.get("order_id"),
                         "response_type": "ask_service", "kind": res.kind.value}
             logger.info("service_candidate_detected", **_svc_log)
+
+            if res.kind is service_resolution.ServiceKind.ROUTE:
+                # Route-to-human category (villa/home cleaning, wedding dress,
+                # luxury/couture — spec §2.8). NEVER quote; capture details and hand
+                # to a specialist. Does not create/alter a laundry booking.
+                from services import specialty_routing
+                cat = res.routing_category
+                logger.info("specialty_route_detected", **_svc_log, routing_category=cat)
+                return _ok({
+                    "supported": True,
+                    "route_to_specialist": True,
+                    "routing_category": cat,
+                    "routing_label": specialty_routing.label(cat) if cat else None,
+                    "capture_fields": specialty_routing.capture_fields(cat) if cat else [],
+                    "requested": requested,
+                    "workflow": workflow_state_block(row) if row else _NEW_STATE,
+                    "guidance": (
+                        "This is handled by a specialist team, not quoted here. Do NOT quote a price or "
+                        "create a laundry booking. Warmly acknowledge, ask for the capture_fields listed "
+                        "(one short message), and then call route_to_specialist with the category and the "
+                        "details the customer gives. After routing, tell them a specialist will follow up "
+                        "and stop making commitments."),
+                })
 
             if res.kind is service_resolution.ServiceKind.UNSUPPORTED:
                 # Clearly NOT a Laundry Khalas service (e.g. "haircut"). This is
@@ -892,67 +1091,160 @@ def make_booking_executor(ctx: BookingContext):
             return _ok({"saved": True, "workflow": workflow_state_block(await _current_row())})
 
         if name == "get_order_summary":
+            from services import fulfilment
+            from services import market as market_svc
             from services import pricing
             if row is None:
                 return _ok({"summary_lines": [], "final_price_aed": 0.0,
                             "is_estimated": False, "workflow": _NEW_STATE})
             booking = _booking_from_row(row, ctx)
+            mkt = market_svc.get_market(ctx.market).code
             quote = pricing.calculate_estimate(
-                bf._raw_lines(booking), discount_requested=bool(booking.discount_requested))
+                bf._raw_lines(booking), negotiated_final_total=_negotiated_total(row), market=mkt)
+            # Min-order / delivery charge (spec §2.3): free at/above the market
+            # minimum, else a flat fee — stated up front, never invented.
+            charge = fulfilment.delivery_charge(quote.customer_total, market=mkt)
             return _ok({"summary_lines": pricing.format_quote_lines(quote),
                         "final_price_aed": quote.customer_total,
-                        # Automatic order discount (spec §10) so the model can
-                        # present the benefit. final_price_aed is already net of it.
+                        # Any AGREED negotiated price is already reflected in
+                        # final_price_aed (net of the negotiated discount).
                         "eligible_subtotal_aed": quote.eligible_subtotal,
                         "discount_applied": quote.discount_applied,
                         "discount_percentage": quote.discount_percentage,
                         "discount_amount_aed": quote.discount_amount,
+                        "delivery_free": charge.free,
+                        "delivery_fee_aed": float(charge.fee),
+                        "free_delivery_min_aed": float(charge.free_delivery_min),
+                        "order_grand_total_aed": float(charge.order_grand_total),
                         "is_estimated": quote.is_estimated,
                         "workflow": workflow_state_block(row)})
 
-        if name == "calculate_applicable_order_discount":
+        if name in ("negotiate_order_price", "calculate_applicable_order_discount"):
+            from services import market as market_svc
+            from services import money as _money
+            from services import negotiation, pricing
+            if row is None:
+                return _err("No active order yet — add the service/items before negotiating a price.")
+            booking = _booking_from_row(row, ctx)
+            mkt = market_svc.get_market(ctx.market).code
+            # FULL baseline (no discount) for the negotiation to work off of.
+            base_quote = pricing.calculate_estimate(bf._raw_lines(booking), market=mkt)
+            subtotal = float(base_quote.eligible_subtotal)
+            total_known = (not base_quote.has_pending_inspection
+                           and not any(ln.line_kind == "pending" for ln in base_quote.lines)
+                           and subtotal > 0)
+            if not total_known:
+                return _err("No firm total yet (an item is priced after inspection/measuring), so I can't "
+                            "negotiate a number — tell the customer the price is confirmed first, then we can talk.")
+
+            # Persisted negotiation state lives in the existing discount columns.
+            current_pct = row.get("discount_percentage") if row.get("discount_rule_code") in (
+                "NEGOTIATED", "NEG_FLOOR") else None
+            current_rule = row.get("discount_rule_code")
+            # Facility-floor cost is looked up backend-side (never surfaced); best-effort.
+            facility_cost = await _facility_cost_for_order(ctx, row, booking)
+            decision = negotiation.plan_offer(
+                subtotal, current_percentage=current_pct, current_rule_code=current_rule,
+                itemised=total_known, facility_cost=facility_cost)
+            logger.info("negotiation_decision", order=row.get("order_id"),
+                        **decision.to_snapshot())
+
+            if decision.action in ("offer_ladder", "offer_floor"):
+                reprice = bf.pricing_updates_for_row(
+                    row, discount_requested=True, negotiated_final_total=float(decision.price),
+                    market=mkt)
+                patch = {"discount_requested": True, **(reprice or {})}
+                if decision.rule_code:
+                    patch["discount_rule_code"] = decision.rule_code
+                row = await _apply(patch) or row
+                pre = subtotal
+                final = float(decision.price)
+                pct = float(decision.percentage) if decision.percentage is not None else None
+                summary = (f"I've brought it down to AED {_money.format_money(final)} for you"
+                           + (" — that's the very lowest we can do." if decision.action == "offer_floor"
+                              else "."))
+                return _ok({
+                    "action": "offer",
+                    "offered_percentage": pct,
+                    "offered_price": final,
+                    "pre_discount_total": pre,
+                    "discount_amount": round(pre - final, 2),
+                    "final_total": final,
+                    "is_best_price": decision.action == "offer_floor",
+                    "currency": base_quote.currency,
+                    "pricing_status": "ESTIMATED" if base_quote.is_estimated else "CONFIRMED",
+                    "customer_safe_summary": summary,
+                })
+            if decision.action == "ask_itemisation":
+                return _ok({
+                    "action": "ask_itemisation",
+                    "pre_discount_total": subtotal,
+                    "currency": base_quote.currency,
+                    "customer_safe_summary": ("To check the very best price, could you list every item and the "
+                                              "service you need for each? Then I can see what's possible."),
+                })
+            if decision.reason == "no_facility_cost":
+                # Ladder spent but no valid facility rate/quotation yet → durable
+                # facility-quote request + price PENDING (founder rule: never an
+                # arbitrary number; a human steps in only if no facility responds
+                # within the escalation window).
+                from db.repositories import pending_tasks_repo
+                task = await pending_tasks_repo.create(
+                    "AWAITING_FACILITY_QUOTE", customer_id=(ctx.customer or {}).get("id"),
+                    conversation_id=ctx.conversation_id, notes="best-price negotiation — facility rate pending")
+                logger.info("negotiation_facility_quote_requested", order=row.get("order_id"))
+                return _ok({
+                    "action": "pending",
+                    "pre_discount_total": subtotal,
+                    "currency": base_quote.currency,
+                    "reference": (task or {}).get("task_ref"),
+                    "customer_safe_summary": ("Let me get you the very best price from the facility — I'll come "
+                                              "straight back to you with it."),
+                })
+            # below_floor (customer pushing under the minimum selling price) / other →
+            # a human commercial decision.
+            return _ok({
+                "action": "escalate",
+                "pre_discount_total": subtotal,
+                "currency": base_quote.currency,
+                "reason_code": decision.reason,
+                "customer_safe_summary": ("That's the very best price I can offer. Let me check with the team to "
+                                          "see if anything more is possible — I'll get right back to you."),
+            })
+
+        if name == "quote_express":
+            from services import delivery
+            from services import market as market_svc
             from services import money as _money
             from services import pricing
             if row is None:
-                return _err("No active order yet — add the service/items before calculating a discount.")
-            # Customer asked for a discount → record intent (sticky) and let the
-            # BACKEND engine decide the rule/percentage. The model never computes
-            # money; re-quoting is deterministic + idempotent (never stacks).
-            reprice = bf.pricing_updates_for_row(row, discount_requested=True)
-            if reprice is None:
-                return _err("No priced items yet, so the exact total isn't known and no order discount can be "
-                            "guaranteed — tell the customer the price is confirmed after measuring/inspection.")
-            row = await _apply({"discount_requested": True, **reprice}) or row
+                return _err("No active order yet — add the service/items before quoting Express.")
             booking = _booking_from_row(row, ctx)
-            quote = pricing.calculate_estimate(bf._raw_lines(booking), discount_requested=True)
-            pre = float(quote.eligible_subtotal)
-            final = float(quote.customer_total)
-            pct = quote.discount_percentage
-            if quote.discount_applied:
-                summary = (f"Since the current estimated value is AED {_money.format_money(pre)}, a "
-                           f"{_fmt_pct(pct)}% discount applies, bringing the revised estimate to AED "
-                           f"{_money.format_money(final)}. If the confirmed measurements change, the same "
-                           f"discount rule is recalculated against the updated amount.")
+            mkt = market_svc.get_market(ctx.market).code
+            base_quote = pricing.calculate_estimate(
+                bf._raw_lines(booking), negotiated_final_total=_negotiated_total(row), market=mkt)
+            item_codes = [ln.get("item_code") for ln in (row.get("line_items") or []) if ln.get("item_code")]
+            eq = delivery.express_quote(item_codes, base_quote.customer_total, ctx.local_now())
+            if not eq.eligible:
+                return _ok({
+                    "eligible": False,
+                    "customer_safe_summary": ("Express same-day isn't available for these items — the standard "
+                                              "turnaround applies. I can still book the standard pickup."),
+                })
+            snap = eq.to_snapshot()
+            snap["eligible"] = True
+            snap["cutoff_local"] = delivery.express_cutoff_local()
+            if eq.requires_facility_check:
+                snap["customer_safe_summary"] = (
+                    "It's past our 3 PM same-day cut-off, so let me confirm capacity with the facility — I'll get "
+                    "right back to you. If they can't fit it in, we'll do the standard 24-hour turnaround.")
+                snap["guidance"] = ("Tell the customer you're checking facility capacity and call "
+                                    "create_pending_task (AWAITING_FACILITY_APPROVAL) — do NOT promise same-day yet.")
             else:
-                summary = (f"The current total AED {_money.format_money(pre)} is below the discount threshold, "
-                           f"so no order-level discount applies.")
-            logger.info("discount_applied" if quote.discount_applied else "discount_not_applied",
-                        order=row.get("order_id"), rule=quote.discount_rule_code,
-                        pre_discount_total=pre, discount_amount=float(quote.discount_amount),
-                        final_total=final)
-            return _ok({
-                "eligible": quote.discount_applied,
-                "applied_discount_rule_code": quote.discount_rule_code,
-                "applied_percentage": pct,
-                "pre_discount_total": pre,
-                "discount_amount": float(quote.discount_amount),
-                "final_total": final,
-                "currency": quote.currency,
-                "calculation_version": quote.discount_rule_version or "1",
-                "reason_code": quote.discount_reason,
-                "pricing_status": "ESTIMATED" if quote.is_estimated else "CONFIRMED",
-                "customer_safe_summary": summary,
-            })
+                snap["customer_safe_summary"] = (
+                    "Express same-day is available — with the express surcharge the total comes to "
+                    f"{market_svc.format_price(eq.express_total, mkt)}. Shall I set it up?")
+            return _ok(snap)
 
         if name == "confirm_order":
             if row is None:
@@ -1111,6 +1403,22 @@ def make_booking_executor(ctx: BookingContext):
             return _ok({"eligible_campaigns": [
                 {"code": c["code"], "offer": c.get("offer"), "valid_to": c.get("valid_to")}
                 for c in active]})
+
+        if name == "route_to_specialist":
+            from db.repositories import pending_tasks_repo
+            from services import specialty_routing
+            category = str(ti.get("category", "")).strip().upper()
+            details = str(ti.get("details", "")).strip()
+            if not specialty_routing.is_valid_category(category):
+                return _err(f"Unknown category. Use one of: {sorted(specialty_routing.categories())}")
+            task = await pending_tasks_repo.create(
+                "AWAITING_OPERATIONS_RESPONSE", customer_id=(ctx.customer or {}).get("id"),
+                conversation_id=ctx.conversation_id,
+                notes=f"[SPECIALIST:{category}] {details}"[:1000])
+            logger.info("specialty_routed", conversation=ctx.conversation_id, category=category)
+            return _ok({"routed": True, "category": category,
+                        "reference": (task or {}).get("task_ref"),
+                        "message": specialty_routing.acknowledgement(category)})
 
         if name == "request_human_support":
             return _ok({"escalated": True,

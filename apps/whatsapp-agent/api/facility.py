@@ -17,6 +17,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from api import deps
 from db import database
 from db.repositories import (
+    catalogue_repo,
     driver_assignments_repo,
     facilities_repo,
     facility_drivers_repo,
@@ -29,7 +30,6 @@ from db.repositories import (
     order_events_repo,
 )
 from services import facility_drivers as driver_svc
-from services import facility_notifications as facility_notify
 from services import facility_orders as facility_actions
 
 router = APIRouter(prefix="/api/facility", tags=["facility"])
@@ -357,8 +357,18 @@ async def patch_settings_timings(
             receiving_start=r.get("receiving_start"), receiving_end=r.get("receiving_end"),
             handoff_start=r.get("handoff_start"), handoff_end=r.get("handoff_end"),
             same_day_cutoff=r.get("same_day_cutoff"), is_closed=r.get("is_closed", False),
+            is_24h=r.get("is_24h", False),
         ))
     return {"timings": out}
+
+
+@router.get("/service-categories")
+async def get_service_categories(principal: dict = Depends(deps.require_facility_scope)):
+    """The catalogue service categories a facility can offer (for the accepted-
+    services picker). Categories are non-sensitive published service types."""
+    if not database.is_supabase_mode():
+        return {"categories": []}
+    return {"categories": await catalogue_repo.list_categories()}
 
 
 @router.get("/settings/prices")

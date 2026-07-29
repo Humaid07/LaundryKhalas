@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/dashboard/auth-context";
 import { isRouteAllowed } from "@/lib/dashboard/auth";
 import { accentClasses, accentForHref } from "@/lib/dashboard/accents";
 import { BrandWordmark } from "./Brand";
+import { NavLabel } from "./NavLabel";
 
 /** Is the current route inside this section (exact landing or any child route)? */
 function inSection(pathname: string, href: string) {
@@ -29,7 +30,7 @@ function ChildRow({ child, onNavigate }: { child: NavChild; onNavigate?: () => v
       aria-current={active ? "page" : undefined}
       title={child.label}
       className={cn(
-        "group/child relative grid h-9 grid-cols-[16px_1fr_auto] items-center gap-2.5 rounded-lg pl-3 pr-2 text-[13px] transition-colors duration-200",
+        "lk-navrow group/child relative grid h-9 grid-cols-[16px_1fr_auto] items-center gap-2.5 rounded-lg pl-3 pr-2 text-[13px] transition-colors duration-200",
         active
           ? cn(accent.softBg, "font-semibold", accent.text)
           : cn("font-medium text-ink-muted", accent.hoverBg, "hover:text-ink"),
@@ -37,7 +38,7 @@ function ChildRow({ child, onNavigate }: { child: NavChild; onNavigate?: () => v
     >
       {active && <span className={cn("absolute -left-[9px] top-1/2 h-4 w-1 -translate-y-1/2 rounded-r-full", accent.rail)} />}
       <span className={cn("h-1.5 w-1.5 justify-self-center rounded-full transition-colors", active ? accent.dot : "bg-ink-faint/50 group-hover/child:bg-ink-faint")} />
-      <span className="min-w-0 truncate">{child.label}</span>
+      <NavLabel label={child.label} />
       <span className="flex justify-end">
         {typeof child.badge === "number" && (
           <span className={cn("grid h-[18px] min-w-[20px] place-items-center rounded-full px-1 text-xxs font-semibold tnum", active ? cn(accent.strongBg, accent.text) : "bg-ink/8 text-ink-muted")}>
@@ -102,7 +103,7 @@ function ParentRow({
         title={item.label}
         className={cn(
           // Fixed 4-column grid: icon · label · badge (reserved) · chevron (reserved).
-          "relative grid h-11 grid-cols-[24px_1fr_auto_18px] items-center gap-2.5 rounded-xl px-3 text-sm font-medium transition-colors duration-200",
+          "lk-navrow relative grid h-11 grid-cols-[24px_1fr_auto_18px] items-center gap-2.5 rounded-xl px-3 text-sm font-medium transition-colors duration-200",
           filled
             ? cn(accent.softBg, accent.text)
             : active
@@ -117,7 +118,7 @@ function ParentRow({
         <Icon className={cn("h-[18px] w-[18px] justify-self-center transition-all duration-200", accent.text, active ? "opacity-100" : "opacity-60 group-hover:opacity-100")} />
 
         {/* 2 · label */}
-        <span className="min-w-0 truncate">{item.label}</span>
+        <NavLabel label={item.label} />
 
         {/* 3 · badge (column always present; empty when no count) */}
         <span className="flex min-w-0 justify-end">

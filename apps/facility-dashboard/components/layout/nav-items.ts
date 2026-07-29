@@ -1,4 +1,4 @@
-import { Home, ClipboardList, Truck, Wallet, Settings, type LucideIcon } from "lucide-react";
+import { Home, ClipboardList, Truck, Wallet, Settings, Building2, type LucideIcon } from "lucide-react";
 
 export type NavItem = {
   href: string;
@@ -12,6 +12,7 @@ export type NavItem = {
  *  desktop sidebar so they can never disagree. */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Home", icon: Home, match: ["/"] },
+  { href: "/facilities", label: "Facilities", icon: Building2, match: ["/facilities"] },
   { href: "/orders", label: "Orders", icon: ClipboardList, match: ["/orders"] },
   { href: "/drivers", label: "Drivers", icon: Truck, match: ["/drivers"] },
   { href: "/finance", label: "Finance", icon: Wallet, match: ["/finance"] },

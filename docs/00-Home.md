@@ -22,6 +22,74 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — WhatsApp Agent Tuning (staged, `apps/whatsapp-agent`, 2026-07-29)
+
+Staged tuning of the **WhatsApp Operations Agent** against the founder-approved spec
+(negotiation engine, min-order/delivery, express surcharge, AED/QAR, persona). One stage
+at a time, stop for review between stages.
+
+- **Stage 1 (rules & config layer):** `build-reports/2026-07-29-whatsapp-agent-tuning-stage1.md`
+  — new config + pure services for the §3 negotiation engine (ladder 10→20 / 15→25, 5-min
+  ghost timer, facility-floor `floor = discounted − 0.75×(discounted − cost)` with itemisation
+  guard), min-order/delivery (≥50 free / <50 → 8), express +50% & 3 PM cut-off, AED/QAR
+  currency plumbing, carpet 2–5 days, persona config. **Additive, non-breaking** (81 new +
+  104 regression tests green). Founder decisions: discount model → negotiation-only; QAR →
+  plumbing now, price list later.
+- **Stage 2 (agent system prompt):** `build-reports/2026-07-29-whatsapp-agent-tuning-stage2.md`
+  — persona (single name from config, never-reveal-AI, English/Arabic), §2.12 order flow
+  (photo-gate, full-address capture, driver 15–30 min + reception/security/door fallbacks,
+  special-care notes, alterations cm/inch), payment guardrails (card-first, cash fallback, no
+  driver side-deal), and the AED/QAR currency overlay injected via the per-turn state block.
+  **Additive** (25 new + 97 regression tests green). Not yet: negotiation/min-order/express
+  tools (Stage 3).
+- **Stage 3 (negotiation-only discount + tool):** `build-reports/2026-07-29-whatsapp-agent-tuning-stage3.md`
+  — **retired the automatic 15%-over-100 discount** (full-price quoting; rollback flag
+  `auto_order_discount_enabled`), and shipped `negotiate_order_price` driving the §3 ladder
+  (10→20 / 15→25) + facility-floor (`disc − 0.75×gap`, cost never surfaced) + itemisation guard +
+  escalate-below-floor. No migration (state in existing discount columns). 45 + 118 + 145 tests green.
+- **Stages 3b–6 (tools, routing, privacy, regression):** `build-reports/2026-07-29-whatsapp-agent-tuning-stage3b-to-6.md`
+  — min-order delivery fee in the summary + `quote_express` tool (+50% / 3 PM cut-off);
+  `route_to_specialist` for villa/wedding/luxury (`services/specialty_routing`, never quoted);
+  adversarial privacy suite (no PII to facility/driver/model); 14 §12 scenario tests +
+  `scripts/replay_scenarios.py` (**14/14**). Program regression **286 passed**, ruff clean.
+- **Qatar (QAR) pricing:** `build-reports/2026-07-29-whatsapp-agent-qa-pricing.md` — QAR quoting is
+  now live end-to-end via `config/laundry_catalogue_qa.json` (52 personal-laundry items from the QA
+  website) + market-aware `pricing.calculate_estimate(market=…)`; unpriced QA items become
+  inspection-only (never AED-as-QAR); `lookup_item_price` + summaries in QAR. AE baseline unchanged.
+  **321 tests green.** QA `pricing_configured: true`.
+- **Facility-cost engine + floor wiring:** `build-reports/2026-07-29-facility-cost-and-floor.md` —
+  founder's cost model in `services/facility_cost.py` (standard = facility rate × pricing unit; bespoke
+  = facility quotation; + min-charge/operational-fees; incomplete → no arbitrary number); wired into the
+  negotiation floor (`_facility_cost_for_order`, never surfaced). No facility rate → `AWAITING_FACILITY_QUOTE`
+  + price **pending**; below the floor → human. **302 tests + 14/14 replay green.**
+- **Multi-persona name system:** `build-reports/2026-07-29-multi-persona-assignment.md` — replaced the
+  single `agent_name` with a **persistent per-customer persona** (Sara/Maya/Zoya/Hanna/Sofia/Max/Ben):
+  deterministic-hash assignment, persisted on the customer (migration **000031**), injected as
+  `assistant_identity` each turn, stable prompt forbids Claude choosing/inventing a name, personas kept
+  separate from human staff (paused on takeover, same persona restored on release). 10 guarantees
+  tested (persona suite 23/23 clean).
+- **Program docs:** [[week-03-report]] · [[week-03-whatsapp-agent-tuning-demo]]. **Program COMPLETE
+  (7 stages) + QAR pricing + facility-cost engine + multi-persona, mock-first, on `main`, uncommitted.**
+  Apply migration 000031 before live use. (Command centre still to feed facility rates; optional QA
+  specialty price list.)
+
+## Latest — Facilities Management module (2026-07-29)
+
+End-to-end **Facilities Management** across the internal dashboard (:3000), partner portal
+(:3010), backend and the AI agent. Build report:
+`build-reports/2026-07-29-facilities-management.md`.
+- New top-level **Facilities** section in both dashboards (list + filters + cards + add/edit;
+  partner manages their own single facility). Compliance Queue relocated from Partner
+  Acquisition into Facilities.
+- Writeable facility CRUD with validation + `facility_audit_log` (migration **000030**: adds
+  `full_address`, `quality_score` (internal-only), `capacity_unit`, `onboarding_source`,
+  `created_by/updated_by`, `facility_timings.is_24h`). Internal rates + quality score are
+  internal-only (partner schemas `extra="forbid"` → 422; serializers exclude them).
+- Grounded agent tools (`find_eligible_facilities`, `list_facilities`, …) reading the DB
+  (`services/facility_matching.py`, haversine, 30s TTL cache) + audited status mutation.
+- Reusable sidebar long-label hover-scroll (`NavLabel`) in both apps.
+- Apply: `python scripts/apply_facilities_management.py` (dev Supabase). Mock-first; 503 until applied.
+
 ## Latest — ERP Dashboard Redesign (staged, `apps/admin`, 2026-07-29)
 
 Staged UI/design-system evolution of the internal admin dashboard into a **modern ERP

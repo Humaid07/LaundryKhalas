@@ -38,7 +38,7 @@ export function FacilityBottomNav() {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 backdrop-blur md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="mx-auto grid max-w-lg grid-cols-5">
+      <ul className="mx-auto grid max-w-lg grid-cols-6">
         {BOTTOM_ITEMS.map((item) => {
           const on = isActive(pathname, item);
           const accent = accentClasses(accentForHref(item.href));

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  SearchX, Send, CalendarClock, ShieldCheck, Globe2, Gauge, Info, MapPin,
+  SearchX, Send, CalendarClock, Globe2, Gauge, Info, MapPin,
 } from "lucide-react";
 import { useFilters } from "@/components/dashboard/shell/FiltersProvider";
 import { applyGlobalFilters, activeFilterCount } from "@/lib/dashboard/filters";
@@ -16,11 +16,10 @@ import {
 } from "@/components/dashboard/minimal";
 import {
   roleCards, roleStatusTone,
-  partners, stageTone, complianceTone, getPartnerIdByName,
+  partners, stageTone, getPartnerIdByName,
   marketIntel, readinessTone,
   outreach,
   meetings, meetingStatusTone,
-  complianceQueue,
   regionalCoverage, coverageStatusTone,
   performancePreview,
   type Partner, type PipelineStage,
@@ -314,63 +313,8 @@ function MeetingsSection() {
 
 /* ------------------------------ Compliance queue ---------------------------- */
 
-type CompTabId = "all" | "in-review" | "docs-pending" | "flagged" | "passed";
-const COMP_TABS: { id: CompTabId; label: string; match: (s: string) => boolean }[] = [
-  { id: "all", label: "All", match: () => true },
-  { id: "in-review", label: "In review", match: (s) => s === "In Review" },
-  { id: "docs-pending", label: "Docs pending", match: (s) => s === "Docs Pending" },
-  { id: "flagged", label: "Flagged", match: (s) => s === "Flagged" },
-  { id: "passed", label: "Passed", match: (s) => s === "Passed" },
-];
-
-function ComplianceSection() {
-  const { filters } = useFilters();
-  const [tab, setTab] = useState<CompTabId>("all");
-  const base = useMemo(() => applyGlobalFilters(complianceQueue, filters), [filters]);
-  const matcher = COMP_TABS.find((t) => t.id === tab)!.match;
-  const rows = base.filter((c) => matcher(c.status));
-
-  const kpis: MinimalKpi[] = [
-    { label: "Open reviews", value: num(base.filter((c) => c.status !== "Passed").length) },
-    { label: "Docs pending", value: num(base.filter((c) => c.status === "Docs Pending").length), tone: "warning" },
-    { label: "Flagged", value: num(base.filter((c) => c.status === "Flagged").length), tone: "danger" },
-    { label: "Passed", value: num(base.filter((c) => c.status === "Passed").length), tone: "success" },
-  ];
-  const tabs: WorkflowTab[] = COMP_TABS.map((t) => ({ id: t.id, label: t.label, count: base.filter((c) => t.match(c.status)).length }));
-
-  return (
-    <div className="space-y-6">
-      <MinimalKpiStrip kpis={kpis} />
-      <InfoNote>
-        <span className="font-semibold text-ink">Status-only view.</span> Trade licenses, bank details and documents are
-        represented as states — no document contents or account numbers are stored.
-      </InfoNote>
-      <TabsRow tabs={tabs} value={tab} onChange={(id) => setTab(id as CompTabId)} />
-      {rows.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title="No compliance records in this view" description="No partners match this status and the active filters." />
-      ) : (
-        <RecordList>
-          {rows.map((c) => {
-            const leadId = getPartnerIdByName(c.partner);
-            return (
-              <CompactRecordCard
-                key={c.partner}
-                title={c.partner}
-                status={{ label: c.status, tone: complianceTone[c.status] }}
-                fields={[
-                  { label: "Country", value: c.country },
-                  { label: "Pending docs", value: String(c.pending) },
-                  { label: "Agreement", value: c.agreement },
-                ]}
-                href={leadId ? `/partner-acquisition/pipeline/${leadId}` : undefined}
-              />
-            );
-          })}
-        </RecordList>
-      )}
-    </div>
-  );
-}
+/* Compliance Queue moved to the Facilities section →
+ * components/dashboard/facilities/FacilityCompliance.tsx (route /facilities/compliance). */
 
 /* ------------------------------ Regional coverage --------------------------- */
 
@@ -462,7 +406,6 @@ export function PartnerSubsection({ slug }: { slug: string }) {
     case "market-intelligence": return <MarketSection />;
     case "outreach": return <OutreachSection />;
     case "meetings": return <MeetingsSection />;
-    case "compliance-queue": return <ComplianceSection />;
     case "regional-coverage": return <CoverageSection />;
     case "performance-preview": return <PerformanceSection />;
     default: return <TeamSection />;

@@ -1,0 +1,21 @@
+{
+  "_note": "Market → currency plumbing (founder-approved spec §8). One place that maps a customer's country (by WhatsApp phone prefix) to a market, its currency and how prices are formatted, so the agent NEVER sends a mismatched-currency quote or payment link. `pricing_configured` gates whether a canonical price list exists for that market: AE (AED) uses config/laundry_catalogue.json; QA (Qatar/QAR) uses the config/laundry_catalogue_qa.json overlay (personal-laundry prices from the QA website). Items a market does not price are quoted only after inspection (never in another market's currency). Prefixes are E.164 country codes without '+'.",
+  "version": "2026-07-29.1",
+  "default_market": "AE",
+  "markets": {
+    "AE": {
+      "name": "United Arab Emirates",
+      "currency": "AED",
+      "currency_prefix": "AED",
+      "phone_prefixes": ["971"],
+      "pricing_configured": true
+    },
+    "QA": {
+      "name": "Qatar",
+      "currency": "QAR",
+      "currency_prefix": "QAR",
+      "phone_prefixes": ["974"],
+      "pricing_configured": true
+    }
+  }
+}

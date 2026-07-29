@@ -1,0 +1,22 @@
+{
+  "_note": "Central, configurable definition of the WhatsApp agent's price-NEGOTIATION engine (founder-approved spec §3). The database/config is the single source of truth — the ladder, ghost window and concession fraction are NEVER hardcoded across components. This is DISTINCT from config/order_discounts.json (named/automatic promos): negotiation is the ONLY sanctioned way to move off the website baseline, and it fires ONLY when the customer haggles. Percentages are whole numbers (10 = 10%). Amounts are compared per-market against the eligible order subtotal (sum of final, VAT-inclusive line totals). The facility-floor is computed backend-side and only the floor PRICE is ever surfaced — the raw facility cost is never exposed to the agent or the customer (CLAUDE.md §7).",
+  "active": true,
+  "version": "2026-07-29.1",
+  "ghost_timeout_seconds": 300,
+  "max_concession_fraction": 0.75,
+  "itemisation_required_for_floor": true,
+  "markets": {
+    "AE": {
+      "currency": "AED",
+      "tier_threshold": 100.0,
+      "low_ladder_percentages": [10, 20],
+      "high_ladder_percentages": [15, 25]
+    },
+    "QA": {
+      "currency": "QAR",
+      "tier_threshold": 100.0,
+      "low_ladder_percentages": [10, 20],
+      "high_ladder_percentages": [15, 25]
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "_note": "Route-to-human (specialist) service categories (founder-approved spec §2.8). For these the agent NEVER quotes: it acknowledges once, captures the listed structured details, hands off to a specialist (a pending task + human follow-up), and stops making commitments. Distinct from UNSUPPORTED (politely declined, e.g. haircut) and from the sell-directly specialty items in §2.7 (shoes/bags/carpets/curtains) which the agent quotes after a photo. B2B/commercial is handled separately by services/b2b.py + the escalation rules. Terms are matched case-insensitively as substrings on a normalised message; keep them specific so ordinary garment/laundry requests are never swept up.",
+  "version": "2026-07-29.1",
+  "categories": {
+    "HOME_CLEANING": {
+      "label": "villa / home / deep cleaning",
+      "acknowledgement": "We can absolutely help with that — home and deep cleaning is handled by our specialist team. Let me pass your details to them and they'll follow up shortly.",
+      "capture": ["property type (villa/apartment/office)", "number of rooms", "area", "preferred date"],
+      "terms": [
+        "villa cleaning", "home cleaning", "house cleaning", "deep cleaning",
+        "deep clean", "apartment cleaning", "flat cleaning", "office cleaning",
+        "maid service", "housekeeping", "move-in cleaning", "move in cleaning",
+        "move-out cleaning", "move out cleaning", "sofa cleaning at home",
+        "kitchen cleaning", "bathroom cleaning", "general cleaning"
+      ]
+    },
+    "WEDDING_DRESS": {
+      "label": "wedding dress",
+      "acknowledgement": "Wedding dresses are handled by our specialist garment team so we can care for them properly. Let me take a few details and have them follow up with you.",
+      "capture": ["dress type/material", "any stains or damage", "area", "event date if any"],
+      "terms": [
+        "wedding dress", "wedding gown", "bridal gown", "bridal dress",
+        "bridal wear", "wedding suit"
+      ]
+    },
+    "LUXURY_BESPOKE": {
+      "label": "luxury / bespoke garment care",
+      "acknowledgement": "That's a specialist piece, so our luxury garment-care team will look after it. Let me capture a few details and have them reach out.",
+      "capture": ["item", "brand or material", "the concern (clean/repair/restore/re-dye)", "area"],
+      "terms": [
+        "couture", "haute couture", "exotic leather", "crocodile leather",
+        "python leather", "re-dye", "redye", "re-dyeing", "re-dying",
+        "luxury restoration", "bespoke restoration", "high-value restoration",
+        "designer restoration", "fur coat", "fur cleaning"
+      ]
+    }
+  }
+}

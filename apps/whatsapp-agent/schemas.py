@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class TestChatRequest(BaseModel):
@@ -157,3 +157,105 @@ class OrderMetrics(BaseModel):
     support_required: int
     total_orders: int
     orders_by_status: dict[str, int]
+
+
+# --- Facilities Management -------------------------------------------------
+# Internal (admin/ops) schemas MAY carry quality_score. Partner schemas OMIT
+# quality_score + internal rates entirely and use extra="forbid", so a partner
+# request that includes a protected field is REJECTED (422) at the schema layer —
+# not silently dropped (CLAUDE.md §7 privacy firewall + internal-only isolation).
+
+
+class AdminFacilityCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    full_address: str | None = None
+    area: str | None = None
+    city: str | None = None
+    emirate: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    service_radius_km: float | None = None
+    capacity_daily: int | None = None
+    capacity_unit: str | None = None
+    operating_status: str | None = None
+    accepts_orders: bool | None = None
+    quality_score: float | None = None       # internal-only
+    market: str | None = None
+    country: str | None = None
+    notes: str | None = None
+    contact_area: str | None = None
+    services: list[str] | None = None
+
+
+class AdminFacilityUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = None
+    full_address: str | None = None
+    area: str | None = None
+    city: str | None = None
+    emirate: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    service_radius_km: float | None = None
+    capacity_daily: int | None = None
+    capacity_unit: str | None = None
+    operating_status: str | None = None
+    accepts_orders: bool | None = None
+    quality_score: float | None = None       # internal-only
+    market: str | None = None
+    country: str | None = None
+    notes: str | None = None
+    contact_area: str | None = None
+    services: list[str] | None = None
+
+
+class PartnerFacilityCreate(BaseModel):
+    # NO quality_score, NO market/country, NO internal rates — omitted by design.
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    full_address: str | None = None
+    area: str | None = None
+    city: str | None = None
+    emirate: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    service_radius_km: float | None = None
+    capacity_daily: int | None = None
+    capacity_unit: str | None = None
+    operating_status: str | None = None
+    accepts_orders: bool | None = None
+    notes: str | None = None
+    contact_area: str | None = None
+    services: list[str] | None = None
+
+
+class PartnerFacilityUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = None
+    full_address: str | None = None
+    area: str | None = None
+    city: str | None = None
+    emirate: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    service_radius_km: float | None = None
+    capacity_daily: int | None = None
+    capacity_unit: str | None = None
+    operating_status: str | None = None
+    accepts_orders: bool | None = None
+    notes: str | None = None
+    contact_area: str | None = None
+    services: list[str] | None = None
+
+
+class FacilityStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+
+
+class FacilityRateUpsert(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    service_code: str
+    rate: float
+    currency: str = "AED"

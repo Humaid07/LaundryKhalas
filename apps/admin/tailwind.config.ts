@@ -34,6 +34,7 @@ const config: Config = {
           cyan: token("accent-cyan"),
           steel: token("accent-steel"),
           plum: token("accent-plum"),
+          orange: token("accent-orange"),
         },
         ink: {
           DEFAULT: token("ink"),

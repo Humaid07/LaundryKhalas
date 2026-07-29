@@ -71,7 +71,7 @@ async def update_settings(facility_id: str, **fields) -> dict | None:
 _TIMING_COLS = (
     "id, facility_id, day_of_week, opens_at, closes_at, receiving_start, "
     "receiving_end, handoff_start, handoff_end, same_day_cutoff, is_closed, "
-    "created_at, updated_at"
+    "is_24h, created_at, updated_at"
 )
 _TIMING_TIME_FIELDS = ("opens_at", "closes_at", "receiving_start", "receiving_end",
                        "handoff_start", "handoff_end", "same_day_cutoff")
@@ -87,24 +87,28 @@ async def list_timings(facility_id: str) -> list[dict]:
 
 async def upsert_timing(facility_id: str, day_of_week: int, **times) -> dict | None:
     """Upsert one day's timing row (unique on facility_id + day_of_week). Time
-    fields accept 'HH:MM' strings (cast to time) or None."""
+    fields accept 'HH:MM' strings (cast to time) or None. ``is_24h`` marks a day
+    open around the clock."""
     is_closed = bool(times.get("is_closed", False))
+    is_24h = bool(times.get("is_24h", False))
     values = [facility_id, int(day_of_week)]
     for f in _TIMING_TIME_FIELDS:
         values.append(times.get(f))
     values.append(is_closed)
+    values.append(is_24h)
     # $3..$9 are the time fields, cast text→time so 'HH:MM' works.
     time_ph = ", ".join(f"${i}::text::time" for i in range(3, 3 + len(_TIMING_TIME_FIELDS)))
     closed_ph = f"${3 + len(_TIMING_TIME_FIELDS)}"
+    is24_ph = f"${4 + len(_TIMING_TIME_FIELDS)}"
     update_sets = ", ".join(
-        f"{f} = excluded.{f}" for f in (*_TIMING_TIME_FIELDS, "is_closed")
+        f"{f} = excluded.{f}" for f in (*_TIMING_TIME_FIELDS, "is_closed", "is_24h")
     )
     return await database.fetchrow(
         f"""
         insert into facility_timings
-            (facility_id, day_of_week, {', '.join(_TIMING_TIME_FIELDS)}, is_closed,
+            (facility_id, day_of_week, {', '.join(_TIMING_TIME_FIELDS)}, is_closed, is_24h,
              is_test_data, is_demo, environment, created_by_seed)
-        values ($1, $2, {time_ph}, {closed_ph}, true, false, 'dev', false)
+        values ($1, $2, {time_ph}, {closed_ph}, {is24_ph}, true, false, 'dev', false)
         on conflict (facility_id, day_of_week) do update set {update_sets}
         returning {_TIMING_COLS}
         """,

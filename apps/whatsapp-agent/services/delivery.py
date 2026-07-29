@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+from dataclasses import dataclass
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 
-from services import catalogue
+from services import catalogue, money
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 _SLA_FILE = "delivery_sla.json"
@@ -144,6 +146,86 @@ def _delivery_text(t: dict, start_at, end_at) -> str:
     return end_at.strftime("%A, %d %B %Y")
 
 
+# --------------------------------------------------------------------------
+# Express surcharge + same-day cut-off (founder-approved spec §2.4)
+# --------------------------------------------------------------------------
+def express_surcharge_pct() -> Decimal:
+    """Express/same-day surcharge as a fraction of the order total (default 0.5 =
+    +50%). Config-driven — never invented in the prompt."""
+    return money.to_decimal(meta().get("express_surcharge_pct", 0.5))
+
+
+def express_cutoff_local() -> str:
+    """Local same-day cut-off time, 'HH:MM' (default 15:00 / 3 PM)."""
+    return str(meta().get("express_cutoff_local", "15:00"))
+
+
+def _cutoff_time() -> _dt.time:
+    raw = express_cutoff_local()
+    try:
+        hh, mm = (int(x) for x in raw.split(":", 1))
+        return _dt.time(hour=hh, minute=mm)
+    except (ValueError, TypeError):
+        return _dt.time(hour=15, minute=0)
+
+
+def is_after_express_cutoff(now_local: _dt.datetime | _dt.time) -> bool:
+    """True when a same-day Express request arrives AFTER the local cut-off. Such a
+    request is NOT auto-rejected (spec §2.4): the caller checks facility capacity
+    and, if unavailable, offers the standard 24h window."""
+    t = now_local.time() if isinstance(now_local, _dt.datetime) else now_local
+    return t > _cutoff_time()
+
+
+def apply_express_surcharge(order_total) -> Decimal:
+    """The +50% Express order total: round(order_total × (1 + surcharge_pct))."""
+    total = money.to_decimal(order_total)
+    return money.round_money(total * (Decimal(1) + express_surcharge_pct()))
+
+
+@dataclass(frozen=True)
+class ExpressQuote:
+    eligible: bool
+    after_cutoff: bool
+    requires_facility_check: bool   # True when past cut-off → confirm capacity first
+    surcharge_pct: Decimal
+    base_total: Decimal
+    surcharge_amount: Decimal
+    express_total: Decimal
+
+    def to_snapshot(self) -> dict:
+        return {
+            "express_eligible": self.eligible,
+            "after_cutoff": self.after_cutoff,
+            "requires_facility_check": self.requires_facility_check,
+            "surcharge_pct": float(self.surcharge_pct),
+            "base_total": float(self.base_total),
+            "surcharge_amount": float(self.surcharge_amount),
+            "express_total": float(self.express_total),
+        }
+
+
+def express_quote(item_codes: list[str], order_total,
+                  now_local: _dt.datetime | None = None) -> ExpressQuote:
+    """Full Express pricing decision for an order: eligibility (every item eligible),
+    whether the same-day cut-off has passed (→ facility capacity must be confirmed
+    before promising), and the +50% surcharged total. Pure — the caller decides
+    whether to actually offer Express based on real facility capacity."""
+    base = money.round_money(order_total)
+    eligible = order_turnaround(item_codes)["express_eligible"]
+    after_cutoff = is_after_express_cutoff(now_local) if now_local is not None else False
+    express_total = apply_express_surcharge(base)
+    return ExpressQuote(
+        eligible=eligible,
+        after_cutoff=after_cutoff,
+        requires_facility_check=eligible and after_cutoff,
+        surcharge_pct=express_surcharge_pct(),
+        base_total=base,
+        surcharge_amount=money.round_money(express_total - base),
+        express_total=express_total,
+    )
+
+
 def delivery_options(item_codes: list[str]) -> dict:
     """Standard + (when eligible) Express options for the delivery-mode step."""
     std = order_turnaround(item_codes, express=False)
@@ -151,10 +233,11 @@ def delivery_options(item_codes: list[str]) -> dict:
            "express_eligible": std["express_eligible"], "express": None}
     if std["express_eligible"]:
         exp = order_turnaround(item_codes, express=True)
-        surcharge = meta().get("express_surcharge_aed")
         out["express"] = {
             "mode": "EXPRESS", "display_text": exp["display_text"],
             "hours": express_hours(),
-            "surcharge_aed": surcharge,   # null until the business configures it
+            "surcharge_pct": float(express_surcharge_pct()),   # +50% (spec §2.4)
+            "surcharge_aed": meta().get("express_surcharge_aed"),  # legacy fixed fee, unused
+            "cutoff_local": express_cutoff_local(),
         }
     return out

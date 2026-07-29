@@ -27,6 +27,7 @@ export type AccentName =
   | "cyan" // Finance & Compliance
   | "steel" // Dev & Automation
   | "plum" // Reports
+  | "orange" // Facilities
   | "neutral"; // Settings
 
 /** Top-level route segment → its unique accent. One line per section. */
@@ -41,6 +42,7 @@ export const MODULE_ACCENT: Record<string, AccentName> = {
   "finance-compliance": "cyan",
   "dev-automation": "steel",
   reports: "plum",
+  facilities: "orange",
   settings: "neutral",
 };
 
@@ -200,6 +202,18 @@ export const ACCENT_CLASSES: Record<AccentName, AccentClasses> = {
     hoverBorder: "hover:border-accent-plum/40",
     dot: "bg-accent-plum",
     ctaHover: "group-hover:bg-accent-plum group-hover:text-white",
+  },
+  orange: {
+    text: "text-accent-orange",
+    chip: "bg-accent-orange/12 text-accent-orange",
+    rail: "bg-accent-orange",
+    softBg: "bg-accent-orange/10",
+    hoverBg: "hover:bg-accent-orange/[0.08]",
+    strongBg: "bg-accent-orange/20",
+    ring: "ring-accent-orange/25",
+    hoverBorder: "hover:border-accent-orange/40",
+    dot: "bg-accent-orange",
+    ctaHover: "group-hover:bg-accent-orange group-hover:text-white",
   },
   neutral: {
     text: "text-ink-muted",

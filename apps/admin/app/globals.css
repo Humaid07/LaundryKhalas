@@ -52,6 +52,7 @@
   --accent-cyan: 8 145 178; /* #0891b2 Finance & Compliance */
   --accent-steel: 55 71 105; /* #374769 Dev & Automation */
   --accent-plum: 147 51 190; /* #9333be Reports */
+  --accent-orange: 234 88 12; /* #ea580c Facilities */
 
   --ring: 214 51 108;
   --shadow-color: 24 15 20;
@@ -96,6 +97,7 @@
   --accent-cyan: 34 211 238; /* #22d3ee Finance & Compliance */
   --accent-steel: 130 148 184; /* #8294b8 Dev & Automation */
   --accent-plum: 192 132 252; /* #c084fc Reports */
+  --accent-orange: 251 146 60; /* #fb923c Facilities */
 
   --ring: 232 76 136;
   --shadow-color: 0 0 0;
@@ -198,4 +200,23 @@ body {
 .lk-menu-in {
   animation: lk-menu-in 0.15s cubic-bezier(0.22, 1, 0.36, 1) both;
   transform-origin: top;
+}
+
+/* Sidebar long-label hover-scroll (see components/dashboard/shell/NavLabel.tsx).
+ * Only overflowing labels get `.lk-navlabel`; the enclosing row carries
+ * `.lk-navrow` and is the focusable element, so hover + keyboard focus both
+ * drive the scroll. The `--lk-scroll` inline var is the negative overflow px. */
+.lk-navlabel__text {
+  transition: transform 0.2s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lk-navrow:hover .lk-navlabel .lk-navlabel__text,
+  .lk-navrow:focus-visible .lk-navlabel .lk-navlabel__text {
+    animation: lk-navlabel-scroll 4.5s ease-in-out infinite;
+  }
+}
+@keyframes lk-navlabel-scroll {
+  0%, 14% { transform: translateX(0); }
+  50%, 64% { transform: translateX(var(--lk-scroll, 0)); }
+  100% { transform: translateX(0); }
 }

@@ -161,6 +161,26 @@ export interface FacilityProfile {
   [key: string]: unknown;
 }
 
+/** Editable fields a partner may submit for their own facility. Deliberately
+ *  omits quality_score + internal rates — the backend rejects them (422) too. */
+export interface FacilityManageInput {
+  name?: string;
+  full_address?: string | null;
+  area?: string | null;
+  city?: string | null;
+  emirate?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  service_radius_km?: number | null;
+  capacity_daily?: number | null;
+  capacity_unit?: string | null;
+  operating_status?: string;
+  accepts_orders?: boolean;
+  notes?: string | null;
+  contact_area?: string | null;
+  services?: string[];
+}
+
 export interface FacilityOverview {
   orders_in_today?: number;
   orders_out_today?: number;
@@ -602,6 +622,29 @@ export const facilityApi = {
   // Backend returns a single status object (payout intentionally pending).
   financePayouts: (params: { range?: string } = {}) =>
     request<FacilityPayoutInfo>(`/api/facility/finance/payouts${qs(params)}`),
+
+  // --- Facilities Management (this partner's own facility) ---
+  facilities: () =>
+    request<{ facilities: FacilityProfile[] }>("/api/facility/facilities"),
+  createFacility: (body: FacilityManageInput) =>
+    request<{ facility: FacilityProfile }>("/api/facility/facilities", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateFacility: (id: string, patch: FacilityManageInput) =>
+    request<{ facility: FacilityProfile }>(`/api/facility/facilities/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  setFacilityStatus: (id: string, status: string) =>
+    request<{ facility: FacilityProfile }>(`/api/facility/facilities/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  serviceCategories: () =>
+    request<{ categories: { code: string; name: string }[] }>(
+      "/api/facility/service-categories",
+    ),
 
   // --- Settings ---
   getProfileSettings: () => request<FacilityProfile>("/api/facility/settings/profile"),

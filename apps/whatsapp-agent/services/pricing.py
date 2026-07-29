@@ -139,15 +139,20 @@ class Quote:
 
 def _line_for(item: dict, quantity: float, measure: float | None,
               vat_rate: float, prices_include_vat: bool,
-              override_price: float | None = None) -> QuoteLine:
+              override_price: float | None = None,
+              force_pending: bool = False) -> QuoteLine:
     ptype = item["pricing_type"]
-    # A published/promotional price (from the price resolver) overrides the static
-    # catalogue price so the agent quotes the CURRENT published value with no
-    # restart. Falls back to the catalogue price when no override is supplied.
-    base_price = override_price if override_price is not None else item.get("current_price")
+    # A published/promotional price (from the price resolver) OR a per-market price
+    # overrides the static catalogue price so the agent quotes the CURRENT value with
+    # no restart. Falls back to the catalogue price when no override is supplied.
+    # ``force_pending`` means this item has NO configured price in the active market
+    # (spec §8) — it is priced after inspection, never quoted with another market's
+    # number.
+    base_price = None if force_pending else (
+        override_price if override_price is not None else item.get("current_price"))
     unit = item["pricing_unit"]
     starting = item["is_starting_price"]
-    inspection = item["requires_inspection"]
+    inspection = item["requires_inspection"] or force_pending
     measured = item["requires_measurement"] or ptype in ("PER_SQM", "PER_KG")
 
     def _final_unit(p):
@@ -193,9 +198,59 @@ def _line_for(item: dict, quantity: float, measure: float | None,
     )
 
 
+def _no_discount(subtotal, reason: str) -> "discount.DiscountResult":
+    zero = money.round_money(0)
+    return discount.DiscountResult(
+        applied=False, reason=reason, rule_code=None, eligible_subtotal=subtotal,
+        threshold=None, discount_percentage=None, discount_amount=zero,
+        final_total=subtotal, discount_requested=False, rule_version=None)
+
+
+def _negotiated_discount(subtotal, final_total) -> "discount.DiscountResult":
+    """A negotiated final total (from services/negotiation via the negotiate tool)
+    applied exactly as the customer's price. The percentage is derived only for
+    display/logging; the money that governs is the negotiated final total."""
+    final = money.round_money(final_total)
+    amount = money.round_money(subtotal - final)
+    pct = (money.round_money(amount / subtotal * money.to_decimal(100))
+           if subtotal > 0 else money.round_money(0))
+    return discount.DiscountResult(
+        applied=amount > money.round_money(0), reason="negotiated", rule_code="NEGOTIATED",
+        eligible_subtotal=subtotal, threshold=None, discount_percentage=pct,
+        discount_amount=amount, final_total=final, discount_requested=True,
+        rule_version="negotiation")
+
+
+def _resolve_discount(subtotal, *, total_is_known: bool, discount_requested: bool,
+                      negotiated_final_total: float | None) -> "discount.DiscountResult":
+    """The SINGLE decision on what discount (if any) applies to a known subtotal.
+
+    Order of precedence:
+      1. A negotiated final total (the negotiation tool already decided it) — used
+         exactly, as long as it is a sane 0 < final <= subtotal.
+      2. Otherwise, the legacy AUTOMATIC order discount — ONLY when the operator has
+         re-enabled it (auto_order_discount_enabled). Retired by default (founder
+         decision: negotiation-only).
+      3. Otherwise, no discount — the full baseline price is quoted (spec §2.1).
+    """
+    if not total_is_known or subtotal <= money.round_money(0):
+        return _no_discount(subtotal, "unknown_total" if not total_is_known else "below_threshold")
+    if negotiated_final_total is not None:
+        final = money.round_money(negotiated_final_total)
+        if money.round_money(0) < final <= subtotal:
+            return _negotiated_discount(subtotal, final)
+        return _no_discount(subtotal, "negotiation_invalid")
+    from settings import get_settings
+    if get_settings().auto_order_discount_enabled:
+        return discount.evaluate(subtotal, total_is_known=True, discount_requested=discount_requested)
+    return _no_discount(subtotal, "negotiation_only")
+
+
 def calculate_estimate(order_items: list[dict],
                        price_overrides: dict[str, float] | None = None,
-                       *, discount_requested: bool = False) -> Quote:
+                       *, discount_requested: bool = False,
+                       negotiated_final_total: float | None = None,
+                       market: str = "AE") -> Quote:
     """Compute a quote for ``order_items`` with FINAL customer prices.
 
     Each entry: ``{"item_code": str, "quantity": number, "measure": number?}``
@@ -211,8 +266,13 @@ def calculate_estimate(order_items: list[dict],
     """
     vat = catalogue.vat_rate()
     incl = catalogue.prices_include_vat()
+    # Per-market pricing (spec §8): a non-AE market with its own price list supplies
+    # the money in its own currency; items it does NOT price become inspection lines
+    # (never quoted with the AE number). AE uses the base catalogue unchanged.
+    is_market_priced = market not in (None, "AE") and catalogue.has_market_pricing(market)
+    market_map = catalogue.market_prices(market) if is_market_priced else {}
     quote = Quote(
-        currency=catalogue.currency(),
+        currency=catalogue.market_currency(market) if is_market_priced else catalogue.currency(),
         vat_rate=vat,
         prices_include_vat=incl,
         disclaimer=catalogue.pricing_disclaimer(),
@@ -226,8 +286,17 @@ def calculate_estimate(order_items: list[dict],
             continue
         qty = _coerce_number(entry.get("quantity"), default=1.0)
         measure = _coerce_number(entry.get("measure"), default=None)
-        override = (price_overrides or {}).get(item["item_code"])
-        line = _line_for(item, qty, measure, vat, incl, override_price=override)
+        code = item["item_code"]
+        if is_market_priced:
+            # The market's price is authoritative; an item the market does not price
+            # is inspection-only (never falls back to the AE catalogue number).
+            override = market_map.get(code)
+            force_pending = code not in market_map
+        else:
+            override = (price_overrides or {}).get(code)
+            force_pending = False
+        line = _line_for(item, qty, measure, vat, incl,
+                         override_price=override, force_pending=force_pending)
         quote.lines.append(line)
         if line.line_kind in ("exact", "estimate") and line.line_total is not None:
             customer_total += money.to_decimal(line.line_total)
@@ -245,19 +314,19 @@ def calculate_estimate(order_items: list[dict],
     # measured estimate (per-sqm/per-kg with a supplied measurement) is still an
     # ESTIMATE for labelling — the final quantity is confirmed at pickup.
     quote.is_final = not (has_pending or quote.has_measured_estimate)
-    # DISCOUNT ELIGIBILITY (spec §§5-9 + precedence). The exact total is KNOWN
-    # whenever there is no 'from'/inspection ('pending') line and the subtotal is
-    # positive — INCLUDING a measured estimate, whose amount is firmly derived
-    # from the supplied measurement (rate × sqm/kg). Only a genuinely-unknown
-    # 'from'/inspection total is excluded from a guaranteed discount (spec §8).
-    # So a 30 sqm carpet at AED 600 with a discount request DOES get the 20%
-    # tier; the result is simply labelled ESTIMATED and recalculated if the
-    # confirmed measurement changes. Computed deterministically so recomputation
-    # never stacks the discount (spec §9); discount_requested gates the 20% tier.
+    # DISCOUNT (founder decision 2026-07-29: NEGOTIATION-ONLY). By default no
+    # automatic discount is applied — the FULL baseline price is quoted (spec §2.1).
+    # A discount appears only when the negotiation tool passes an agreed
+    # ``negotiated_final_total`` (the §3 ladder / facility-floor), or when the legacy
+    # automatic engine is explicitly re-enabled (auto_order_discount_enabled). The
+    # exact total is KNOWN when there is no 'from'/inspection ('pending') line and
+    # the subtotal is positive (a measured estimate counts as known); an unknown
+    # 'from'/inspection total is never discounted (spec §8).
     total_is_known = (not has_pending) and eligible_subtotal > money.round_money(0)
-    disc = discount.evaluate(eligible_subtotal, total_is_known=total_is_known,
-                             discount_requested=discount_requested)
-    quote.discount_requested = discount_requested
+    disc = _resolve_discount(eligible_subtotal, total_is_known=total_is_known,
+                             discount_requested=discount_requested,
+                             negotiated_final_total=negotiated_final_total)
+    quote.discount_requested = discount_requested or disc.discount_requested
     quote.eligible_subtotal = float(eligible_subtotal)
     quote.discount_applied = disc.applied
     quote.discount_reason = disc.reason
@@ -290,21 +359,22 @@ def _coerce_number(v, default):
 def format_quote_lines(quote: Quote) -> list[str]:
     """Human lines for the WhatsApp summary / dashboard, one per order line.
     Shows only FINAL customer amounts; never any VAT/tax wording (spec §§11/23)."""
+    cur = quote.currency or "AED"
     out: list[str] = []
     for ln in quote.lines:
         qty = _fmt_qty(ln.quantity)
         if ln.line_kind == "exact":
-            out.append(f"{qty} × {ln.name} — AED {money.format_money(ln.line_total)}")
+            out.append(f"{qty} × {ln.name} — {cur} {money.format_money(ln.line_total)}")
         elif ln.line_kind == "estimate":
             out.append(
                 f"{ln.name}: {_fmt_qty(ln.measure)} {ln.unit.lower()} "
-                f"— AED {money.format_money(ln.line_total)} (confirmed after measuring)"
+                f"— {cur} {money.format_money(ln.line_total)} (confirmed after measuring)"
             )
         else:  # pending
             unit = ln.unit.lower()
             if ln.unit_price is not None:
                 out.append(
-                    f"{qty} × {ln.name}: from AED {money.format_money(ln.unit_price)} per {unit} "
+                    f"{qty} × {ln.name}: from {cur} {money.format_money(ln.unit_price)} per {unit} "
                     "(final price after inspection)"
                 )
             else:
@@ -315,6 +385,7 @@ def format_quote_lines(quote: Quote) -> list[str]:
 def format_quote_summary(quote: Quote) -> str:
     """Full multi-line quote block for the booking confirmation summary. Shows a
     single FINAL amount — no subtotal, no VAT line, no tax wording (spec §23)."""
+    cur = quote.currency or "AED"
     lines = format_quote_lines(quote)
     body = "\n".join(lines)
     label = "Estimated price" if quote.is_estimated else "Final price"
@@ -325,11 +396,11 @@ def format_quote_summary(quote: Quote) -> str:
         # No VAT line anywhere (spec §4).
         revised_label = "Revised estimated price" if quote.is_estimated else "Revised price"
         pct = _fmt_qty(quote.discount_percentage)
-        body += f"\nOriginal {'estimate' if quote.is_estimated else 'price'}: AED {money.format_money(quote.eligible_subtotal)}"
-        body += f"\nSpecial {pct}% discount: -AED {money.format_money(quote.discount_amount)}"
-        body += f"\n{revised_label}: AED {money.format_money(quote.estimated_total_including_vat)}"
+        body += f"\nOriginal {'estimate' if quote.is_estimated else 'price'}: {cur} {money.format_money(quote.eligible_subtotal)}"
+        body += f"\nSpecial {pct}% discount: -{cur} {money.format_money(quote.discount_amount)}"
+        body += f"\n{revised_label}: {cur} {money.format_money(quote.estimated_total_including_vat)}"
     elif quote.estimated_total_including_vat > 0:
-        body += f"\n{label} — AED {money.format_money(quote.estimated_total_including_vat)}"
+        body += f"\n{label} — {cur} {money.format_money(quote.estimated_total_including_vat)}"
     if quote.has_pending_inspection or any(ln.line_kind == "pending" for ln in quote.lines):
         body += "\n\nSome items are priced after inspection — the team will confirm the final price."
     if quote.has_measured_estimate:

@@ -493,6 +493,15 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
                    if m["sender_type"] in ("customer", "agent")
                    and m.get("message_text") and m["message_text"] not in current_texts]
         _market = (customer or {}).get("market")
+        # Pin ONE approved AI persona to this customer on first contact (persistent,
+        # never changes). Best-effort: a failure here must never block the reply.
+        if customer:
+            try:
+                from db.repositories import customers_repo
+                from services import persona_assignment
+                await persona_assignment.ensure_assigned(customer, customers_repo)
+            except Exception as exc:  # noqa: BLE001
+                logger.info("persona_assign_skipped", error=str(exc))
         ctx = BookingContext(
             conversation_id=convo["id"], order_uuid=None, repo=orders_repo,
             today=clock.today(_market), available_slots=slots_repo.available_slots,

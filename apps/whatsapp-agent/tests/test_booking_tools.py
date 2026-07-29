@@ -150,11 +150,18 @@ async def test_full_booking_via_write_tools_then_idempotent_confirm():
     assert repo.row["status"] == order_store.PICKUP_SCHEDULED
 
 
-async def test_calculate_applicable_order_discount_tool_carpet_600():
-    """The authoritative discount tool: for a 30 sqm carpet estimate (AED 600)
-    with a discount request it returns the 20% tier (AED 120 off → AED 480),
-    labels it ESTIMATED, and PERSISTS AED 480 as the draft's final total."""
-    repo = FakeOrdersRepo("conv-disc")
+async def test_negotiate_order_price_ladder_carpet_600(monkeypatch):
+    """Negotiation tool (negotiation-only model): a 30 sqm carpet estimate (AED 600,
+    high tier ≥100) haggled advances the ladder 15% → AED 510, then 25% → AED 450,
+    then — with the standard ladder spent and NO facility rate available — logs a
+    durable facility-quote request and marks the price PENDING (never an arbitrary
+    number), persisting each agreed total and never stacking."""
+    async def _create(task_type, **kw):
+        return {"task_ref": "FQ-1", "task_type": task_type}
+    from db.repositories import pending_tasks_repo
+    monkeypatch.setattr(pending_tasks_repo, "create", _create)
+
+    repo = FakeOrdersRepo("conv-neg")
     repo.row.update({
         "line_items": [{"item_code": "HOME_CARE_CARPET_REGULAR_SQM", "quantity": 1,
                         "measure": 30, "line_kind": "estimate"}],
@@ -163,27 +170,75 @@ async def test_calculate_applicable_order_discount_tool_carpet_600():
     })
     execute = make_booking_executor(_ctx(repo))
 
-    data, err = await _call(execute, "calculate_applicable_order_discount")
+    d1, err = await _call(execute, "negotiate_order_price")
     assert err is False
-    assert data["eligible"] is True
-    assert data["applied_discount_rule_code"] == "ORDER_OVER_200_DISCOUNT_REQUESTED"
-    assert data["applied_percentage"] == 20.0
-    assert data["pre_discount_total"] == 600.0
-    assert data["discount_amount"] == 120.0
-    assert data["final_total"] == 480.0
-    assert data["currency"] == "AED"
-    assert data["pricing_status"] == "ESTIMATED"
-    assert "480" in data["customer_safe_summary"] and "600" in data["customer_safe_summary"]
+    assert d1["action"] == "offer"
+    assert d1["offered_percentage"] == 15.0
+    assert d1["offered_price"] == 510.0
+    assert d1["pre_discount_total"] == 600.0
+    assert d1["pricing_status"] == "ESTIMATED"
+    assert repo.row["estimated_total"] == 510.0
+    assert repo.row["discount_rule_code"] == "NEGOTIATED"
 
-    # PERSISTED: the draft now stores AED 480 as the final total (not 600).
-    assert repo.row["discount_requested"] is True
-    assert repo.row["estimated_total"] == 480.0
-    assert repo.row["amount"] == 480.0
-    assert repo.row["discount_amount"] == 120.0
+    d2, _ = await _call(execute, "negotiate_order_price")
+    assert d2["action"] == "offer"
+    assert d2["offered_percentage"] == 25.0
+    assert d2["offered_price"] == 450.0
+    assert d2["is_best_price"] is False
+    assert repo.row["estimated_total"] == 450.0
 
-    # Idempotent: calling again does not stack — still 480.
-    data2, _ = await _call(execute, "calculate_applicable_order_discount")
-    assert data2["final_total"] == 480.0 and repo.row["estimated_total"] == 480.0
+    d3, _ = await _call(execute, "negotiate_order_price")
+    assert d3["action"] == "pending"      # ladder spent, no facility rate → quote request
+    assert d3["reference"] == "FQ-1"
+    assert repo.row["estimated_total"] == 450.0   # unchanged; no arbitrary further discount
+
+
+async def test_negotiate_order_price_reaches_facility_floor(monkeypatch):
+    """With a facility cost available, an itemised low-tier order (5 shirts, AED 45)
+    goes 10% → 40.50, 20% → 36.00, then the facility-floor (cost 20 → 36 − 0.75×16 =
+    AED 24.00) marked as the best price, then escalates below it."""
+    async def _cost(ctx, row, booking):
+        return 20.0
+    monkeypatch.setattr(booking_tools, "_facility_cost_for_order", _cost)
+
+    repo = FakeOrdersRepo("conv-floor")
+    repo.row.update({
+        "line_items": [{"item_code": "CLEAN_PRESS_SHIRT", "quantity": 5}],
+        "catalogue_category_code": "CLEAN_PRESS", "catalogue_category_name": "Clean & Press",
+        "estimated_total": 45.0, "amount": 45.0,
+    })
+    execute = make_booking_executor(_ctx(repo))
+
+    d1, _ = await _call(execute, "negotiate_order_price")
+    assert d1["offered_percentage"] == 10.0 and d1["offered_price"] == 40.5
+    d2, _ = await _call(execute, "negotiate_order_price")
+    assert d2["offered_percentage"] == 20.0 and d2["offered_price"] == 36.0
+
+    d3, _ = await _call(execute, "negotiate_order_price")
+    assert d3["action"] == "offer"
+    assert d3["offered_price"] == 24.0
+    assert d3["is_best_price"] is True
+    assert repo.row["discount_rule_code"] == "NEG_FLOOR"
+    assert repo.row["estimated_total"] == 24.0
+
+    d4, _ = await _call(execute, "negotiate_order_price")
+    assert d4["action"] == "escalate"     # below the floor → human
+
+
+async def test_get_order_summary_quotes_full_price_by_default():
+    """Negotiation-only: with no haggling, the summary shows the FULL baseline price
+    (no automatic discount)."""
+    repo = FakeOrdersRepo("conv-full")
+    repo.row.update({
+        "line_items": [{"item_code": "CLEAN_PRESS_SHIRT", "quantity": 5},
+                       {"item_code": "CLEAN_PRESS_TROUSERS", "quantity": 5}],
+        "catalogue_category_code": "CLEAN_PRESS", "catalogue_category_name": "Clean & Press",
+    })
+    execute = make_booking_executor(_ctx(repo))
+    data, err = await _call(execute, "get_order_summary")
+    assert err is False
+    assert data["discount_applied"] is False
+    assert data["final_price_aed"] == data["eligible_subtotal_aed"]   # full price, no discount
 
 
 async def test_claude_confirm_triggers_post_confirmation_effects(spy_post_confirm):

@@ -75,6 +75,20 @@ export const SECTIONS: Record<string, SectionDef> = {
     ],
   },
 
+  facilities: {
+    key: "facilities",
+    base: "/facilities",
+    eyebrow: "Partner cleaning network",
+    title: "Facilities",
+    description:
+      "Onboard and manage partner cleaning facilities — capacity, coverage, accepted services, operating hours, internal rates and compliance.",
+    cols: 2,
+    subsections: [
+      { slug: "directory", label: "Facilities Directory", icon: Factory, description: "All partner facilities — status, area, capacity, accepted services and quality score. Add, edit and manage rates.", kpis: [{ label: "Facilities", value: "—" }, { label: "Open", value: "—", tone: "success" }] },
+      { slug: "compliance", label: "Compliance Queue", icon: ShieldCheck, description: "Trade license, documents, agreement and onboarding checklist.", kpis: [{ label: "Open", value: "6", tone: "warning" }, { label: "Passed", value: "82%", tone: "success" }] },
+    ],
+  },
+
   sales: {
     key: "sales",
     base: "/sales",
@@ -106,7 +120,6 @@ export const SECTIONS: Record<string, SectionDef> = {
       { slug: "market-intelligence", label: "Market Intelligence", icon: MapIcon, description: "Opportunity score, demand/supply, competitors and targets.", kpis: [{ label: "Cities", value: "8" }, { label: "Priority", value: "5", tone: "danger" }] },
       { slug: "outreach", label: "Outreach Tracker", icon: Send, description: "Outreach sent, replies, meetings and follow-ups by region.", kpis: [{ label: "Active", value: "41" }, { label: "Replies", value: "87" }] },
       { slug: "meetings", label: "Meetings & Follow-ups", icon: CalendarClock, description: "Meeting schedule, next action and owner.", kpis: [{ label: "Upcoming", value: "5", tone: "plum" }] },
-      { slug: "compliance-queue", label: "Compliance Queue", icon: ShieldCheck, description: "Trade license, documents, agreement and onboarding checklist.", kpis: [{ label: "Open", value: "6", tone: "warning" }, { label: "Passed", value: "82%", tone: "success" }] },
       { slug: "regional-coverage", label: "Regional Coverage", icon: Globe2, description: "MENA, Asia, EU, Americas and GCC coverage.", kpis: [{ label: "Regions", value: "8/14" }] },
       { slug: "performance-preview", label: "Performance Preview", icon: Gauge, description: "Future partner performance once onboarded.", kpis: [{ label: "Onboarded", value: "2" }] },
     ],

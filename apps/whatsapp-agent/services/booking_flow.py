@@ -415,16 +415,21 @@ def _live_overrides() -> dict:
 def _pricing_updates(raw_lines: list[dict], category_code: str | None,
                      category_name: str | None,
                      price_overrides: dict[str, float] | None = None,
-                     *, discount_requested: bool = False) -> dict:
+                     *, discount_requested: bool = False,
+                     negotiated_final_total: float | None = None,
+                     market: str = "AE") -> dict:
     """Recompute the quote from raw lines and return the order-row PATCH (priced
     line snapshot + VAT columns + amount mirror). ``price_overrides`` (from
     ``services.price_resolver.published_overrides``, defaulting to the per-turn
     published prices set by ``advance``) makes the snapshot use the CURRENT
     published/promotional prices; absent → the static catalogue price.
-    ``discount_requested`` gates the 20%-over-200 discount tier."""
+    ``negotiated_final_total`` applies an agreed negotiated price (the §3 ladder /
+    facility-floor) as the customer's total; None → full baseline (negotiation-only
+    default)."""
     q = pricing.calculate_estimate(
         raw_lines, price_overrides=price_overrides if price_overrides is not None else _live_overrides(),
-        discount_requested=discount_requested)
+        discount_requested=discount_requested, negotiated_final_total=negotiated_final_total,
+        market=market)
     d = q.to_dict()
     return {
         "line_items": d["lines"],
@@ -448,7 +453,9 @@ def _pricing_updates(raw_lines: list[dict], category_code: str | None,
     }
 
 
-def pricing_updates_for_row(row: dict, *, discount_requested: bool | None = None) -> dict | None:
+def pricing_updates_for_row(row: dict, *, discount_requested: bool | None = None,
+                            negotiated_final_total: float | None = None,
+                            market: str = "AE") -> dict | None:
     """Re-price an order ROW from its stored ``line_items`` and return the
     order-row pricing PATCH, so a change to ``discount_requested`` (or a re-quote)
     is persisted as the new FINAL total — never leaving a stale pre-discount
@@ -469,7 +476,8 @@ def pricing_updates_for_row(row: dict, *, discount_requested: bool | None = None
     requested = row.get("discount_requested") if discount_requested is None else discount_requested
     return _pricing_updates(
         raw, row.get("catalogue_category_code"), row.get("catalogue_category_name"),
-        discount_requested=bool(requested))
+        discount_requested=bool(requested), negotiated_final_total=negotiated_final_total,
+        market=market)
 
 
 def _quote_for(booking: "Booking", price_overrides: dict[str, float] | None = None):

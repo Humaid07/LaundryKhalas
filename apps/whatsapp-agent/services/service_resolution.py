@@ -37,6 +37,7 @@ class ServiceKind(str, Enum):
     ALIAS = "alias"             # resolves via a category/item alias
     AMBIGUOUS = "ambiguous"     # laundry, but needs one clarification (iron)
     BESPOKE = "bespoke"         # specialty laundry needing a photo/quote
+    ROUTE = "route"             # route to a human specialist, never quote (spec §2.8)
     UNSUPPORTED = "unsupported"  # clearly NOT a Laundry Khalas service
     NONE = "none"               # empty / not service-related / unrecognisable
 
@@ -51,6 +52,7 @@ class ServiceResolution:
     category_code: str | None = None
     category_name: str | None = None
     reason: str = ""
+    routing_category: str | None = None   # set when kind is ROUTE (spec §2.8)
 
     @property
     def is_supported(self) -> bool:
@@ -136,7 +138,17 @@ def classify_service_request(
     if not raw and not selection_id:
         return ServiceResolution(ServiceKind.NONE, reason="empty")
 
-    # 1) Specialty / bespoke marker wins over a plain alias resolution.
+    # 1) Route-to-human categories (villa/home cleaning, wedding dress, luxury/
+    #    couture) win over BOTH the bespoke photo-flow and catalogue aliasing, so a
+    #    "wedding dress" is handed to a specialist (spec §2.8) rather than quoted as
+    #    Clean & Press. B2B is handled separately (services/b2b.py).
+    from services import specialty_routing
+    routed = specialty_routing.classify(low)
+    if routed:
+        return ServiceResolution(ServiceKind.ROUTE, reason=f"route:{routed.matched_term}",
+                                 routing_category=routed.category)
+
+    # 2) Specialty / bespoke marker wins over a plain alias resolution.
     sig = _contains_term(low, _BESPOKE_SIGNALS)
     if sig:
         return ServiceResolution(ServiceKind.BESPOKE, reason=f"bespoke_signal:{sig}")

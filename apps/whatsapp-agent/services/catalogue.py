@@ -52,7 +52,7 @@ def _raw() -> dict:
 def reload_catalogue() -> None:
     """Drop the cache (used by tests / after a seed edit). Defensive so it is
     safe to call even while a test has monkeypatched ``_raw``/``_index``."""
-    for fn in (_raw, _index):
+    for fn in (_raw, _index, _market_raw):
         clear = getattr(fn, "cache_clear", None)
         if clear:
             clear()
@@ -68,6 +68,47 @@ def vat_rate() -> float:
 
 def currency() -> str:
     return meta().get("currency", "AED")
+
+
+# --- Per-market price overlays (spec §8) ------------------------------------
+# The item structure (codes/units/types) is shared across markets; only the money
+# differs. A market file maps item_code -> {current_price, regular_price?} in that
+# market's currency. AE uses the base catalogue; other markets overlay their file.
+_MARKET_FILES = {"QA": "laundry_catalogue_qa.json"}
+
+
+@lru_cache(maxsize=None)
+def _market_raw(market: str) -> dict | None:
+    fname = _MARKET_FILES.get(market)
+    if not fname:
+        return None
+    path = _CONFIG_DIR / fname
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def has_market_pricing(market: str | None) -> bool:
+    """True when a non-AE market has its own configured price list."""
+    return market not in (None, "AE") and _market_raw(market) is not None
+
+
+def market_currency(market: str | None) -> str:
+    """Currency code for a market's prices (QAR for QA, else the base AED)."""
+    raw = _market_raw(market) if market else None
+    return raw.get("currency", currency()) if raw else currency()
+
+
+def market_prices(market: str | None) -> dict[str, float]:
+    """``{item_code: current_price}`` for a market's overlay, or ``{}`` for AE /
+    an unconfigured market. Items absent from this map have NO price in that market
+    and must be treated as priced-after-inspection (never quoted in AED)."""
+    raw = _market_raw(market) if market else None
+    if not raw:
+        return {}
+    return {code: float(v["current_price"])
+            for code, v in raw.get("prices", {}).items()
+            if v.get("current_price") is not None}
 
 
 def prices_include_vat() -> bool:

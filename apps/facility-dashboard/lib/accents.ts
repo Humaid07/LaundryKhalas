@@ -29,6 +29,7 @@ export type AccentName =
 /** First route segment → accent. "" (home) maps via the "home" key. */
 export const MODULE_ACCENT: Record<string, AccentName> = {
   home: "teal",
+  facilities: "indigo",
   orders: "sky",
   drivers: "violet",
   finance: "cyan",
