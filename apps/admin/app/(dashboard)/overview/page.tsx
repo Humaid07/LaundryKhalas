@@ -5,7 +5,7 @@ import { MessageSquarePlus, Download, ArrowUpRight, SearchX } from "lucide-react
 import { ResponsivePageHeader } from "@/components/dashboard/shell/PageHeader";
 import { StatGrid } from "@/components/dashboard/ui/StatCard";
 import { ChartCard } from "@/components/dashboard/ui/ChartCard";
-import { Panel, PanelHeader, StatusBadge } from "@/components/dashboard/ui/primitives";
+import { Panel, PanelHeader, StatusBadge, KpiBand } from "@/components/dashboard/ui/primitives";
 import { Button } from "@/components/dashboard/ui/Button";
 import { DataTable, type Column } from "@/components/dashboard/ui/DataTable";
 import { EmptyState, SnapshotBadge } from "@/components/dashboard/ui/states";
@@ -67,13 +67,11 @@ export default function OverviewPage() {
         }
       />
 
-      {/* KPI grid — headline totals are period snapshots (labelled when filters are active);
+      {/* KPI band — headline totals are period snapshots (labelled when filters are active);
           the lists/charts below (orders, conversations, by-channel, by-city) are filter-aware. */}
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">Headline totals</p>
-        <SnapshotBadge active={activeFilterCount(filters) > 0} />
-      </div>
-      <StatGrid stats={overviewKpis} className="mb-6" />
+      <KpiBand label="Headline totals" aside={<SnapshotBadge active={activeFilterCount(filters) > 0} />}>
+        <StatGrid stats={overviewKpis} />
+      </KpiBand>
 
       {/* Primary trend charts */}
       <div className="mb-6 grid gap-4 xl:grid-cols-3">

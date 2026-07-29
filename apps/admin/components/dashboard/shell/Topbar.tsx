@@ -1,10 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Bell, Menu, Search } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserMenu } from "./UserMenu";
+import { CommandPalette } from "./CommandPalette";
 
 export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Global ⌘K / Ctrl+K opens the command palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-canvas/85 px-4 backdrop-blur-md md:px-6">
       {/* Mobile hamburger */}
@@ -17,23 +33,26 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
         <Menu className="h-4 w-4" />
       </button>
 
-      {/* Search */}
-      <div className="relative hidden max-w-md flex-1 sm:block">
+      {/* Search → opens the command palette */}
+      <button
+        type="button"
+        onClick={() => setPaletteOpen(true)}
+        aria-label="Search and jump to a section"
+        aria-keyshortcuts="Meta+K Control+K"
+        className="relative hidden max-w-md flex-1 items-center gap-2 rounded-lg border border-border bg-surface pl-9 pr-2 text-left transition-colors hover:border-border-strong sm:flex"
+      >
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-        <input
-          type="search"
-          placeholder="Search orders, customers, conversations…"
-          className="h-9 w-full rounded-lg border border-border bg-surface pl-9 pr-16 text-sm text-ink placeholder:text-ink-faint transition-colors hover:border-border-strong focus:border-rose focus-visible:outline-none"
-        />
-        <kbd className="absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-surface-2 px-1.5 py-0.5 text-xxs font-medium text-ink-faint md:block">
+        <span className="h-9 flex-1 truncate py-2 text-sm text-ink-faint">Search orders, customers, conversations…</span>
+        <kbd className="hidden shrink-0 rounded border border-border bg-surface-2 px-1.5 py-0.5 text-xxs font-medium text-ink-faint md:block">
           ⌘K
         </kbd>
-      </div>
+      </button>
 
       <div className="flex flex-1 items-center justify-end gap-2 sm:flex-none">
         {/* Mobile search icon */}
         <button
           type="button"
+          onClick={() => setPaletteOpen(true)}
           aria-label="Search"
           className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted hover:text-ink sm:hidden"
         >
@@ -55,6 +74,8 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
         {/* Profile + sign out */}
         <UserMenu />
       </div>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </header>
   );
 }

@@ -184,7 +184,7 @@ export function PricingManagement() {
           />
           <p className="text-xxs text-ink-faint">
             {can("pricing.edit")
-              ? <>Click an item to edit it. Editing stages a <span className="font-semibold text-ink">draft</span> — live prices don't change until you publish.</>
+              ? <>Click an item to edit it. Editing stages a <span className="font-semibold text-ink">draft</span> — live prices don&apos;t change until you publish.</>
               : "You have read-only access to pricing."}
           </p>
         </>
@@ -315,7 +315,7 @@ function EditItemModal({ item, versionId, onClose, onSaved }: { item: PricingIte
     <Modal title={`Edit ${item.canonical_name}`} onClose={onClose}
       footer={<><Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button><Button variant="primary" size="sm" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save to draft"}</Button></>}>
       <div className="space-y-3">
-        <p className="text-xxs text-ink-faint">Staged in draft — live prices don't change until you publish.</p>
+        <p className="text-xxs text-ink-faint">Staged in draft — live prices don&apos;t change until you publish.</p>
         <label className="block text-xs"><span className="text-ink-muted">Base / original price (AED)</span><input className={input} type="number" step="0.01" value={current} onChange={(e) => setCurrent(e.target.valueAsNumber)} /></label>
         <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface-2 px-3 py-2 text-xs">
           <span className="text-ink-muted">Customer-facing price (final)</span>

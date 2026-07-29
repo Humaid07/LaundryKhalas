@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardList } from "lucide-react";
-import { FilterBar } from "@/components/dashboard/shell/FilterBar";
+import { FilterMenu, FilterChips } from "@/components/dashboard/shell/FilterMenu";
 import { useFilters } from "@/components/dashboard/shell/FiltersProvider";
 import { filterOrders, activeFilterCount } from "@/lib/dashboard/filters";
 import { orderStatusTone } from "@/lib/dashboard/status-maps";
@@ -88,12 +88,12 @@ export function CustomerOrders() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <WorkflowTabs tabs={tabs} value={tab} onChange={(id) => setTab(id as TabId)} />
-        <SnapshotBadge active={isFiltered} />
+        <div className="flex items-center gap-2">
+          <SnapshotBadge active={isFiltered} />
+          <FilterMenu />
+        </div>
       </div>
-
-      <div className="rounded-xl border border-border/70 bg-surface px-3 py-2.5">
-        <FilterBar />
-      </div>
+      <FilterChips />
 
       {rows.length === 0 ? (
         <EmptyState icon={ClipboardList} title="No orders in this view" description="No orders match this status and the active filters." />

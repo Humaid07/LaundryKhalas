@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   LifeBuoy, Ban, PhoneCall, Flame, Reply, MapPin, SearchX, Hand,
 } from "lucide-react";
-import { FilterBar } from "@/components/dashboard/shell/FilterBar";
+import { FilterMenu, FilterChips } from "@/components/dashboard/shell/FilterMenu";
 import { WhatsAppInbox } from "@/components/dashboard/whatsapp/WhatsAppInbox";
 import { orders, conversations, tickets } from "@/lib/dashboard/mock-data";
 import { customerFollowups, cancellations } from "@/lib/dashboard/operations-data";
@@ -127,14 +127,12 @@ export function CustomerFacing() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <WorkflowTabs tabs={tabs} value={tab} onChange={(id) => setTab(id as TabId)} />
-        <SnapshotBadge active={isFiltered} />
-      </div>
-
-      {tab !== "inbox" && (
-        <div className="rounded-xl border border-border/70 bg-surface px-3 py-2.5">
-          <FilterBar />
+        <div className="flex items-center gap-2">
+          <SnapshotBadge active={isFiltered} />
+          {tab !== "inbox" && <FilterMenu />}
         </div>
-      )}
+      </div>
+      {tab !== "inbox" && <FilterChips />}
 
       {tab === "inbox" ? (
         <WhatsAppInbox />

@@ -11,6 +11,7 @@ import { CHART } from "@/lib/dashboard/chart-theme";
 import { formatCurrency, formatRelativeTime } from "@/lib/dashboard/formatters";
 import { useFilters } from "@/components/dashboard/shell/FiltersProvider";
 import { applyGlobalFilters, activeFilterCount } from "@/lib/dashboard/filters";
+import { useAccentName } from "@/lib/dashboard/use-accent";
 import { financeKpis, revenueVsCost, profitTrend } from "@/lib/dashboard/mock-data";
 import {
   paymentRecords, invoices, paymentStatusTone, chargeStatusTone, invoiceStatusTone,
@@ -58,14 +59,15 @@ function FinancialOverviewSection() {
     value: k.value,
     tone: k.tone,
   }));
+  const accent = useAccentName();
   return (
     <div className="space-y-6">
       <MinimalKpiStrip kpis={kpis} />
       <div className="grid gap-6 lg:grid-cols-2">
-        <ChartCard title="Revenue vs cost" subtitle="AED · 6 months">
+        <ChartCard accent={accent} title="Revenue vs cost" subtitle="AED · 6 months">
           <GroupedBars data={revenueVsCost} series={[{ key: "Revenue", color: CHART.rose }, { key: "Cost", color: CHART.slate }]} height={240} />
         </ChartCard>
-        <ChartCard title="Profit trend" subtitle="AED · 6 months">
+        <ChartCard accent={accent} title="Profit trend" subtitle="AED · 6 months">
           <AreaTrend data={profitTrend} currency series={[{ key: "Profit", color: CHART.teal }]} height={240} />
         </ChartCard>
       </div>

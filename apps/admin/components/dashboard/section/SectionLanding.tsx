@@ -25,6 +25,7 @@ export function SectionLanding({ sectionKey, actions }: { sectionKey: string; ac
         description={section.description}
         actions={actions}
         showFilters={section.filterable !== false}
+        breadcrumb={[{ label: "Command Center", href: "/overview" }, { label: section.title }]}
       />
       <div className={cn("grid gap-4", colClass[section.cols ?? 3])}>
         {section.subsections.map((sub) => (

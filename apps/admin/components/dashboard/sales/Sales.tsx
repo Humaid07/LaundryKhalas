@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowUpRight, SearchX } from "lucide-react";
-import { StatGrid } from "@/components/dashboard/ui/StatCard";
+import { ArrowUpRight, SearchX, TrendingUp } from "lucide-react";
+import { StatCard, StatGrid, HeroStat } from "@/components/dashboard/ui/StatCard";
 import { ChartCard } from "@/components/dashboard/ui/ChartCard";
-import { Panel, PanelHeader, StatusBadge, DeltaChip } from "@/components/dashboard/ui/primitives";
+import { Panel, PanelHeader, StatusBadge, DeltaChip, KpiBand } from "@/components/dashboard/ui/primitives";
+import { useAccentName } from "@/lib/dashboard/use-accent";
 import { Button } from "@/components/dashboard/ui/Button";
 import { DataTable, type Column } from "@/components/dashboard/ui/DataTable";
 import { EmptyState, FilteredEmptyState, SnapshotBadge } from "@/components/dashboard/ui/states";
@@ -66,15 +67,24 @@ function SnapshotRow({ label }: { label: string }) {
 /* -------------------------------- Overview ---------------------------------- */
 
 function OverviewSection() {
+  const accent = useAccentName();
+  const { filters } = useFilters();
+  const [hero, ...rest] = salesKpis;
   return (
     <div className="space-y-6">
-      <SnapshotRow label="Sales snapshot" />
-      <StatGrid stats={salesKpis} cols="auto" />
+      <KpiBand label="Sales snapshot" aside={<SnapshotBadge active={activeFilterCount(filters) > 0} />}>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {hero && <HeroStat stat={hero} accent={accent} icon={TrendingUp} className="sm:col-span-2 sm:row-span-2" />}
+          {rest.map((s) => (
+            <StatCard key={s.label} stat={s} accent={accent} />
+          ))}
+        </div>
+      </KpiBand>
       <div className="grid gap-4 xl:grid-cols-3">
-        <ChartCard title="Customer acquisition" subtitle="New vs returning · 6 months" className="xl:col-span-2">
+        <ChartCard accent={accent} title="Customer acquisition" subtitle="New vs returning · 6 months" className="xl:col-span-2">
           <AreaTrend data={acquisitionTrend} stacked series={[{ key: "Returning", color: CHART.plum }, { key: "New", color: CHART.rose }]} />
         </ChartCard>
-        <ChartCard title="B2B vs B2C" subtitle="Revenue split">
+        <ChartCard accent={accent} title="B2B vs B2C" subtitle="Revenue split">
           <DonutChart data={b2bVsB2c} colors={[CHART.teal, CHART.rose]} centerValue="AED 612K" centerLabel="Total" />
         </ChartCard>
       </div>

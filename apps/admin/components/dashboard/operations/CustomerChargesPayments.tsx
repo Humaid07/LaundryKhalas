@@ -19,7 +19,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { StatGrid } from "@/components/dashboard/ui/StatCard";
-import { FilterBar } from "@/components/dashboard/shell/FilterBar";
+import { FilterMenu, FilterChips } from "@/components/dashboard/shell/FilterMenu";
 import { Tabs, type TabDef } from "@/components/dashboard/ui/Tabs";
 import { Panel, PanelHeader, StatusBadge } from "@/components/dashboard/ui/primitives";
 import { Button } from "@/components/dashboard/ui/Button";
@@ -257,12 +257,13 @@ export function CustomerChargesPayments() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">Payments snapshot</p>
-        <SnapshotBadge active={isFiltered} />
+        <div className="flex items-center gap-2">
+          <SnapshotBadge active={isFiltered} />
+          <FilterMenu />
+        </div>
       </div>
       <StatGrid stats={paymentKpis} cols="4" />
-      <div className="rounded-xl border border-border bg-surface px-3 py-2.5 shadow-card">
-        <FilterBar />
-      </div>
+      <FilterChips />
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="min-w-0 xl:col-span-2">
           <Tabs tabs={tabs} />

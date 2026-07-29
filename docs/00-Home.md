@@ -22,6 +22,27 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — ERP Dashboard Redesign (staged, `apps/admin`, 2026-07-29)
+
+Staged UI/design-system evolution of the internal admin dashboard into a **modern ERP
+operations cockpit** — one phase at a time, stop for review between phases.
+- **Phase 0 (audit + proposal):** `build-reports/2026-07-29-erp-dashboard-phase-0-audit-proposal.md`
+  — extended tokens, elevation scale, card-variant catalog, module-accent **families**
+  (rose/teal/amber/violet/slate), filter/nav declutter plan. Decisions locked.
+- **Phase 1 (tokens + shell):** `build-reports/2026-07-29-erp-dashboard-phase-1-tokens-shell.md`
+  — layered surfaces + stronger borders, `lib/dashboard/accents.ts` (single source of
+  truth), module-accent shell (sidebar/header/sub-nav/cards), page grammar (breadcrumb →
+  header → KPI band), consolidated **Filters popover** + active chips, and a **⌘K command
+  palette**.
+- **Phases 2–4 (kit + rollout + polish):** `build-reports/2026-07-29-erp-dashboard-phase-2-4-kit-rollout-polish.md`
+  — **Hero KPI** variant + `accent` prop across the kit (`StatCard`/`Panel`/`ChartCard`),
+  `use-accent.ts` hook, **component catalog** (`architecture/erp-dashboard-component-catalog.md`);
+  unified filters (5 Operations components → `FilterMenu`), flagship Hero+accent on Sales
+  Overview, accented Finance charts; removed dead `FilterBar`. **Redesign complete.**
+- **Status:** All gates green in light + dark (`tsc` 0, `lint` 0 errors, `build` exit 0,
+  Playwright no console errors). On `main`, **not committed**. See
+  [[minimal-dashboard-design-system]] and [[erp-dashboard-component-catalog]].
+
 ## Latest — Order-state trigger + RLS hardening (migration 000029, 2026-07-28)
 
 Closed the "Week 2" DB gaps: a **DB-level order-state trigger**

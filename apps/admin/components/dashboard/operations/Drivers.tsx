@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PackageOpen, PackageCheck, AlertTriangle, MapPin, Star, SearchX } from "lucide-react";
-import { FilterBar } from "@/components/dashboard/shell/FilterBar";
+import { FilterMenu, FilterChips } from "@/components/dashboard/shell/FilterMenu";
 import { useFilters } from "@/components/dashboard/shell/FiltersProvider";
 import { filterDrivers, filterByArea, applyGlobalFilters, activeFilterCount } from "@/lib/dashboard/filters";
 import { priorityTone } from "@/lib/dashboard/status-maps";
@@ -99,12 +99,12 @@ export function Drivers() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <WorkflowTabs tabs={tabs} value={tab} onChange={(id) => setTab(id as TabId)} />
-        <SnapshotBadge active={isFiltered} />
+        <div className="flex items-center gap-2">
+          <SnapshotBadge active={isFiltered} />
+          <FilterMenu />
+        </div>
       </div>
-
-      <div className="rounded-xl border border-border/70 bg-surface px-3 py-2.5">
-        <FilterBar />
-      </div>
+      <FilterChips />
 
       {tab === "overview" ? (
         fDrivers.length === 0 ? (

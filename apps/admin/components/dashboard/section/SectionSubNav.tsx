@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { SECTIONS } from "@/lib/dashboard/sections";
+import { accentClasses, accentForHref } from "@/lib/dashboard/accents";
 import { cn } from "@/lib/utils";
 
 /**
@@ -16,6 +17,7 @@ export function SectionSubNav({ sectionKey }: { sectionKey: string }) {
   const pathname = usePathname();
   const section = SECTIONS[sectionKey];
   if (!section) return null;
+  const accent = accentClasses(accentForHref(section.base));
   const active = section.subsections.find((s) => pathname.startsWith(`${section.base}/${s.slug}`));
 
   return (
@@ -41,7 +43,7 @@ export function SectionSubNav({ sectionKey }: { sectionKey: string }) {
                 aria-current={on ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-semibold transition-all duration-200",
-                  on ? "bg-surface text-rose shadow-card" : "text-ink-muted hover:text-ink",
+                  on ? cn("bg-surface shadow-card", accent.text) : "text-ink-muted hover:text-ink",
                 )}
               >
                 <Icon className="h-4 w-4" />

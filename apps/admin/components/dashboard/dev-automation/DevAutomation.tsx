@@ -48,7 +48,7 @@ import {
  * record actions live here — the primary records (agents, jobs) click through to
  * a full detail page where all actions live behind an ActionMenu. Non-primary
  * views are consistent read-only previews. Global filters are preserved via
- * applyGlobalFilters; the SubsectionShell renders the header + FilterBar.
+ * applyGlobalFilters; the SubsectionShell renders the header + FilterMenu.
  * ========================================================================== */
 
 const fmtTime = (iso: string) => (iso === "—" ? "—" : formatRelativeTime(iso));

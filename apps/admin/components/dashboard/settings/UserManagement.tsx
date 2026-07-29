@@ -215,7 +215,7 @@ export function ProfileTeamPanel() {
           <div className="flex items-center gap-2 py-6 text-sm text-ink-muted"><Loader2 className="h-4 w-4 animate-spin text-rose" />Loading users…</div>
         )}
         {state.kind === "unavailable" && (
-          <Notice>User management is available when the backend runs with authentication enabled (<code className="font-mono text-xxs">REQUIRE_AUTH=true</code>) and <code className="font-mono text-xxs">DATABASE_MODE=supabase</code>. In local dev you're signed in as a synthetic admin, so there are no stored accounts to manage yet.</Notice>
+          <Notice>User management is available when the backend runs with authentication enabled (<code className="font-mono text-xxs">REQUIRE_AUTH=true</code>) and <code className="font-mono text-xxs">DATABASE_MODE=supabase</code>. In local dev you&apos;re signed in as a synthetic admin, so there are no stored accounts to manage yet.</Notice>
         )}
         {state.kind === "error" && <p className="py-4 text-sm text-danger">{state.message}</p>}
         {state.kind === "ready" && (

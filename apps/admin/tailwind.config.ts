@@ -15,10 +15,25 @@ const config: Config = {
           DEFAULT: token("surface"),
           2: token("surface-2"),
           raised: token("surface-raised"),
+          sunken: token("surface-sunken"),
         },
         border: {
           DEFAULT: token("border"),
           strong: token("border-strong"),
+        },
+        // Module-accent family tokens (see globals.css / lib/dashboard/accents.ts).
+        // rose lives in its own object above; these four are the wayfinding accents.
+        accent: {
+          teal: token("accent-teal"),
+          amber: token("accent-amber"),
+          violet: token("accent-violet"),
+          slate: token("accent-slate"),
+          sky: token("accent-sky"),
+          indigo: token("accent-indigo"),
+          fuchsia: token("accent-fuchsia"),
+          cyan: token("accent-cyan"),
+          steel: token("accent-steel"),
+          plum: token("accent-plum"),
         },
         ink: {
           DEFAULT: token("ink"),
