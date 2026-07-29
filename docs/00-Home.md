@@ -73,6 +73,16 @@ at a time, stop for review between stages.
   Apply migration 000031 before live use. (Command centre still to feed facility rates; optional QA
   specialty price list.)
 
+## Latest — Dev & Automation → Webpages (scaffold, 2026-07-29)
+
+Mock-safe **Webpages** subsection under **Dev & Automation** (`/dev-automation/webpages`) —
+scaffolding for a future workflow where locally-created website pages are pulled in via an
+approved API for SEO review. Four cards (Page Intake Overview KPIs, development-placeholder
+intake table, Future API Pull Status = *Not connected*, SEO Handoff) + a **Local Webpage SEO
+Queue** card on SEO Agents (Local Page E-E-A-T Optimisation, *Pending integration*, links to
+Webpages). **No API/scraper/sync/external-machine integration** — all deferred. tsc + lint +
+build green. Report: `build-reports/2026-07-29-webpages-section.md`.
+
 ## Latest — Facilities Management module (2026-07-29)
 
 End-to-end **Facilities Management** across the internal dashboard (:3000), partner portal

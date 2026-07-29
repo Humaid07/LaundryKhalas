@@ -11,6 +11,7 @@ import {
 import { useFilters } from "@/components/dashboard/shell/FiltersProvider";
 import { applyGlobalFilters, activeFilterCount } from "@/lib/dashboard/filters";
 import { formatCurrency, formatRelativeTime } from "@/lib/dashboard/formatters";
+import { WebpagesTab } from "./Webpages";
 import {
   agentHealth,
   agentStatusToneD,
@@ -555,6 +556,7 @@ export function DevSubsection({ slug }: { slug: string }) {
     case "deployments": return <DeploymentsTab />;
     case "integration-status": return <IntegrationsTab />;
     case "logs-audit": return <LogsTab />;
+    case "webpages": return <WebpagesTab />;
     default: return <OverviewSection />;
   }
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
-  Sparkles, Bot, SearchX, FileText, TrendingUp, TrendingDown, Minus, MapPin,
+  Sparkles, Bot, SearchX, FileText, TrendingUp, TrendingDown, Minus, MapPin, Globe2, ArrowRight,
 } from "lucide-react";
 import { seoAgentApi, type SeoAgentHealthDTO } from "@/lib/dashboard/seo-agent-api";
 import { formatRelativeTime } from "@/lib/dashboard/formatters";
@@ -21,7 +22,8 @@ import {
 } from "@/lib/dashboard/seo-data";
 import {
   MinimalKpiStrip, WorkflowTabs, CompactRecordCard, RecordList, DataPreviewTable,
-  StatusBadge, EmptyState, SnapshotBadge, type MinimalKpi, type WorkflowTab, type PreviewColumn,
+  StatusBadge, EmptyState, SnapshotBadge, DetailSectionCard,
+  type MinimalKpi, type WorkflowTab, type PreviewColumn,
 } from "@/components/dashboard/minimal";
 import type { Tone } from "@/lib/dashboard/types";
 import { cn } from "@/lib/utils";
@@ -108,6 +110,46 @@ const toneBg: Record<Tone, string> = {
 const needsAttention = (a: SeoAgent) =>
   a.approvalRequired || a.status === "Needs Review" || a.status === "Awaiting Approval";
 
+/**
+ * Local Webpage SEO Queue — a mock-safe placeholder notification for the future
+ * "Webpages" intake workflow (Dev & Automation → Webpages). No real task is
+ * created and no agent runs; this only surfaces the planned handoff and links to
+ * the intake page. Real intake + notifications are deferred.
+ */
+function LocalWebpageSeoQueue() {
+  return (
+    <DetailSectionCard
+      title="Local Webpage SEO Queue"
+      icon={Globe2}
+      action={<StatusBadge tone="info">Pending integration</StatusBadge>}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium text-ink">Local Page E-E-A-T Optimisation</p>
+            <StatusBadge tone="warning" dot={false}>Medium</StatusBadge>
+          </div>
+          <p className="mt-1 max-w-xl text-xs text-ink-muted">
+            New locally created webpages will appear here for SEO review. The SEO team should optimise
+            local E-E-A-T sections once page intake is connected.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xxs text-ink-faint">
+            <span>Owner: SEO Team</span>
+            <span aria-hidden>·</span>
+            <span>0 pages awaiting review</span>
+          </div>
+        </div>
+        <Link
+          href="/dev-automation/webpages"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-accent-indigo/30 px-3 py-1.5 text-xs font-medium text-accent-indigo transition-colors hover:bg-accent-indigo/10"
+        >
+          View Webpages <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+    </DetailSectionCard>
+  );
+}
+
 function OverviewSection() {
   const kpis = toMinimalKpis(useSeoLive(seoAgentApi.getOverviewKpis, seoKpis));
   const attention = seoAgents.filter(needsAttention);
@@ -115,6 +157,7 @@ function OverviewSection() {
     <div className="space-y-6">
       <MinimalKpiStrip kpis={kpis} />
       <BriefCard />
+      <LocalWebpageSeoQueue />
       <div className="space-y-3">
         <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">Agents needing attention</p>
         {attention.length === 0 ? (

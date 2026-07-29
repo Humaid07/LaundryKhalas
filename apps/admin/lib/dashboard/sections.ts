@@ -204,6 +204,7 @@ export const SECTIONS: Record<string, SectionDef> = {
       { slug: "deployments", label: "Deployments", icon: Rocket, description: "App, environment, version, last deploy and status.", kpis: [{ label: "Apps", value: "3" }] },
       { slug: "integration-status", label: "Integration Status", icon: Plug, description: "WhatsApp, Stripe, GSC, GA4, Cloudflare, PostgreSQL, Redis.", kpis: [{ label: "Integrations", value: "18" }] },
       { slug: "logs-audit", label: "Logs & Audit", icon: ScrollText, description: "Safe logs — event, module, severity and trace ID.", status: { label: "No secrets", tone: "success" } },
+      { slug: "webpages", label: "Webpages", icon: Globe2, description: "Locally created website pages, pulled in for SEO review.", status: { label: "Pending integration", tone: "info" }, kpis: [{ label: "Pulled", value: "0" }, { label: "For SEO", value: "0" }] },
     ],
   },
 
