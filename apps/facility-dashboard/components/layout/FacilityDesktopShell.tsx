@@ -6,86 +6,70 @@ import { AlertCircle, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { roleLabel } from "@/lib/roles";
-import { NAV_ITEMS, isActive } from "./nav-items";
+import { accentClasses, accentForHref } from "@/lib/accents";
+import { NAV_ITEMS, isActive, type NavItem } from "./nav-items";
 import { useUnreadCount } from "@/lib/use-notifications";
 import { BrandWordmark } from "@/components/shell/Brand";
 
+const ISSUES_ITEM: NavItem = { href: "/issues", label: "Issues", icon: AlertCircle, match: ["/issues"] };
+
+/** One sidebar row — fixed grid (icon · label · badge), per-section accent. */
+function SidebarLink({ item, badge }: { item: NavItem; badge?: number }) {
+  const pathname = usePathname();
+  const on = isActive(pathname, item);
+  const accent = accentClasses(accentForHref(item.href));
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      aria-current={on ? "page" : undefined}
+      title={item.label}
+      className={cn(
+        "group relative grid h-11 grid-cols-[24px_1fr_auto] items-center gap-2.5 rounded-xl px-3 text-sm font-medium transition-colors duration-200",
+        on ? cn(accent.softBg, accent.text) : cn("text-ink-muted", accent.hoverBg, "hover:text-ink"),
+      )}
+    >
+      {on && <span className={cn("absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full", accent.rail)} />}
+      <Icon className={cn("h-[18px] w-[18px] justify-self-center transition-all duration-200", accent.text, on ? "opacity-100" : "opacity-60 group-hover:opacity-100")} />
+      <span className="min-w-0 truncate">{item.label}</span>
+      <span className="flex justify-end">
+        {typeof badge === "number" && badge > 0 && (
+          <span className={cn("grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-xxs font-bold tnum", on ? cn(accent.strongBg, accent.text) : "bg-rose text-rose-contrast")}>
+            {badge > 9 ? "9+" : badge}
+          </span>
+        )}
+      </span>
+    </Link>
+  );
+}
+
 /**
- * FacilityDesktopShell — a simple, quiet left sidebar for md+ screens. Mobile
- * uses the bottom nav instead (this sidebar is hidden under md).
+ * FacilityDesktopShell — quiet left sidebar for md+ screens (mobile uses the
+ * bottom nav). Every row is a fixed grid with a persistent per-section accent.
  */
 export function FacilityDesktopShell() {
-  const pathname = usePathname();
   const { user, logout } = useAuth();
   const unread = useUnreadCount();
   const settingsItem = NAV_ITEMS.find((item) => item.href === "/settings");
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface md:flex">
+    <aside className="hidden w-60 shrink-0 flex-col overflow-x-hidden border-r border-border bg-surface md:flex">
       <div className="px-5 py-5">
         <BrandWordmark />
       </div>
 
-      <nav className="flex-1 px-3">
+      <nav className="flex-1 overflow-x-hidden px-3">
         <ul className="space-y-1">
-          {/* Primary destinations (Settings is pulled out below so it sits
-              after the Issues link). */}
-          {NAV_ITEMS.filter((item) => item.href !== "/settings").map((item) => {
-            const on = isActive(pathname, item);
-            const showBadge = item.href === "/orders" && unread > 0;
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  aria-current={on ? "page" : undefined}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                    on
-                      ? "bg-rose/10 text-rose"
-                      : "text-ink-muted hover:bg-surface-2 hover:text-ink",
-                  )}
-                >
-                  <item.icon className={cn("h-[1.15rem] w-[1.15rem]", on && "stroke-[2.2]")} />
-                  <span className="flex-1">{item.label}</span>
-                  {showBadge && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose px-1.5 text-xxs font-bold text-rose-contrast">
-                      {unread > 9 ? "9+" : unread}
-                    </span>
-                  )}
-                </Link>
-              </li>
-            );
-          })}
+          {NAV_ITEMS.filter((item) => item.href !== "/settings").map((item) => (
+            <li key={item.href}>
+              <SidebarLink item={item} badge={item.href === "/orders" ? unread : undefined} />
+            </li>
+          ))}
         </ul>
 
         <div className="mt-2 space-y-1 border-t border-border/60 pt-2">
-          <Link
-            href="/issues"
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-              isActive(pathname, { href: "/issues", label: "Issues", icon: AlertCircle, match: ["/issues"] })
-                ? "bg-rose/10 text-rose"
-                : "text-ink-muted hover:bg-surface-2 hover:text-ink",
-            )}
-          >
-            <AlertCircle className="h-[1.15rem] w-[1.15rem]" />
-            <span className="flex-1">Issues</span>
-          </Link>
-          {settingsItem && (
-            <Link
-              href={settingsItem.href}
-              aria-current={isActive(pathname, settingsItem) ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive(pathname, settingsItem)
-                  ? "bg-rose/10 text-rose"
-                  : "text-ink-muted hover:bg-surface-2 hover:text-ink",
-              )}
-            >
-              <settingsItem.icon className="h-[1.15rem] w-[1.15rem]" />
-              <span className="flex-1">{settingsItem.label}</span>
-            </Link>
-          )}
+          <SidebarLink item={ISSUES_ITEM} />
+          {settingsItem && <SidebarLink item={settingsItem} />}
         </div>
       </nav>
 

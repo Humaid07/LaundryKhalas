@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { accentClasses, accentForHref } from "@/lib/accents";
 import { NAV_ITEMS, isActive, type NavItem } from "./nav-items";
 import { useUnreadCount } from "@/lib/use-notifications";
 
@@ -40,6 +41,7 @@ export function FacilityBottomNav() {
       <ul className="mx-auto grid max-w-lg grid-cols-5">
         {BOTTOM_ITEMS.map((item) => {
           const on = isActive(pathname, item);
+          const accent = accentClasses(accentForHref(item.href));
           const showBadge = item.href === "/orders" && unread > 0;
           return (
             <li key={item.href}>
@@ -47,10 +49,12 @@ export function FacilityBottomNav() {
                 href={item.href}
                 aria-current={on ? "page" : undefined}
                 className={cn(
-                  "relative flex min-h-[56px] flex-col items-center justify-center gap-1 py-2 text-xxs font-semibold transition-colors",
-                  on ? "text-rose" : "text-ink-faint hover:text-ink",
+                  "relative flex min-h-[56px] flex-col items-center justify-center gap-1 py-2 text-xxs font-semibold transition-colors duration-200",
+                  on ? accent.text : "text-ink-faint hover:text-ink",
                 )}
               >
+                {/* active section indicator */}
+                {on && <span className={cn("absolute inset-x-5 top-0 h-0.5 rounded-full", accent.rail)} />}
                 <span className="relative">
                   <item.icon className={cn("h-6 w-6", on && "stroke-[2.2]")} />
                   {showBadge && (

@@ -15,10 +15,24 @@ const config: Config = {
           DEFAULT: token("surface"),
           2: token("surface-2"),
           raised: token("surface-raised"),
+          sunken: token("surface-sunken"),
         },
         border: {
           DEFAULT: token("border"),
           strong: token("border-strong"),
+        },
+        // Section-accent tokens (see lib/accents.ts).
+        accent: {
+          teal: token("accent-teal"),
+          amber: token("accent-amber"),
+          violet: token("accent-violet"),
+          slate: token("accent-slate"),
+          sky: token("accent-sky"),
+          indigo: token("accent-indigo"),
+          fuchsia: token("accent-fuchsia"),
+          cyan: token("accent-cyan"),
+          steel: token("accent-steel"),
+          plum: token("accent-plum"),
         },
         ink: {
           DEFAULT: token("ink"),
