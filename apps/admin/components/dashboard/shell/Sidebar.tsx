@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -59,10 +59,15 @@ function ChildRow({ child, onNavigate }: { child: NavChild; onNavigate?: () => v
 function ParentRow({
   item,
   collapsed,
+  expanded: expandedProp,
+  onToggle,
   onNavigate,
 }: {
   item: NavItem;
   collapsed: boolean;
+  /** Accordion state from the Sidebar — only one section is open at a time. */
+  expanded: boolean;
+  onToggle: () => void;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -75,9 +80,7 @@ function ParentRow({
   // Filled (accent background) on the section's own landing route; when a child
   // route is active the parent keeps accent text but the child gets the fill.
   const filled = exact;
-
-  const [open, setOpen] = useState<boolean | null>(null);
-  const expanded = hasChildren && (open ?? (active || !!item.defaultOpen));
+  const expanded = hasChildren && expandedProp;
 
   /* Collapsed rail: icon-only, centered, tooltip via title. */
   if (collapsed) {
@@ -99,7 +102,6 @@ function ParentRow({
   }
 
   const submenuId = `submenu-${item.href.replace(/\W+/g, "-").replace(/^-|-$/g, "")}`;
-  const toggle = () => setOpen((o) => !(o ?? (active || !!item.defaultOpen)));
 
   // Shared row grammar (icon · label · badge · chevron) + the active/hover styling,
   // identical whether the row is a toggle button (has children) or a link (no children).
@@ -150,7 +152,7 @@ function ParentRow({
         // "Overview" child.)
         <button
           type="button"
-          onClick={toggle}
+          onClick={onToggle}
           title={item.label}
           aria-expanded={expanded}
           aria-controls={submenuId}
@@ -194,9 +196,21 @@ export function Sidebar({
   onNavigate?: () => void;
 }) {
   const { role } = useAuth();
+  const pathname = usePathname();
   // Show only the sections this role may open — same rule as the route guard so
   // the sidebar and guard can never drift apart.
   const items = role ? NAV_ITEMS.filter((item) => isRouteAllowed(role, item.href)) : NAV_ITEMS;
+
+  // Accordion: exactly ONE section open at a time. Defaults to the section that
+  // contains the current route; opening another collapses the previous one.
+  const activeHref = items.find((i) => inSection(pathname, i.href))?.href ?? null;
+  const [openHref, setOpenHref] = useState<string | null>(activeHref);
+  // Navigating into a section opens it (and collapses the others). A manual
+  // collapse within the same route persists because activeHref hasn't changed.
+  useEffect(() => {
+    if (activeHref) setOpenHref(activeHref);
+  }, [activeHref]);
+  const handleToggle = (href: string) => setOpenHref((cur) => (cur === href ? null : href));
 
   return (
     <div className="flex h-full flex-col overflow-x-hidden bg-surface">
@@ -211,7 +225,14 @@ export function Sidebar({
           <p className="px-2 pb-2 text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">Command Center</p>
         )}
         {items.map((item) => (
-          <ParentRow key={item.href} item={item} collapsed={collapsed} onNavigate={onNavigate} />
+          <ParentRow
+            key={item.href}
+            item={item}
+            collapsed={collapsed}
+            expanded={openHref === item.href}
+            onToggle={() => handleToggle(item.href)}
+            onNavigate={onNavigate}
+          />
         ))}
       </nav>
 

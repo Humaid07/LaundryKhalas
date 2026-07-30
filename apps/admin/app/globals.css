@@ -202,6 +202,29 @@ body {
   transform-origin: top;
 }
 
+/* Tuned interactive card hover — a soft elevation "glow" + firmer border on
+ * hover. Pure CSS (no JS), theme-aware (dark uses a black shadow, matching the
+ * house shadow style), and it obscures NO content. Sets only box-shadow +
+ * border-color, so it composes cleanly with an existing hover lift
+ * (e.g. hover:-translate-y-0.5). Applied to interactive/entity cards across the
+ * dashboard (StatCard, CompactRecordCard, Panel, …); the section landing cards
+ * additionally get the pointer-tracked spotlight (SpotlightCard). */
+.lk-hover-glow {
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lk-hover-glow:hover {
+  /* A real, theme-visible glow: a brand-rose ring + a spreading halo (no offset,
+     so it reads as a glow on the DARK theme too, where a plain shadow is invisible)
+     plus a soft depth shadow. Brand rose is the design system's interaction signal. */
+  border-color: rgb(var(--rose) / 0.45);
+  box-shadow:
+    0 0 0 1px rgb(var(--rose) / 0.30),
+    0 0 22px -2px rgb(var(--rose) / 0.28),
+    0 14px 30px -14px rgb(var(--shadow-color) / 0.40);
+}
+
 /* Sidebar long-label hover-scroll (see components/dashboard/shell/NavLabel.tsx).
  * Only overflowing labels get `.lk-navlabel`; the enclosing row carries
  * `.lk-navrow` and is the focusable element, so hover + keyboard focus both

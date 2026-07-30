@@ -22,7 +22,7 @@ export function Panel({
   return (
     <section
       className={cn(
-        "rounded-2xl border border-border bg-surface shadow-card",
+        "lk-hover-glow rounded-2xl border border-border bg-surface shadow-card",
         a && "relative overflow-hidden",
         padded && "p-5",
         className,

@@ -39,7 +39,7 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-surface p-4 shadow-card transition-all duration-300 ease-out-quint hover:-translate-y-0.5 hover:border-border-strong hover:shadow-raised",
+        "lk-hover-glow group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-surface p-4 shadow-card transition-all duration-300 ease-out-quint hover:-translate-y-0.5 hover:border-border-strong",
         className,
       )}
     >
@@ -94,7 +94,7 @@ export function HeroStat({
   return (
     <div
       className={cn(
-        "relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border-strong bg-surface p-5 shadow-raised",
+        "lk-hover-glow relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border-strong bg-surface p-5 shadow-raised",
         className,
       )}
     >

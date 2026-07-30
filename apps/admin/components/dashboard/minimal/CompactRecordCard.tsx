@@ -74,7 +74,7 @@ export function CompactRecordCard({
 
   const base = "flex w-full items-stretch gap-4 rounded-2xl border border-border/70 bg-surface p-5 text-left shadow-card";
   const cls = interactive
-    ? `group ${base} transition-all duration-200 ease-out-quint hover:-translate-y-0.5 hover:border-border-strong hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40`
+    ? `lk-hover-glow group ${base} transition-all duration-200 ease-out-quint hover:-translate-y-0.5 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40`
     : base;
 
   if (href) {
