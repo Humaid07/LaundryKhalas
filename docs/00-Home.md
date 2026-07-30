@@ -22,7 +22,37 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
-## Latest — Facility Order Photos (intake + pre-dispatch, 2026-07-30)
+## Latest — Cloudflare R2 media storage (2026-07-30)
+
+Actual media **files** now live in **Cloudflare R2** (a private, S3-compatible
+bucket) while Supabase/Postgres stays the source of truth (metadata only). Only the
+FastAPI backend holds R2 credentials; the dashboards upload/view **through FastAPI**
+via short-lived **signed URLs**. Built as **one unified system** by extending the
+existing facility `order_photos` feature in place (owner decision: reconcile, don't
+duplicate) — new generic storage service `services/media_storage.py` (R2 + local
+fallback, fail-safe when unconfigured), generic media columns on `order_photos`
+(migration 000034), **PII-safe object keys** `orders/{market}/{ref}/{stage}/{uuid}`,
+a signed `…/photos/{id}/view-url` route, checksum + audit, and a low-churn
+facility-dashboard api-client method. Default provider stays `local` (mock-first).
+See [[media-storage-r2]], [[r2-media-storage-test-script]], and the build report
+`build-reports/2026-07-30-cloudflare-r2-media-storage.md`. Gates: backend 1130
+passed / 1 pre-existing unrelated fail (30/30 in the photo file, +15 new R2 tests);
+facility dashboard typecheck + lint + build green. Extends
+[[project_2026-07-30_facility-order-photos]].
+
+## Earlier — Inbox filter pills → compact Filter button + popover (2026-07-30)
+
+The Operations → Customer Facing inbox no longer shows all five filters as a permanent
+pill wall above the chat list. They now live behind **one compact Filter button** beside
+"Search chats" that opens a grouped **popover** — **Attention** (Human Needed / Urgent,
+multi-select checkboxes) and **Order status** (Active Orders / Resolved, radios) — with
+live counts, a one-row active-filter summary chip, an empty state, and **URL-persisted**
+filter state (`?human_needed=true&urgent=true&order_status=active`). Search + filters
+combine (AND); the selected chat safely deselects if a filter hides it. See
+[[2026-07-30-inbox-filter-popover]]. Gates: typecheck + lint clean; Playwright verified
+(desktop, dark, mobile).
+
+## Earlier — Facility Order Photos (intake + pre-dispatch, 2026-07-30)
 
 Laundry partners can now attach **garment/item proof photos** to an order at two stages —
 **intake** (received at facility) and **pre-dispatch** (before handoff) — for proof, QC,

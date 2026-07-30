@@ -78,6 +78,9 @@ async def upload_order_photos(
             facility_id=fid,
             stage=stage,
             files=incoming,
+            # PII-safe object key parts: market code + business order reference.
+            market_code=row.get("market"),
+            order_ref=row.get("order_id"),
             actor_id=(principal or {}).get("id"),
             actor_name=_actor(principal),
         )
@@ -100,6 +103,25 @@ async def delete_order_photo(
     if removed is None:
         raise HTTPException(status_code=404, detail="Photo not found for this facility.")
     return {"deleted": True, "id": removed["id"]}
+
+
+@router.get("/orders/{order_id}/photos/{photo_id}/view-url")
+async def order_photo_view_url(
+    order_id: str,
+    photo_id: str,
+    principal: dict = Depends(deps.require_facility_scope),
+):
+    """A SHORT-LIVED signed view URL, minted ONLY after the facility-scoped
+    ownership check. For R2 it points directly at the private bucket; for local
+    storage ``url`` is null and the client uses the Bearer content proxy."""
+    if not database.is_supabase_mode():
+        raise HTTPException(status_code=404, detail="Photo not found.")
+    fid = _fid(principal)
+    await _resolve_order(fid, order_id)
+    result = await photo_svc.signed_view_url(photo_id, fid)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Photo not found for this facility.")
+    return result
 
 
 @router.get("/orders/{order_id}/photos/{photo_id}/content")

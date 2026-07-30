@@ -258,6 +258,71 @@ class Settings(BaseSettings):
     def facility_order_photo_allowed_types_set(self) -> set[str]:
         return {t.strip().lower() for t in self.facility_order_photo_allowed_types.split(",") if t.strip()}
 
+    # --- Media storage (Cloudflare R2, S3-compatible) ------------------------
+    # Actual media FILES live in Cloudflare R2 (a PRIVATE, S3-compatible bucket);
+    # Supabase/Postgres stays the source of truth and stores only METADATA rows
+    # (public.order_photos — the unified order-media record). ONLY this FastAPI
+    # backend holds R2 credentials; the admin + facility dashboards upload/view
+    # media exclusively THROUGH FastAPI via short-lived signed URLs. NEVER expose
+    # any CLOUDFLARE_R2_* value to a frontend / NEXT_PUBLIC_* var.
+    #   MEDIA_STORAGE_PROVIDER=local -> dev/test fallback (files on local disk).
+    #   MEDIA_STORAGE_PROVIDER=r2    -> Cloudflare R2 (CLOUDFLARE_R2_* required;
+    #                                   fails fast if any credential is missing).
+    media_storage_provider: str = "local"
+    cloudflare_r2_account_id: str = ""
+    cloudflare_r2_bucket: str = ""
+    cloudflare_r2_endpoint: str = ""
+    cloudflare_r2_access_key_id: str = ""
+    cloudflare_r2_secret_access_key: str = ""
+    # R2 ignores region but the S3 signer needs one; "auto" is correct for R2.
+    cloudflare_r2_region: str = "auto"
+    # Signed GET (view) + signed PUT (direct upload) URL lifetimes, seconds.
+    media_signed_url_expires_seconds: int = 300
+    media_upload_signed_url_expires_seconds: int = 300
+    # Per-file size caps (MB) and MIME allow-lists (comma-separated). SVG/PDF/EXE
+    # and anything not listed are rejected.
+    media_max_image_mb: int = 10
+    media_max_video_mb: int = 100
+    media_allowed_image_types: str = "image/jpeg,image/png,image/webp"
+    media_allowed_video_types: str = "video/mp4,video/quicktime"
+
+    @property
+    def media_storage_provider_normalized(self) -> str:
+        """Active media backend; anything unrecognized → safe 'local'."""
+        m = (self.media_storage_provider or "").strip().lower()
+        return m if m in ("local", "r2") else "local"
+
+    @property
+    def r2_is_configured(self) -> bool:
+        """True only when every credential R2 needs is present. The storage
+        service fails fast (503) when provider=r2 but this is False."""
+        return all(
+            (v or "").strip()
+            for v in (
+                self.cloudflare_r2_account_id,
+                self.cloudflare_r2_bucket,
+                self.cloudflare_r2_endpoint,
+                self.cloudflare_r2_access_key_id,
+                self.cloudflare_r2_secret_access_key,
+            )
+        )
+
+    @property
+    def media_max_image_bytes(self) -> int:
+        return max(1, int(self.media_max_image_mb)) * 1024 * 1024
+
+    @property
+    def media_max_video_bytes(self) -> int:
+        return max(1, int(self.media_max_video_mb)) * 1024 * 1024
+
+    @property
+    def media_allowed_image_types_set(self) -> set[str]:
+        return {t.strip().lower() for t in self.media_allowed_image_types.split(",") if t.strip()}
+
+    @property
+    def media_allowed_video_types_set(self) -> set[str]:
+        return {t.strip().lower() for t in self.media_allowed_video_types.split(",") if t.strip()}
+
     # --- Inbound message aggregation (task spec §§14-23) --------------------
     # Customers often send one thought as several quick fragments ("Hi" / "need
     # wash" / "tomorrow"). When enabled, inbound fragments are buffered per

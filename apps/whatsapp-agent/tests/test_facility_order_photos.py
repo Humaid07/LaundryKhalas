@@ -5,6 +5,9 @@ SQLite): endpoint functions are called directly with a hand-built principal dict
 (exactly what ``require_facility_scope`` would produce) and the repo/storage/event
 layers are monkeypatched. This mirrors tests/test_facility_orders.py.
 """
+import hashlib
+from types import SimpleNamespace
+
 import pytest
 from fastapi import HTTPException
 
@@ -12,7 +15,9 @@ import api.facility_order_photos as api_photos
 import api.orders as api_orders
 from db import database
 from db.repositories import facility_orders_repo, order_events_repo, order_photos_repo, orders_repo
+from services import media_storage
 from services import order_photos as svc
+from settings import Settings
 
 
 # --------------------------- fixtures / helpers ---------------------------
@@ -58,14 +63,18 @@ def wired(monkeypatch):
         events.append(kw)
         return {"id": "evt-1", **kw}
 
-    def fake_save(order_uuid, ext, data):
-        return (f"{order_uuid}/order-photo-abc.{ext}", f"order-photo-abc.{ext}")
+    uploaded: list[dict] = []
+
+    async def fake_upload(*, object_key, data, content_type, provider=None):
+        uploaded.append({"object_key": object_key, "content_type": content_type, "size": len(data)})
+        return {"provider": "local", "bucket": None, "object_key": object_key, "public_url": None}
 
     monkeypatch.setattr(order_photos_repo, "create", fake_create)
     monkeypatch.setattr(order_photos_repo, "count_for_stage", fake_count)
     monkeypatch.setattr(order_events_repo, "create", fake_event)
-    monkeypatch.setattr(svc, "_save_local", fake_save)
-    return {"created": created, "events": events, "monkeypatch": monkeypatch}
+    # Capture storage writes at the media_storage boundary (no disk, no network).
+    monkeypatch.setattr(media_storage, "upload_file", fake_upload)
+    return {"created": created, "events": events, "uploaded": uploaded, "monkeypatch": monkeypatch}
 
 
 def _principal(role="facility_owner", fid="fac-mine"):
@@ -295,3 +304,184 @@ async def test_ops_photo_content_by_id_scopes_to_order(monkeypatch):
                 "content_type": "image/jpeg", "file_name": "order-photo-x.jpg"}
     monkeypatch.setattr(order_photos_repo, "get_any", get_any)
     assert await svc.read_content_by_id("p1", order_uuid="ord-uuid-1") is None
+
+
+# ==================== media storage service (R2 + local) ===================
+def _r2_settings(**over):
+    """A minimal settings stand-in exposing only what media_storage reads."""
+    base = dict(
+        media_storage_provider_normalized="r2",
+        r2_is_configured=True,
+        cloudflare_r2_bucket="lk-media",
+        cloudflare_r2_region="auto",
+        cloudflare_r2_endpoint="https://acct.r2.cloudflarestorage.com",
+        cloudflare_r2_access_key_id="ak",
+        cloudflare_r2_secret_access_key="sk",
+        media_signed_url_expires_seconds=300,
+        media_upload_signed_url_expires_seconds=300,
+    )
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+class _FakeR2:
+    """Captures S3 calls without touching the network."""
+
+    def __init__(self):
+        self.put, self.deleted = [], []
+
+    def put_object(self, **kw):
+        self.put.append(kw)
+        return {}
+
+    def get_object(self, **kw):
+        return {"Body": SimpleNamespace(read=lambda: b"IMG-BYTES")}
+
+    def delete_object(self, **kw):
+        self.deleted.append(kw)
+        return {}
+
+    def generate_presigned_url(self, op, Params=None, ExpiresIn=None):
+        return f"https://signed.example/{Params['Key']}?exp={ExpiresIn}"
+
+
+def test_r2_config_loads():
+    s = Settings(
+        _env_file=None, media_storage_provider="r2",
+        cloudflare_r2_account_id="acct", cloudflare_r2_bucket="lk-media",
+        cloudflare_r2_endpoint="https://acct.r2.cloudflarestorage.com",
+        cloudflare_r2_access_key_id="ak", cloudflare_r2_secret_access_key="sk",
+    )
+    assert s.media_storage_provider_normalized == "r2"
+    assert s.r2_is_configured is True
+    assert s.media_max_image_bytes == s.media_max_image_mb * 1024 * 1024
+    assert "image/jpeg" in s.media_allowed_image_types_set
+
+
+def test_missing_r2_config_flag_is_false():
+    s = Settings(_env_file=None, media_storage_provider="r2")  # provider r2, no creds
+    assert s.media_storage_provider_normalized == "r2"
+    assert s.r2_is_configured is False
+
+
+async def test_missing_r2_config_fails_safe_on_upload(monkeypatch):
+    monkeypatch.setattr(media_storage, "get_settings", lambda: _r2_settings(r2_is_configured=False))
+    media_storage.reset_client_cache()
+    with pytest.raises(media_storage.MediaStorageError) as exc:
+        await media_storage.upload_file(
+            object_key="orders/AE/X/intake/a.jpg", data=_jpeg(), content_type="image/jpeg")
+    assert exc.value.status_code == 503  # never a silent local fallback
+
+
+async def test_r2_upload_read_and_sign(monkeypatch):
+    fake = _FakeR2()
+    monkeypatch.setattr(media_storage, "get_settings", lambda: _r2_settings())
+    monkeypatch.setattr(media_storage, "_r2", lambda: fake)
+
+    out = await media_storage.upload_file(
+        object_key="orders/AE/LK-AE-1024/intake/a.jpg", data=_jpeg(), content_type="image/jpeg")
+    assert out["provider"] == "r2" and out["bucket"] == "lk-media"
+    assert fake.put and fake.put[0]["Key"] == "orders/AE/LK-AE-1024/intake/a.jpg"
+
+    data = await media_storage.read_file(object_key="orders/AE/LK-AE-1024/intake/a.jpg", provider="r2")
+    assert data == b"IMG-BYTES"
+
+    url = await media_storage.create_signed_view_url(
+        object_key="orders/AE/LK-AE-1024/intake/a.jpg", provider="r2")
+    assert url.startswith("https://signed.example/") and "exp=300" in url
+
+
+async def test_local_signed_view_url_is_none():
+    assert await media_storage.create_signed_view_url(object_key="k.jpg", provider="local") is None
+
+
+def test_validate_file_type_rejects_non_image_and_svg():
+    allowed = {"image/jpeg", "image/png", "image/webp"}
+    with pytest.raises(media_storage.MediaStorageError) as exc:
+        media_storage.validate_file_type(declared_type="application/pdf", data=b"%PDF-1.4", allowed_types=allowed)
+    assert exc.value.status_code == 415
+    with pytest.raises(media_storage.MediaStorageError):  # SVG blocked
+        media_storage.validate_file_type(declared_type="image/svg+xml", data=b"<svg></svg>", allowed_types=allowed)
+
+
+def test_validate_file_type_accepts_jpeg():
+    ct, ext = media_storage.validate_file_type(
+        declared_type="image/jpeg", data=_jpeg(), allowed_types={"image/jpeg"})
+    assert ct == "image/jpeg" and ext == "jpg"
+
+
+def test_validate_file_size_rejects_oversized():
+    with pytest.raises(media_storage.MediaStorageError) as exc:
+        media_storage.validate_file_size(b"x" * 20, max_bytes=10)
+    assert exc.value.status_code == 413
+
+
+def test_checksum_is_sha256():
+    assert media_storage.sha256_hex(b"abc") == hashlib.sha256(b"abc").hexdigest()
+
+
+def test_object_key_is_pii_safe():
+    key = svc._build_object_key(
+        market_code="AE", order_ref="LK-AE-1024", order_uuid="ord-uuid", stage="intake", ext="jpg")
+    assert key.startswith("orders/AE/LK-AE-1024/intake/") and key.endswith(".jpg")
+    for pii in ("ahmed", "0501234567", "phone", "@", " "):
+        assert pii not in key.lower()
+
+
+async def test_upload_stores_pii_safe_key_and_checksum(wired):
+    # Even with a PII-laden CLIENT filename, the stored object key + file name are
+    # generated and carry only market/order-ref + uuids; checksum + provenance set.
+    await svc.add_photos(
+        order_uuid="ord-1", facility_id="fac-mine", stage="intake",
+        market_code="AE", order_ref="LK-AE-1024",
+        files=[svc.IncomingPhoto("Ahmed-0501234567.jpg", "image/jpeg", _jpeg())],
+        actor_name="Owner Jane",
+    )
+    key = wired["uploaded"][0]["object_key"]
+    assert key.startswith("orders/AE/LK-AE-1024/intake/")
+    assert "Ahmed" not in key and "0501234567" not in key
+    row = wired["created"][0]
+    assert row["checksum_sha256"] == media_storage.sha256_hex(_jpeg())
+    assert row["source_channel"] == "facility_dashboard" and row["visibility_scope"] == "facility"
+
+
+# --------------- signed view-url endpoint (only after access check) --------
+async def test_view_url_denied_for_other_facility(monkeypatch):
+    monkeypatch.setattr(database, "is_supabase_mode", lambda: True)
+
+    async def no_row(fid, order_id):
+        return None
+    monkeypatch.setattr(facility_orders_repo, "get_row", no_row)
+    with pytest.raises(HTTPException) as exc:
+        await api_photos.order_photo_view_url("LK-1", "p1", principal=_principal(fid="fac-mine"))
+    assert exc.value.status_code == 404  # scope check first — never mints a URL
+
+
+async def test_view_url_returns_signed_for_owner(monkeypatch):
+    monkeypatch.setattr(database, "is_supabase_mode", lambda: True)
+
+    async def get_row(fid, order_id):
+        return {"id": "ord-uuid-1"}
+    async def signed(photo_id, fid):
+        return {"url": "https://signed.example/k.jpg?exp=300", "expires_in": 300, "provider": "r2"}
+    monkeypatch.setattr(facility_orders_repo, "get_row", get_row)
+    monkeypatch.setattr(svc, "signed_view_url", signed)
+
+    res = await api_photos.order_photo_view_url("LK-1", "p1", principal=_principal())
+    assert res["url"].startswith("https://signed.example/") and res["expires_in"] == 300
+
+
+async def test_signed_view_url_service_is_scoped(monkeypatch):
+    async def get_none(pid, fid):
+        return None
+    monkeypatch.setattr(order_photos_repo, "get", get_none)
+    assert await svc.signed_view_url("p1", "fac-mine") is None  # not theirs → no URL
+
+    async def get_row(pid, fid):
+        return {"storage_key": "orders/AE/X/intake/a.jpg", "storage_provider": "r2"}
+    async def fake_sign(*, object_key, provider=None, expires=None):
+        return f"https://signed.example/{object_key}"
+    monkeypatch.setattr(order_photos_repo, "get", get_row)
+    monkeypatch.setattr(media_storage, "create_signed_view_url", fake_sign)
+    out = await svc.signed_view_url("p1", "fac-mine")
+    assert out["url"] == "https://signed.example/orders/AE/X/intake/a.jpg" and out["provider"] == "r2"

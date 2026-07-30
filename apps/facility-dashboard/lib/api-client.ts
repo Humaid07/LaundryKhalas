@@ -310,8 +310,13 @@ export interface FacilityOrderPhoto {
   content_type?: string | null;
   file_size?: number | null;
   uploaded_by?: string | null;
-  /** Set only for a public cloud provider; null for local dev storage. */
+  /** Storage backend: "r2" (Cloudflare R2, private) or "local" (dev disk). */
+  provider?: string | null;
+  /** Set only for a PUBLIC cloud provider; null for a private R2 bucket / local
+   *  storage (view via the signed view-url or the Bearer content proxy). */
   url?: string | null;
+  width?: number | null;
+  height?: number | null;
   created_at?: string | null;
   [key: string]: unknown;
 }
@@ -319,6 +324,14 @@ export interface FacilityOrderPhoto {
 export interface OrderPhotosResponse {
   photos: FacilityOrderPhoto[];
   counts: { intake: number; pre_dispatch: number };
+}
+
+/** Short-lived signed view URL for a photo (R2). `url` is null for local dev
+ *  storage — the client then falls back to the Bearer content proxy. */
+export interface OrderPhotoViewUrl {
+  url: string | null;
+  expires_in?: number;
+  provider?: string | null;
 }
 
 export interface FacilityOrderEvent {
@@ -683,9 +696,14 @@ export const facilityApi = {
       `/api/facility/orders/${id}/photos/${photoId}`,
       { method: "DELETE" },
     ),
-  /** Fetch a photo's bytes (Bearer-guarded) as a revocable blob: URL for <img>. */
+  /** Fetch a photo's bytes (Bearer-guarded) as a revocable blob: URL for <img>.
+   *  Works for both local and R2 storage (the backend proxies R2 bytes). */
   orderPhotoObjectUrl: (id: string, photoId: string) =>
     requestObjectUrl(`/api/facility/orders/${id}/photos/${photoId}/content`),
+  /** Mint a short-lived signed view URL (R2). Returned only after the backend's
+   *  facility-scoped permission check; `url` is null for local dev storage. */
+  orderPhotoViewUrl: (id: string, photoId: string) =>
+    request<OrderPhotoViewUrl>(`/api/facility/orders/${id}/photos/${photoId}/view-url`),
 
   // --- Finance ---
   // Backend summary uses revenue_total/order_count/average_order_value; alias to

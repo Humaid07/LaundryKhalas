@@ -19,9 +19,10 @@ from db import database
 STAGES = ("intake", "pre_dispatch")
 
 _SELECT_COLS = (
-    "id, order_id, facility_id, stage, storage_provider, storage_key, public_url, "
-    "file_name, content_type, file_size, uploaded_by_user_id, uploaded_by_name, "
-    "metadata, created_at, deleted_at"
+    "id, order_id, facility_id, stage, storage_provider, bucket, storage_key, public_url, "
+    "file_name, content_type, file_size, checksum_sha256, width, height, "
+    "source_channel, visibility_scope, status, "
+    "uploaded_by_user_id, uploaded_by_name, metadata, created_at, deleted_at"
 )
 
 
@@ -34,9 +35,15 @@ def to_read(row: dict) -> dict:
         "content_type": row.get("content_type"),
         "file_size": row.get("file_size"),
         "uploaded_by": row.get("uploaded_by_name"),
-        # public_url is set only for a public cloud provider; for local storage it
-        # is null and the client fetches bytes via the scoped content endpoint.
+        # provider tells the client whether a signed R2 view URL is available
+        # (r2) or it should use the Bearer content proxy (local). Never the key.
+        "provider": row.get("storage_provider"),
+        # public_url is set only for a public cloud provider; for a PRIVATE R2
+        # bucket and for local storage it is null and the client views bytes via
+        # the scoped content endpoint or a short-lived signed view URL.
         "url": row.get("public_url"),
+        "width": row.get("width"),
+        "height": row.get("height"),
         "created_at": row.get("created_at"),
     }
 
@@ -51,7 +58,14 @@ async def create(
     file_name: str,
     content_type: str,
     file_size: int,
+    bucket: str | None = None,
     public_url: str | None = None,
+    checksum_sha256: str | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    source_channel: str = "facility_dashboard",
+    visibility_scope: str = "facility",
+    status: str = "active",
     uploaded_by_user_id: str | None = None,
     uploaded_by_name: str | None = None,
     metadata: dict | None = None,
@@ -62,22 +76,32 @@ async def create(
     return await database.fetchrow(
         f"""
         insert into order_photos
-            (order_id, facility_id, stage, storage_provider, storage_key, public_url,
-             file_name, content_type, file_size, uploaded_by_user_id, uploaded_by_name,
+            (order_id, facility_id, stage, storage_provider, bucket, storage_key, public_url,
+             file_name, content_type, file_size, checksum_sha256, width, height,
+             source_channel, visibility_scope, status,
+             uploaded_by_user_id, uploaded_by_name,
              metadata, is_test_data, is_demo, environment, seed_source, created_by_seed)
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb,
-                $13, false, 'dev', $14, $15)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                $14, $15, $16, $17, $18, $19::jsonb,
+                $20, false, 'dev', $21, $22)
         returning {_SELECT_COLS}
         """,
         order_uuid,
         facility_id,
         stage,
         storage_provider,
+        bucket,
         storage_key,
         public_url,
         file_name,
         content_type,
         int(file_size),
+        checksum_sha256,
+        width,
+        height,
+        source_channel,
+        visibility_scope,
+        status,
         uploaded_by_user_id,
         uploaded_by_name,
         metadata or {},

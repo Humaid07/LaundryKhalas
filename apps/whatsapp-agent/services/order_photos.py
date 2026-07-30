@@ -21,15 +21,13 @@ Every successful upload writes ONE ``order_events`` row
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from pathlib import Path
 from uuid import uuid4
 
 from db.repositories import order_events_repo, order_photos_repo
+from services import media_storage
 from settings import get_settings
-
-# storage/order-photos lives under apps/whatsapp-agent (parents[1] = that dir).
-_STORAGE_ROOT = Path(__file__).resolve().parents[1] / "storage" / "order-photos"
 
 # stage → the order_events event_type recorded on upload.
 _UPLOAD_EVENT = {
@@ -39,6 +37,21 @@ _UPLOAD_EVENT = {
 
 # content-type → file extension.
 _EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+
+
+def _slug(value: str | None) -> str:
+    """Path-safe token for an object key: uppercase, keep [A-Z0-9-], drop the
+    rest. Used only for the market code + order reference (never customer data)."""
+    return re.sub(r"[^A-Z0-9-]+", "", (value or "").upper().replace(" ", "-")).strip("-")
+
+
+def _build_object_key(*, market_code: str | None, order_ref: str | None, order_uuid: str, stage: str, ext: str) -> str:
+    """PII-SAFE object key: ``orders/{market}/{order_ref}/{stage}/{uuid}.{ext}``.
+    No customer name / phone / address / facility / driver name. Falls back to the
+    order UUID (also non-PII) when a market/reference isn't supplied."""
+    market = _slug(market_code) or "XX"
+    ref = _slug(order_ref) or _slug(order_uuid) or "ORDER"
+    return f"orders/{market}/{ref}/{stage}/{uuid4().hex}.{ext}"
 
 
 class PhotoValidationError(Exception):
@@ -103,29 +116,25 @@ def _validate_one(photo: IncomingPhoto) -> tuple[str, str]:
     return declared, _EXT[declared]
 
 
-def _save_local(order_uuid: str, ext: str, data: bytes) -> tuple[str, str]:
-    """Write bytes to the local dev store. Returns (storage_key, file_name)."""
-    file_name = f"order-photo-{uuid4().hex}.{ext}"
-    storage_key = f"{order_uuid}/{file_name}"
-    dest = _STORAGE_ROOT / storage_key
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(data)
-    return storage_key, file_name
-
-
 async def add_photos(
     *,
     order_uuid: str,
     facility_id: str,
     stage: str,
     files: list[IncomingPhoto],
+    market_code: str | None = None,
+    order_ref: str | None = None,
     actor_id: str | None = None,
     actor_name: str | None = None,
     is_test_data: bool = True,
 ) -> list[dict]:
-    """Validate + store + persist a batch of photos for one order+stage, then
-    write ONE order event. Validation is all-or-nothing: if any file is invalid
-    nothing is stored. Returns the PII-safe photo views."""
+    """Validate + store (local or Cloudflare R2) + persist a batch of photos for
+    one order+stage, then write ONE order event. Validation is all-or-nothing: if
+    any file is invalid nothing is stored. Returns the PII-safe photo views.
+
+    Files go to the configured MEDIA_STORAGE_PROVIDER via ``media_storage``; when
+    provider=r2 but credentials are missing the storage layer raises 503 (never a
+    silent local fallback for a lost upload)."""
     if stage not in order_photos_repo.STAGES:
         raise PhotoValidationError(
             f"Unknown stage '{stage}'. Use 'intake' or 'pre_dispatch'.", status_code=422)
@@ -133,11 +142,6 @@ async def add_photos(
         raise PhotoValidationError("No files were uploaded.", status_code=422)
 
     settings = get_settings()
-    provider = settings.facility_order_photo_storage_normalized
-    if provider != "local":
-        # Cloud providers are reserved for a later task; never silently no-op.
-        raise PhotoValidationError(
-            f"Storage provider '{provider}' is not enabled yet.", status_code=503)
 
     # Validate ALL first (all-or-nothing) so a bad file never leaves a partial batch.
     validated = [(_validate_one(f), f) for f in files]
@@ -154,24 +158,44 @@ async def add_photos(
         )
 
     saved: list[dict] = []
-    for (content_type, ext), photo in validated:
-        storage_key, file_name = _save_local(order_uuid, ext, photo.data)
-        row = await order_photos_repo.create(
-            order_uuid=order_uuid,
-            facility_id=facility_id,
-            stage=stage,
-            storage_provider=provider,
-            storage_key=storage_key,
-            file_name=file_name,
-            content_type=content_type,
-            file_size=len(photo.data),
-            uploaded_by_user_id=actor_id,
-            uploaded_by_name=actor_name,
-            metadata={"stage": stage},
-            is_test_data=is_test_data,
-        )
-        if row:
-            saved.append(order_photos_repo.to_read(row))
+    try:
+        for (content_type, ext), photo in validated:
+            object_key = _build_object_key(
+                market_code=market_code, order_ref=order_ref,
+                order_uuid=order_uuid, stage=stage, ext=ext,
+            )
+            stored = await media_storage.upload_file(
+                object_key=object_key, data=photo.data, content_type=content_type,
+            )
+            # Display/download name stays a GENERATED safe name (the client's
+            # original filename is never persisted — it can carry customer PII).
+            file_name = f"order-photo-{uuid4().hex}.{ext}"
+            row = await order_photos_repo.create(
+                order_uuid=order_uuid,
+                facility_id=facility_id,
+                stage=stage,
+                storage_provider=stored["provider"],
+                storage_key=stored["object_key"],
+                bucket=stored.get("bucket"),
+                public_url=stored.get("public_url"),
+                file_name=file_name,
+                content_type=content_type,
+                file_size=len(photo.data),
+                checksum_sha256=media_storage.sha256_hex(photo.data),
+                source_channel="facility_dashboard",
+                visibility_scope="facility",
+                status="active",
+                uploaded_by_user_id=actor_id,
+                uploaded_by_name=actor_name,
+                metadata={"stage": stage},
+                is_test_data=is_test_data,
+            )
+            if row:
+                saved.append(order_photos_repo.to_read(row))
+    except media_storage.MediaStorageError as exc:
+        # Surface storage failures (e.g. R2 unconfigured/unavailable) with a
+        # proper HTTP status; nothing partial is exposed to the caller.
+        raise PhotoValidationError(str(exc), status_code=exc.status_code)
 
     # ONE audit event for the batch (PII-safe metadata only).
     await order_events_repo.create(
@@ -198,14 +222,16 @@ async def list_photos(order_uuid: str, *, stage: str | None = None) -> list[dict
 
 async def read_content(photo_id: str, facility_id: str) -> tuple[bytes, str, str] | None:
     """Return (bytes, content_type, file_name) for a facility's photo, or None if
-    it isn't theirs / the file is missing. Reads from the local store."""
+    it isn't theirs / the file is missing. Reads from the row's provider (local
+    disk or R2) via the storage layer."""
     row = await order_photos_repo.get(photo_id, facility_id)
     if not row:
         return None
-    path = _STORAGE_ROOT / row["storage_key"]
-    if not path.exists():
+    data = await media_storage.read_file(
+        object_key=row["storage_key"], provider=row.get("storage_provider"))
+    if data is None:
         return None
-    return path.read_bytes(), row["content_type"], row["file_name"]
+    return data, row["content_type"], row["file_name"]
 
 
 async def read_content_by_id(
@@ -220,10 +246,25 @@ async def read_content_by_id(
         return None
     if order_uuid and str(row["order_id"]) != str(order_uuid):
         return None
-    path = _STORAGE_ROOT / row["storage_key"]
-    if not path.exists():
+    data = await media_storage.read_file(
+        object_key=row["storage_key"], provider=row.get("storage_provider"))
+    if data is None:
         return None
-    return path.read_bytes(), row["content_type"], row["file_name"]
+    return data, row["content_type"], row["file_name"]
+
+
+async def signed_view_url(photo_id: str, facility_id: str) -> dict | None:
+    """A short-lived signed GET URL for a facility's photo — minted ONLY after the
+    facility-scoped ownership check. Returns ``{"url", "expires_in"}`` for R2, or
+    ``{"url": None, ...}`` for local storage (the client then uses the Bearer
+    content proxy). None when the photo isn't this facility's live photo."""
+    row = await order_photos_repo.get(photo_id, facility_id)
+    if not row:
+        return None
+    expires = get_settings().media_signed_url_expires_seconds
+    url = await media_storage.create_signed_view_url(
+        object_key=row["storage_key"], provider=row.get("storage_provider"), expires=expires)
+    return {"url": url, "expires_in": int(expires), "provider": row.get("storage_provider")}
 
 
 async def delete_photo(
