@@ -52,8 +52,10 @@ from services import (
     b2b,
     booking_flow,
     complaints,
+    contact_identity,
     discount,
     human_intervention,
+    location_capture,
     message_aggregation,
     message_completeness,
     money,
@@ -410,6 +412,62 @@ async def _handle_unprocessable_voice(convo, customer, sender, masked, wa_id, in
         pass
     if can_reply:
         await _send_plain(convo_id, sender, decision.reply_text, kind="voice_handover")
+
+
+async def _persist_identity(customer: dict, msg: dict, masked: str) -> None:
+    """Persist the normalized WhatsApp number + validated profile name onto the
+    customer (spec §identity). Backend-authoritative; the repo guards an
+    explicit/confirmed name from being overwritten by the WhatsApp profile."""
+    try:
+        e164, num_ok = contact_identity.normalize_whatsapp_sender_number(msg.get("phone"))
+        prior_source = customer.get("customer_name_source")
+        confirmed = customer.get("customer_name") if prior_source in ("CUSTOMER_PROVIDED", "CONFIRMED") else None
+        resolved = contact_identity.resolve_customer_identity(
+            confirmed_name=confirmed, whatsapp_profile_name=msg.get("name"))
+        await customers_repo.update_channel_identity(
+            customer["id"], whatsapp_number=msg.get("phone"),
+            normalized_number=e164 if num_ok else None, number_verified=num_ok,
+            profile_name_raw=msg.get("name"), resolved_name=resolved.name,
+            name_source=resolved.source, name_confidence=resolved.confidence,
+            name_requires_confirmation=resolved.requires_confirmation)
+        logger.info("whatsapp_number_normalized", sender=masked, valid=num_ok)
+        if (msg.get("name") or "").strip() and confirmed is None:
+            if resolved.source == contact_identity.SOURCE_WHATSAPP_PROFILE:
+                logger.info("whatsapp_profile_name_accepted", sender=masked)
+            else:
+                logger.info("whatsapp_profile_name_rejected", sender=masked)
+    except Exception as exc:  # noqa: BLE001 — identity persistence must never break intake
+        logger.warning("identity_persist_failed", sender=masked, error=str(exc))
+
+
+async def _persist_location(convo_id: str, msg: dict, wa_id: str | None, masked: str) -> None:
+    """Persist structured WhatsApp location metadata onto the active draft (spec
+    §location-pin). The pin drives routing; coordinates are only ever written from
+    a real Evolution location event — never invented."""
+    try:
+        cap = location_capture.process_whatsapp_location(
+            msg.get("location_event")
+            or {"latitude": msg.get("latitude"), "longitude": msg.get("longitude")})
+        if not cap.ok:
+            return
+        draft = await orders_repo.get_active_draft(convo_id)
+        if not draft:
+            logger.info("whatsapp_location_received", sender=masked, has_draft=False)
+            return
+        await orders_repo.apply_booking_updates(
+            draft["id"],
+            {
+                "pickup_latitude": cap.latitude, "pickup_longitude": cap.longitude,
+                "location_name": cap.location_name, "location_provider_address": cap.provider_address,
+                "location_type": cap.location_type, "location_accuracy": cap.accuracy,
+                "location_message_id": wa_id, "location_source": "whatsapp_pin",
+                "location_received_at": _dt.datetime.now(_GST), "location_pin_status": "received",
+            },
+            draft.get("conversation_state") or booking_flow.WAITING_FOR_ADDRESS,
+        )
+        logger.info("whatsapp_location_received", sender=masked, has_draft=True)
+    except Exception as exc:  # noqa: BLE001 — enrichment must never break the booking turn
+        logger.warning("location_persist_failed", sender=masked, error=str(exc))
 
 
 def _order_status_text(order: dict | None) -> str:
@@ -805,6 +863,10 @@ async def receive_evolution_webhook(request: Request):
         convo = await conversations_repo.get_or_create_for_customer(
             customer["id"], external_id=f"evo:{sender}"
         )
+        # Persist WhatsApp-channel identity (normalized number + profile name +
+        # profile-derived name) every inbound — cheap, idempotent, never clobbers
+        # an explicit/confirmed customer name.
+        await _persist_identity(customer, msg, masked)
 
         stored_text = text or (msg.get("selection_id") or "shared location")
         inbound_msg = await messages_repo.add_message(
@@ -835,6 +897,11 @@ async def receive_evolution_webhook(request: Request):
                 await conversations_repo.reset_voice_state(convo["id"])
             except Exception:  # noqa: BLE001
                 pass
+
+        # Structured location capture (enrich the active draft; pin drives routing).
+        # Runs in addition to the normal booking turn — never invents coordinates.
+        if msg.get("location_event") or msg.get("latitude") is not None:
+            await _persist_location(convo["id"], msg, wa_id, masked)
 
         # --- ESCALATION (interrupts everything, never auto-resolves) -----------
         category = detect_escalation(text)

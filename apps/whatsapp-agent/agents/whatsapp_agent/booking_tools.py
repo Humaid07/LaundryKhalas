@@ -922,6 +922,14 @@ def make_booking_executor(ctx: BookingContext):
             if not name_val:
                 return _err("That doesn't look like a valid name. Ask the customer for their name.")
             await _apply({"customer_name": name_val})
+            # Record it as the explicit CUSTOMER_PROVIDED name (highest precedence) so
+            # a later WhatsApp profile name can never overwrite it. Best-effort.
+            try:
+                from db.repositories import customers_repo
+                if ctx.customer and ctx.customer.get("id"):
+                    await customers_repo.set_customer_provided_name(ctx.customer["id"], name_val)
+            except Exception:  # noqa: BLE001
+                pass
             return _ok({"saved": True, "customer_name": name_val,
                         "workflow": workflow_state_block(await _current_row())})
 

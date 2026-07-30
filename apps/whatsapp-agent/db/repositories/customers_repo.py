@@ -46,6 +46,66 @@ async def get_or_create_by_phone(
     )
 
 
+async def update_channel_identity(
+    customer_id,
+    *,
+    whatsapp_number: str | None,
+    normalized_number: str | None,
+    number_verified: bool,
+    profile_name_raw: str | None,
+    resolved_name: str | None,
+    name_source: str,
+    name_confidence: float,
+    name_requires_confirmation: bool,
+) -> None:
+    """Persist WhatsApp-channel identity (migration 000033).
+
+    The phone fields and the raw profile name are always refreshed. The customer's
+    NAME is only set from the WhatsApp profile when it has NOT been explicitly
+    provided or confirmed — a CUSTOMER_PROVIDED / CONFIRMED name is never clobbered
+    (so a WhatsApp profile change later can't overwrite the real name).
+    """
+    await database.execute(
+        """
+        update customers set
+            whatsapp_number = coalesce($2, whatsapp_number),
+            normalized_contact_number = coalesce($3, normalized_contact_number),
+            contact_number_source = 'WHATSAPP_SENDER',
+            contact_number_verified = $4,
+            whatsapp_profile_name = coalesce($5, whatsapp_profile_name),
+            customer_name = case
+                when customer_name_source in ('CUSTOMER_PROVIDED','CONFIRMED') then customer_name
+                else coalesce($6, customer_name) end,
+            customer_name_source = case
+                when customer_name_source in ('CUSTOMER_PROVIDED','CONFIRMED') then customer_name_source
+                else $7 end,
+            customer_name_confidence = case
+                when customer_name_source in ('CUSTOMER_PROVIDED','CONFIRMED') then customer_name_confidence
+                else $8 end,
+            customer_name_requires_confirmation = case
+                when customer_name_source in ('CUSTOMER_PROVIDED','CONFIRMED') then false
+                else $9 end,
+            updated_at = now()
+        where id = $1
+        """,
+        customer_id, whatsapp_number, normalized_number, number_verified,
+        profile_name_raw, resolved_name, name_source, name_confidence,
+        name_requires_confirmation,
+    )
+
+
+async def set_customer_provided_name(customer_id, name: str) -> None:
+    """Record a name the customer explicitly gave (CUSTOMER_PROVIDED) — highest
+    precedence; the WhatsApp profile name is preserved separately in
+    whatsapp_profile_name and never overrides this later."""
+    await database.execute(
+        "update customers set customer_name = $2, customer_name_source = 'CUSTOMER_PROVIDED', "
+        "customer_name_confidence = 1.0, customer_name_requires_confirmation = false, "
+        "display_name = $2, updated_at = now() where id = $1",
+        customer_id, name,
+    )
+
+
 # Fields the WhatsApp capture flow may learn about a customer over the
 # conversation. ``name`` maps to display_name; ``language`` to preferred_language.
 # ``address`` is BACKEND-ONLY — never returned by the read APIs / broad tables.

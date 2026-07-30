@@ -110,17 +110,27 @@ done in this pass** (admin order detail is mock-gated) — see limitations.
   none of that test's code path was touched here.
 - ruff clean on all changed files; facility-dashboard tsc clean.
 
+## Update (2026-07-30, follow-up) — identity + location persistence wired into the webhook
+- **Identity persistence**: the webhook now calls `_persist_identity` after the customer upsert →
+  `customers_repo.update_channel_identity` persists `whatsapp_number`, `normalized_contact_number`
+  (strict E.164), `contact_number_source=WHATSAPP_SENDER`, `contact_number_verified`,
+  `whatsapp_profile_name`, and the profile-derived `customer_name`/source/confidence/requires-
+  confirmation — with a SQL guard that NEVER overwrites a `CUSTOMER_PROVIDED`/`CONFIRMED` name.
+  `save_customer_name` now records the explicit name via `set_customer_provided_name`
+  (CUSTOMER_PROVIDED, keeps the WhatsApp profile name separate). Emits `whatsapp_number_normalized`
+  and `whatsapp_profile_name_accepted|rejected` logs.
+- **Structured location persistence**: the webhook now calls `_persist_location` when a location
+  event/coords arrive → parses via `location_capture` and writes `pickup_latitude/longitude`,
+  `location_name`, `location_provider_address`, `location_type`, `location_accuracy`,
+  `location_message_id`, `location_source=whatsapp_pin`, `location_received_at`,
+  `location_pin_status=received` onto the active draft (enrichment; the normal booking turn still
+  runs). Coordinates are only written from a real event. Emits `whatsapp_location_received`.
+
 ## Remaining limitations / external dependencies
 - **Migration application + live end-to-end** need dev Supabase creds (`DATABASE_MODE=supabase`);
   the hermetic suite runs on SQLite and the Evolution/asyncpg path short-circuits there, so the
   webhook/repo/handoff wiring is covered by import/ruff checks + the tested pure core, not by an
   in-suite live integration test.
-- **Identity persistence wiring**: the pure validators + DB columns exist, but the webhook still
-  upserts the customer via the existing `get_or_create_by_phone`; persisting normalized number /
-  validated profile name / name-source into the new columns is not yet wired.
-- **Structured location persistence**: the parser exposes `location_event` and `location_capture`
-  parses it, but the webhook/FSM persists only lat/long today (name/type/message_id columns exist,
-  not yet written).
 - **Admin dashboard** surfacing of the new fields is not implemented.
 - **Post-confirmation amendment (scenario 10)** via Claude: `order_notes` supports `is_amendment`
   and the confirmed snapshot is immutable, but a Claude post-confirm amendment tool is deferred
