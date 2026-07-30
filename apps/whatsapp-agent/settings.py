@@ -218,6 +218,34 @@ class Settings(BaseSettings):
     # REQUIRE_AUTH=false (blank = first active facility). Never used with auth on.
     facility_dev_id: str = ""
 
+    # --- Facility order photos (intake + pre-dispatch proof) -----------------
+    # Where a facility's uploaded order photos are stored. "local" writes bytes
+    # to a gitignored dev folder (apps/whatsapp-agent/storage/order-photos) and
+    # serves them back through the facility-scoped content endpoint — no cloud
+    # creds required. "supabase"/"r2" are placeholders for a later live provider
+    # (not wired yet; unknown value resolves to "local", fail-safe).
+    facility_order_photo_storage: str = "local"
+    # Per-image size ceiling (MB) and per-order-stage photo count ceiling.
+    facility_order_photo_max_mb: int = 5
+    facility_order_photo_max_per_stage: int = 10
+    # Allowed image MIME types (comma-separated). SVG is intentionally excluded
+    # (script-carrying vector); only raster JPG/PNG/WEBP garment photos.
+    facility_order_photo_allowed_types: str = "image/jpeg,image/png,image/webp"
+
+    @property
+    def facility_order_photo_storage_normalized(self) -> str:
+        """Storage backend for order photos; anything unrecognized → safe 'local'."""
+        m = (self.facility_order_photo_storage or "").strip().lower()
+        return m if m in ("local", "supabase", "r2") else "local"
+
+    @property
+    def facility_order_photo_max_bytes(self) -> int:
+        return max(1, int(self.facility_order_photo_max_mb)) * 1024 * 1024
+
+    @property
+    def facility_order_photo_allowed_types_set(self) -> set[str]:
+        return {t.strip().lower() for t in self.facility_order_photo_allowed_types.split(",") if t.strip()}
+
     # --- Inbound message aggregation (task spec §§14-23) --------------------
     # Customers often send one thought as several quick fragments ("Hi" / "need
     # wash" / "tomorrow"). When enabled, inbound fragments are buffered per

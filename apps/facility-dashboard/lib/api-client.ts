@@ -59,6 +59,63 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Shared 401/error handling for the non-JSON request helpers below. */
+function handleAuthFailure(): never {
+  clearSession();
+  if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+    window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+  }
+  throw new FacilityApiError(401, "Your session has expired. Please sign in again.");
+}
+
+/** POST multipart/form-data. Crucially does NOT set Content-Type — the browser
+ *  adds the multipart boundary. Still sends the Bearer token. Used for uploads. */
+async function requestForm<T>(path: string, form: FormData): Promise<T> {
+  let res: Response;
+  const token = getToken();
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method: "POST",
+      body: form,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new FacilityApiError(0, "Could not reach the LaundryKhalas backend (:8100). Is it running?");
+  }
+  if (res.status === 401) handleAuthFailure();
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? detail;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new FacilityApiError(res.status, detail);
+  }
+  if (res.status === 204) return undefined as unknown as T;
+  return res.json() as Promise<T>;
+}
+
+/** GET binary content (an image) as an object URL. The content endpoint is
+ *  Bearer-guarded, so an <img src> can't hit it directly — we fetch the bytes
+ *  with the token and hand back a blob: URL the caller must revoke when done. */
+async function requestObjectUrl(path: string): Promise<string> {
+  let res: Response;
+  const token = getToken();
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new FacilityApiError(0, "Could not reach the LaundryKhalas backend (:8100). Is it running?");
+  }
+  if (res.status === 401) handleAuthFailure();
+  if (!res.ok) throw new FacilityApiError(res.status, res.statusText);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 function qs(params: Record<string, unknown> = {}): string {
   const sp = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
@@ -233,9 +290,35 @@ export interface FacilityOrder {
   amount?: number | null;
   currency?: string | null;
   line_items?: FacilityLineItem[];
+  /** Live (non-deleted) proof-photo counts per stage — drives the card badge. */
+  intake_photo_count?: number | null;
+  pre_dispatch_photo_count?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
   [key: string]: unknown;
+}
+
+/** Photo stages the product implements today. */
+export type OrderPhotoStage = "intake" | "pre_dispatch";
+
+/** PII-safe view of one uploaded order photo (metadata only; bytes are fetched
+ *  from the scoped content endpoint as a blob). */
+export interface FacilityOrderPhoto {
+  id: string;
+  stage: OrderPhotoStage | string;
+  file_name?: string | null;
+  content_type?: string | null;
+  file_size?: number | null;
+  uploaded_by?: string | null;
+  /** Set only for a public cloud provider; null for local dev storage. */
+  url?: string | null;
+  created_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface OrderPhotosResponse {
+  photos: FacilityOrderPhoto[];
+  counts: { intake: number; pre_dispatch: number };
 }
 
 export interface FacilityOrderEvent {
@@ -573,6 +656,29 @@ export const facilityApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  // --- Order photos (intake + pre-dispatch proof) ---
+  orderPhotos: (id: string, stage?: OrderPhotoStage) =>
+    request<OrderPhotosResponse>(
+      `/api/facility/orders/${id}/photos${qs({ stage })}`,
+    ),
+  uploadOrderPhotos: (id: string, stage: OrderPhotoStage, files: File[]) => {
+    const form = new FormData();
+    form.set("stage", stage);
+    files.forEach((f) => form.append("files", f));
+    return requestForm<{ photos: FacilityOrderPhoto[]; stage: string; uploaded: number }>(
+      `/api/facility/orders/${id}/photos`,
+      form,
+    );
+  },
+  deleteOrderPhoto: (id: string, photoId: string) =>
+    request<{ deleted: boolean; id: string }>(
+      `/api/facility/orders/${id}/photos/${photoId}`,
+      { method: "DELETE" },
+    ),
+  /** Fetch a photo's bytes (Bearer-guarded) as a revocable blob: URL for <img>. */
+  orderPhotoObjectUrl: (id: string, photoId: string) =>
+    requestObjectUrl(`/api/facility/orders/${id}/photos/${photoId}/content`),
 
   // --- Finance ---
   // Backend summary uses revenue_total/order_count/average_order_value; alias to

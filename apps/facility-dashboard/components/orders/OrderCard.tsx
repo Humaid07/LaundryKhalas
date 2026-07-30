@@ -4,6 +4,7 @@ import type { FacilityOrder } from "@/lib/api-client";
 import { formatRelativeTime } from "@/lib/formatters";
 import { orderStatusLabel, orderStatusTone, slaLabel, slaTone } from "@/lib/status";
 import { StatusBadge } from "@/components/ui/primitives";
+import { OrderPhotoBadge } from "@/components/orders/OrderPhotoBadge";
 
 /**
  * OrderCard — the mobile-first order preview. Order id, service, expected time,
@@ -40,6 +41,11 @@ export function OrderCard({ order }: { order: FacilityOrder }) {
             </span>
           )}
           {order.pickup_area && <span>{order.pickup_area}</span>}
+          <OrderPhotoBadge
+            status={order.status}
+            intakeCount={order.intake_photo_count}
+            preDispatchCount={order.pre_dispatch_photo_count}
+          />
         </div>
       </div>
       <ChevronRight className="h-4 w-4 shrink-0 self-center text-ink-faint transition-colors group-hover:text-rose" />

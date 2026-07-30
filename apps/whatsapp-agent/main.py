@@ -15,6 +15,7 @@ from api import (
     evolution_webhooks,
     facility,
     facility_management,
+    facility_order_photos,
     flags,
     health,
     human_intervention,
@@ -118,6 +119,10 @@ app.include_router(admin_pricing.router)
 app.include_router(public_pricing.router)
 # Facility (partner) dashboard — every endpoint scoped to the caller's facility.
 app.include_router(facility.router, dependencies=[Depends(deps.require_facility_scope)])
+# Facility order photos (intake + pre-dispatch) — same blanket facility scope.
+app.include_router(
+    facility_order_photos.router, dependencies=[Depends(deps.require_facility_scope)]
+)
 # Partner Facilities Management — each endpoint self-guards (scope for view/edit,
 # facility-role for self-onboarding create), so no blanket router-level guard.
 app.include_router(facility_management.router)

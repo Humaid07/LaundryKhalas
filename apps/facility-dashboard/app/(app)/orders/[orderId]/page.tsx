@@ -42,6 +42,7 @@ import { StatusBadge } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/Button";
 import { LoadingState, ErrorState } from "@/components/ui/states";
 import { AssignDriverModal } from "@/components/drivers/AssignDriverModal";
+import { OrderPhotosSection } from "@/components/orders/OrderPhotosSection";
 import { cn } from "@/lib/utils";
 
 /** Fallback next-action when the backend doesn't send available_actions. */
@@ -213,6 +214,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                 </ul>
               </DetailSectionCard>
             )}
+
+            {/* Order photos — intake + pre-dispatch proof */}
+            <OrderPhotosSection orderId={orderId} status={order.status} canManage={canManage} />
 
             {/* Cleaning details */}
             {order.cleaning_details && Object.keys(order.cleaning_details).length > 0 && (

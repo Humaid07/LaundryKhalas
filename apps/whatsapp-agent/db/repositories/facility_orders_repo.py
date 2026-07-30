@@ -16,6 +16,7 @@ from __future__ import annotations
 from services import order_store
 from settings import get_settings
 from db import database
+from db.repositories import order_photos_repo
 
 # Bucket → status membership (facility operational lanes).
 BUCKET_STATUSES: dict[str, tuple[str, ...]] = {
@@ -213,7 +214,26 @@ async def list_bucket(
         f"limit {limit_ph} offset {offset_ph}",
         *params,
     )
-    return [to_facility_read(r) for r in rows]
+    serialized = [to_facility_read(r) for r in rows]
+    await _attach_photo_counts(rows, serialized)
+    return serialized
+
+
+async def _attach_photo_counts(rows: list[dict], serialized: list[dict]) -> None:
+    """Add ``intake_photo_count`` / ``pre_dispatch_photo_count`` to each serialized
+    order (0 when none) so the order-list cards can show a photo indicator without
+    an extra request per card. One grouped query for the whole page; a failure
+    here (e.g. table not yet migrated) degrades to zeros, never breaks the list."""
+    uuids = [str(r["id"]) for r in rows if r.get("id")]
+    counts: dict[str, dict[str, int]] = {}
+    try:
+        counts = await order_photos_repo.counts_for_orders(uuids)
+    except Exception:  # noqa: BLE001 — photo counts are a non-critical badge
+        counts = {}
+    for r, item in zip(rows, serialized):
+        c = counts.get(str(r.get("id")), {})
+        item["intake_photo_count"] = int(c.get("intake", 0))
+        item["pre_dispatch_photo_count"] = int(c.get("pre_dispatch", 0))
 
 
 async def get(facility_id: str, order_id: str) -> dict | None:

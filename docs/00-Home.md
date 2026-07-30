@@ -22,6 +22,24 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — Facility Order Photos (intake + pre-dispatch, 2026-07-30)
+
+Laundry partners can now attach **garment/item proof photos** to an order at two stages —
+**intake** (received at facility) and **pre-dispatch** (before handoff) — for proof, QC,
+dispute handling and damage tracking. Main upload UI lives on the **order detail page**
+(an **Order Photos** section: two stage cards, an upload sheet with previews, a thumbnail
+grid); order cards carry only a subtle photo **badge** ("Intake photo needed" / "N photos").
+New `order_photos` table (**migration 000032**, metadata-only; bytes in gitignored **local**
+dev storage, `FACILITY_ORDER_PHOTO_STORAGE=local`), `services/order_photos.py`
+(type allow-list + **magic-byte** check → SVG/renamed-exe rejected, 5MB + 10-per-stage caps),
+and 4 facility-scoped endpoints (list/upload/delete/**Bearer-guarded content stream**);
+uploads write an `order_events` audit row. 3 seeded dev orders **LK-TEST-FAC-001/002/003**.
+Migration applied + verified on dev/test Supabase; live end-to-end verified (upload/reject/
+delete + Playwright thumbnails, no overflow, 0 console errors). **13 backend + 44 regression
+tests green; frontend tsc/lint/build clean.** No cloud storage secrets. Architecture:
+[[facility-order-photos]] · test script: [[facility-order-photos-test-script]] · build report:
+`build-reports/2026-07-30-facility-order-photo-upload.md`.
+
 ## Latest — Sidebar whole-row toggle (admin UI, 2026-07-30)
 
 Sidebar sections with subsections now expand/collapse when the **whole parent row** is

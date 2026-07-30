@@ -10,3 +10,5 @@ laundry_class_memory.sqlite
 logs/
 .venv/
 *.egg-info/
+# Locally-stored facility order photos (dev storage — never commit uploads)
+storage/order-photos/
