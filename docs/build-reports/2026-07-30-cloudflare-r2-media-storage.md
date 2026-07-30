@@ -47,6 +47,8 @@ and credentials off the frontend.
 ## 5. Files created
 - `apps/whatsapp-agent/services/media_storage.py`
 - `supabase/migrations/20260730_000034_order_media_generic_columns.sql`
+- `apps/whatsapp-agent/scripts/apply_order_media_generic_columns.py`
+- `apps/whatsapp-agent/scripts/verify_order_media_generic_columns.py`
 - `docs/architecture/media-storage-r2.md`
 - `docs/checklists/r2-media-storage-test-script.md`
 - `docs/build-reports/2026-07-30-cloudflare-r2-media-storage.md`
@@ -82,6 +84,10 @@ None. (`_save_local` function removed from `order_photos.py`; no files deleted.)
   height, duration_seconds, source_channel, visibility_scope, status`; stage CHECK
   expanded to `intake, pre_dispatch, customer_reference, damage_report, issue_photo,
   quality_check, pickup_proof, delivery_proof`. **No new/parallel table.**
+  **APPLIED + verified on the dev/test Supabase** via
+  `scripts/apply_order_media_generic_columns.py` +
+  `scripts/verify_order_media_generic_columns.py` (verify → PASS: 8 columns, 8-stage
+  CHECK, `order_photos_visibility_chk` + `order_photos_status_chk` present).
 
 ## 10. UI pages/components added/changed
 - `apps/facility-dashboard/lib/api-client.ts` — `orderPhotoViewUrl`, `OrderPhotoViewUrl`
@@ -105,8 +111,6 @@ None.
   (owner action); the code path is implemented and unit-tested against a mock client.
 
 ## 15. What is intentionally deferred
-- Applying migration 000034 to the dev/test Supabase project (SQL written; needs
-  manual apply, like prior migrations — **not** claimed as applied here).
 - A real end-to-end R2 smoke test against a live bucket (needs creds; script in the
   checklist doc, section D).
 - Image dimension extraction (`width`/`height` columns exist but stay null; no Pillow
@@ -194,7 +198,8 @@ npm run typecheck && npm run lint && npm run build
    soft-delete keeps bytes + writes an event.
 
 ## 25. Next recommended step
-Provision a private R2 bucket + token, set the secrets in the deployed `.env`, apply
-migration 000034, and run the §D live smoke test. Then (optional) switch the
+Provision a private R2 bucket + token, set the secrets in the deployed `.env`
+(migration 000034 is already applied to dev/test), and run the §D live smoke test.
+Then (optional) switch the
 thumbnail grid to signed `view-url` to offload byte-proxying, and add image
 dimension extraction to populate `width/height`.

@@ -144,7 +144,10 @@ MEDIA_ALLOWED_VIDEO_TYPES=video/mp4,video/quicktime
 1. Create a **private** R2 bucket; create an R2 API token (Object Read & Write).
 2. Put the five `CLOUDFLARE_R2_*` secrets + `MEDIA_STORAGE_PROVIDER=r2` in the
    backend's local/deployed `.env` (never commit).
-3. Apply migration `20260730_000034` to the dev/test Supabase project.
+3. Apply migration `20260730_000034` to the target Supabase project
+   (`python scripts/apply_order_media_generic_columns.py`; verify with
+   `scripts/verify_order_media_generic_columns.py`). Already applied + verified on
+   **dev/test**.
 4. Restart the backend; upload a photo from the facility dashboard; confirm the row
    has `storage_provider='r2'` and the object appears in the bucket under
    `orders/{market}/{ref}/{stage}/…`.
