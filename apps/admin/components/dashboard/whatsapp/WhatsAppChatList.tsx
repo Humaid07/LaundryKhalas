@@ -1,18 +1,21 @@
 "use client";
 
-import { Search, SearchX, Inbox } from "lucide-react";
+import { Search, SearchX, Inbox, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/dashboard/ui/primitives";
 import { formatClock } from "@/lib/dashboard/formatters";
 import {
   statusMeta,
-  inboxFilters,
+  activeFilterLabels,
+  inboxFilterCount,
   type InboxConversation,
   type InboxFilter,
+  type InboxFilterState,
 } from "@/lib/dashboard/whatsapp-inbox";
+import { InboxFilterMenu } from "./InboxFilterMenu";
 
 /**
- * WhatsApp-Web-style chat list: search, filter chips, and one row per
+ * WhatsApp-Web-style chat list: search, a compact filter button, and one row per
  * conversation. Purely presentational — filtering/search state is owned by the
  * parent inbox so the selection and mobile view stay in sync.
  */
@@ -22,8 +25,9 @@ export function WhatsAppChatList({
   onSelect,
   query,
   onQuery,
-  filter,
-  onFilter,
+  filterState,
+  onFilterChange,
+  onClear,
   counts,
   className,
 }: {
@@ -32,53 +36,53 @@ export function WhatsAppChatList({
   onSelect: (id: string) => void;
   query: string;
   onQuery: (q: string) => void;
-  filter: InboxFilter;
-  onFilter: (f: InboxFilter) => void;
+  filterState: InboxFilterState;
+  onFilterChange: (next: InboxFilterState) => void;
+  /** Clears both the search text and every active filter. */
+  onClear: () => void;
   counts: Record<InboxFilter, number>;
   className?: string;
 }) {
+  const filterActive = inboxFilterCount(filterState) > 0;
+  const activeLabels = activeFilterLabels(filterState);
+
   return (
     <div className={cn("flex min-h-0 flex-col border-border bg-surface", className)}>
-      {/* Search */}
+      {/* Search + Filter */}
       <div className="border-b border-border p-3">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
-          <input
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-            placeholder="Search chats"
-            aria-label="Search chats"
-            className="h-9 w-full rounded-full border border-border bg-surface-2 pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-rose focus-visible:outline-none"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
+            <input
+              value={query}
+              onChange={(e) => onQuery(e.target.value)}
+              placeholder="Search chats"
+              aria-label="Search chats"
+              className="h-9 w-full rounded-full border border-border bg-surface-2 pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-rose focus-visible:outline-none"
+            />
+          </div>
+          <InboxFilterMenu state={filterState} onChange={onFilterChange} counts={counts} />
         </div>
 
-        {/* Filter chips */}
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
-          {inboxFilters.map((f) => {
-            const on = filter === f.id;
-            const count = counts[f.id];
-            return (
+        {/* Compact active-filter summary — one row, only when filters are set */}
+        {filterActive && (
+          <div className="mt-2 flex items-center">
+            <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-rose/10 py-0.5 pl-2.5 pr-1 text-xxs font-medium text-rose">
+              <span className="truncate">
+                {activeLabels[0]}
+                {activeLabels.length > 1 && <span className="text-rose/70"> +{activeLabels.length - 1}</span>}
+              </span>
               <button
-                key={f.id}
                 type="button"
-                onClick={() => onFilter(f.id)}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xxs font-medium transition-colors",
-                  on
-                    ? "bg-rose text-rose-contrast"
-                    : "bg-surface-2 text-ink-muted hover:text-ink ring-1 ring-inset ring-border",
-                )}
+                onClick={() => onFilterChange({ humanNeeded: false, urgent: false, orderStatus: "any" })}
+                aria-label="Clear filters"
+                className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-rose/70 transition-colors hover:bg-rose/20 hover:text-rose focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40"
               >
-                {f.label}
-                {count > 0 && (
-                  <span className={cn("tnum", on ? "text-rose-contrast/80" : "text-ink-faint")}>
-                    {count}
-                  </span>
-                )}
+                <X className="h-3 w-3" />
               </button>
-            );
-          })}
-        </div>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Rows */}
@@ -86,16 +90,25 @@ export function WhatsAppChatList({
         {conversations.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center text-ink-faint">
             <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-rose/10 text-rose">
-              {query || filter !== "all" ? <SearchX className="h-5 w-5" /> : <Inbox className="h-5 w-5" />}
+              {query || filterActive ? <SearchX className="h-5 w-5" /> : <Inbox className="h-5 w-5" />}
             </span>
             <p className="text-sm font-medium text-ink">
-              {query || filter !== "all" ? "No matching chats" : "No conversations yet"}
+              {query || filterActive ? "No conversations match" : "No conversations yet"}
             </p>
-            <p className="mt-1 max-w-[14rem] text-xs">
-              {query || filter !== "all"
-                ? "Try a different search or filter."
+            <p className="mt-1 max-w-[15rem] text-xs">
+              {query || filterActive
+                ? "No conversations match the selected filters."
                 : "Incoming WhatsApp conversations will appear here."}
             </p>
+            {(query || filterActive) && (
+              <button
+                type="button"
+                onClick={onClear}
+                className="mt-3 inline-flex items-center gap-1 rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:border-border-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         ) : (
           <ul className="divide-y divide-border">

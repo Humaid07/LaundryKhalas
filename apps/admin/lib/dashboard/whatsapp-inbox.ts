@@ -143,6 +143,87 @@ export function matchesSearch(c: InboxConversation, query: string): boolean {
   );
 }
 
+/* ---------------------------- combined filter state ------------------------ */
+/**
+ * The inbox filters are two independent axes, not one exclusive list:
+ *  - Attention  → "Human Needed" (status) and "Urgent" (priority) can BOTH be
+ *    true for the same conversation, so they are multi-select checkboxes.
+ *  - Order status → "Active Orders" and "Resolved" are mutually exclusive
+ *    (active requires status !== resolved), so they are a single-select radio.
+ * A conversation is visible when it satisfies EVERY active constraint (AND).
+ */
+
+export type OrderStatusFilter = "any" | "active" | "resolved";
+
+export interface InboxFilterState {
+  /** Attention (checkbox): status is human_needed or human_takeover. */
+  humanNeeded: boolean;
+  /** Attention (checkbox): priority is urgent. */
+  urgent: boolean;
+  /** Order status (radio): "any" is the unset/show-all state. */
+  orderStatus: OrderStatusFilter;
+}
+
+export const emptyFilterState: InboxFilterState = {
+  humanNeeded: false,
+  urgent: false,
+  orderStatus: "any",
+};
+
+/** Number of active constraints — powers the compact button badge. */
+export function inboxFilterCount(s: InboxFilterState): number {
+  let n = 0;
+  if (s.humanNeeded) n += 1;
+  if (s.urgent) n += 1;
+  if (s.orderStatus !== "any") n += 1;
+  return n;
+}
+
+/** Combined predicate — AND across every active constraint. */
+export function matchesFilters(c: InboxConversation, s: InboxFilterState): boolean {
+  if (s.humanNeeded && !(c.status === "human_needed" || c.status === "human_takeover")) return false;
+  if (s.urgent && c.priority !== "urgent") return false;
+  if (s.orderStatus === "active" && !(!!c.order && c.status !== "resolved")) return false;
+  if (s.orderStatus === "resolved" && c.status !== "resolved") return false;
+  return true;
+}
+
+/** Ordered human labels for the active constraints (for the compact summary). */
+export function activeFilterLabels(s: InboxFilterState): string[] {
+  const out: string[] = [];
+  if (s.humanNeeded) out.push("Human Needed");
+  if (s.urgent) out.push("Urgent");
+  if (s.orderStatus === "active") out.push("Active Orders");
+  else if (s.orderStatus === "resolved") out.push("Resolved");
+  return out;
+}
+
+/* ----------------------- URL <-> filter state (shareable) ------------------ */
+/* Persisted as ?human_needed=true&urgent=true&order_status=active so filters   */
+/* survive refresh and browser back/forward. Only non-PII booleans/enums go in  */
+/* the URL. Search text stays local (matches the rest of the dashboard).        */
+
+export function filterStateFromParams(params: URLSearchParams): InboxFilterState {
+  const order = params.get("order_status");
+  return {
+    humanNeeded: params.get("human_needed") === "true",
+    urgent: params.get("urgent") === "true",
+    orderStatus: order === "active" || order === "resolved" ? order : "any",
+  };
+}
+
+/** Mutates `params` in place: writes active keys, deletes defaults. */
+export function writeFilterStateToParams(params: URLSearchParams, s: InboxFilterState): void {
+  if (s.humanNeeded) params.set("human_needed", "true");
+  else params.delete("human_needed");
+
+  if (s.urgent) params.set("urgent", "true");
+  else params.delete("urgent");
+
+  if (s.orderStatus === "any") params.delete("order_status");
+  else params.set("order_status", s.orderStatus);
+}
+
 /* --------------------------- seeded conversations -------------------------- */
 /* Timestamps cluster around the deterministic MOCK_NOW (2026-07-20T10:00Z)     */
 /* used across the dashboard so relative times render consistently.            */

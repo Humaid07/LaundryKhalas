@@ -1,13 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   seedConversations,
   matchesFilter,
+  matchesFilters,
   matchesSearch,
   inboxFilters,
+  filterStateFromParams,
+  writeFilterStateToParams,
+  emptyFilterState,
   type InboxConversation,
   type InboxFilter,
+  type InboxFilterState,
   type InboxMessage,
 } from "@/lib/dashboard/whatsapp-inbox";
 import { WhatsAppChatList } from "./WhatsAppChatList";
@@ -36,13 +42,53 @@ export function WhatsAppInbox() {
   );
   const [selectedId, setSelectedId] = useState<string | null>(seedConversations[0]?.id ?? null);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<InboxFilter>("all");
   const [contextOpen, setContextOpen] = useState(true);
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
+  // Filter state: local state is the instant source of truth (so quick toggles
+  // never race the async router), mirrored to the URL
+  // (?human_needed=true&urgent=true&order_status=active) so it survives refresh
+  // and reflects browser back/forward.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchString = searchParams.toString();
+
+  const [filterState, setFilterState] = useState<InboxFilterState>(() =>
+    filterStateFromParams(new URLSearchParams(searchString)),
+  );
+
+  // URL → state: reconcile when the querystring changes externally (back /
+  // forward, refresh, a deep link). No-op when it already matches our state.
+  useEffect(() => {
+    const fromUrl = filterStateFromParams(new URLSearchParams(searchString));
+    setFilterState((prev) =>
+      prev.humanNeeded === fromUrl.humanNeeded &&
+      prev.urgent === fromUrl.urgent &&
+      prev.orderStatus === fromUrl.orderStatus
+        ? prev
+        : fromUrl,
+    );
+  }, [searchString]);
+
+  // state → URL: keep the querystring in sync, preserving unrelated params.
+  // `replace` avoids a history entry per toggle; back still returns to the
+  // previous page. Reading window.location at write time prevents a ping-pong
+  // with the reconcile effect above.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const current = window.location.search.replace(/^\?/, "");
+    const params = new URLSearchParams(current);
+    writeFilterStateToParams(params, filterState);
+    const qs = params.toString();
+    if (qs !== current) {
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }
+  }, [filterState, pathname, router]);
+
   const visible = useMemo(
-    () => conversations.filter((c) => matchesFilter(c, filter) && matchesSearch(c, query)),
-    [conversations, filter, query],
+    () => conversations.filter((c) => matchesFilters(c, filterState) && matchesSearch(c, query)),
+    [conversations, filterState, query],
   );
 
   const counts = useMemo(() => {
@@ -50,6 +96,20 @@ export function WhatsAppInbox() {
     for (const f of inboxFilters) out[f.id] = conversations.filter((c) => matchesFilter(c, f.id)).length;
     return out;
   }, [conversations]);
+
+  // Preserve the selected chat while it still matches; safely deselect it (and
+  // drop the mobile chat view) when a filter/search/status change hides it.
+  useEffect(() => {
+    if (selectedId && !visible.some((c) => c.id === selectedId)) {
+      setSelectedId(null);
+      setMobileChatOpen(false);
+    }
+  }, [visible, selectedId]);
+
+  const clearAll = useCallback(() => {
+    setQuery("");
+    setFilterState(emptyFilterState);
+  }, [setFilterState]);
 
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
 
@@ -123,8 +183,9 @@ export function WhatsAppInbox() {
           onSelect={handleSelect}
           query={query}
           onQuery={setQuery}
-          filter={filter}
-          onFilter={setFilter}
+          filterState={filterState}
+          onFilterChange={setFilterState}
+          onClear={clearAll}
           counts={counts}
           className={mobileChatOpen ? "hidden border-r md:flex" : "flex border-r"}
         />

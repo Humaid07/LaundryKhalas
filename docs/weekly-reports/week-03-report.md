@@ -124,3 +124,20 @@ Separate from the agent workstream, one **admin dashboard UX fix** shipped:
   No visual redesign — same layout/colors/icons/badges/chevron. Gates green + **30/30
   Playwright** (desktop + mobile). Build report:
   `build-reports/2026-07-30-sidebar-parent-row-toggle.md`.
+- **Inbox filter pills → compact Filter button + popover.** In Operations → Customer
+  Facing, the five filters ("All / Human Needed / Urgent / Active Orders / Resolved")
+  used to sit **permanently as a pill wall** above the chat list, eating vertical space.
+  They now live behind **one compact funnel Filter button** beside "Search chats" that
+  opens a focus-managed **popover**: **Attention** (Human Needed / Urgent — multi-select
+  **checkboxes**, since a chat can be both) and **Order status** (Active Orders / Resolved
+  — **radios**, since they're mutually exclusive), each with a **live count** from the real
+  conversation data. Active filters show as a **badge on the button** + a **one-row
+  removable summary chip** (e.g. "Human Needed +1 ×") — no pill wall. Search + filters
+  **combine (AND)**; there's a proper empty state ("No conversations match…" + Clear
+  filters); the selected chat **safely deselects** if a filter hides it. Filter state is
+  **persisted in the URL** (`?human_needed=true&urgent=true&order_status=active`) so it
+  survives refresh and back/forward. Three-column layout, chat pane, colours and spacing
+  unchanged. Fixed an async-router race during the build (local state is now the instant
+  source of truth, mirrored to the URL). Gates: typecheck + lint clean; Playwright verified
+  (desktop, dark, mobile — all 15 requested cases). Build report:
+  `build-reports/2026-07-30-inbox-filter-popover.md`.
