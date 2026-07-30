@@ -34,6 +34,8 @@ def test_parse_plain_text():
             "selection_id": None,
             "latitude": None,
             "longitude": None,
+            "media_kind": "text",
+            "location_event": None,
         }
     ]
 

@@ -60,6 +60,7 @@ from services import (
     order_confirmation,
     order_store,
     post_confirmation,
+    voice_fallback,
 )
 from services.auto_reply import SENDER_NOT_ALLOWED, should_auto_reply
 from services.escalation import detect_escalation
@@ -341,6 +342,74 @@ async def _deliver(channel, phone: str, convo_id: str, reply, *, turn_id: str | 
                                                   "idem_key": idem_key, "turn_id": turn_id})
     except Exception as exc:  # noqa: BLE001
         logger.warning("evolution_send_failed", error=str(exc))
+
+
+async def _send_plain(convo_id: str, phone: str, text: str, *, kind: str) -> None:
+    """Send a plain-text agent message (voice fallback / handover) and store it.
+    Idempotent per (conversation, kind) so a redelivery never double-sends."""
+    try:
+        idem = f"{convo_id}:{kind}"
+        if await messages_repo.agent_reply_key_seen(convo_id, idem):
+            logger.info("duplicate_outbound_prevented", conversation=convo_id, kind=kind)
+            return
+        await EvolutionWhatsAppChannel.from_settings().send_text(to_phone=phone, text=text)
+        await messages_repo.add_message(convo_id, "agent", text, status="sent",
+                                        metadata={"kind": kind, "idem_key": idem})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("voice_reply_failed", kind=kind, error=str(exc))
+
+
+async def _handle_unprocessable_voice(convo, customer, sender, masked, wa_id, inbound_msg, *, live, mode) -> None:
+    """Voice-note handling (spec scenarios 1-4). The system has no transcription,
+    so audio is never sent to the model: first note → one text-fallback ask; second
+    DISTINCT note → human intervention + handover; duplicates/holds → store only."""
+    convo_id = convo["id"]
+    state_row = await conversations_repo.get_voice_state(convo_id)
+    state = voice_fallback.VoiceState(
+        count=state_row.get("count") or 0,
+        last_message_id=state_row.get("last_message_id"),
+        escalation_status=state_row.get("escalation_status") or "none",
+    )
+    takeover_active = convo.get("status") == "human_takeover"
+    logger.info("voice_message_received", sender=masked, wa_message_id=bool(wa_id))
+    decision = voice_fallback.decide_voice_message(state, audio_message_id=wa_id, takeover_active=takeover_active)
+
+    # Persist counters BEFORE replying (survives restart; counted by unique id).
+    await conversations_repo.set_voice_state(
+        convo_id, count=decision.new_count, last_message_id=decision.new_last_message_id,
+        escalation_status=decision.new_status,
+        mark_fallback_sent=(decision.action == voice_fallback.VoiceAction.FIRST_FALLBACK),
+    )
+    if inbound_msg:
+        await messages_repo.set_status(inbound_msg["id"], "no_auto_reply")
+
+    can_reply = live and mode != "paused"
+
+    if decision.action == voice_fallback.VoiceAction.DUPLICATE_IGNORED:
+        logger.info("duplicate_voice_message_ignored", sender=masked)
+        return
+    if decision.action == voice_fallback.VoiceAction.HOLD:
+        logger.info("evolution_inbound_held", sender=masked, no_auto_reply_reason="voice_escalated_or_takeover")
+        return
+    if decision.action == voice_fallback.VoiceAction.FIRST_FALLBACK:
+        logger.info("voice_text_fallback_requested", sender=masked)
+        if can_reply and not takeover_active:
+            await _send_plain(convo_id, sender, decision.reply_text, kind="voice_text_fallback")
+        return
+    # ESCALATE — create the human-intervention case, pause AI, one handover reply.
+    logger.info("repeated_voice_message_detected", sender=masked, reason=decision.escalation_reason)
+    try:
+        await conversations_repo.start_human_takeover(convo_id, operator_name=None)
+        await conversations_repo.set_handoff_reason(convo_id, decision.escalation_reason)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("voice_takeover_failed", sender=masked, error=str(exc))
+    logger.info("voice_human_intervention_created", sender=masked, reason=decision.escalation_reason)
+    try:  # notify Operations = surface via the takeover queue + CRM refresh (best-effort)
+        await crm_repo.recompute_for_customer(customer["id"])
+    except Exception:  # noqa: BLE001
+        pass
+    if can_reply:
+        await _send_plain(convo_id, sender, decision.reply_text, kind="voice_handover")
 
 
 def _order_status_text(order: dict | None) -> str:
@@ -748,6 +817,24 @@ async def receive_evolution_webhook(request: Request):
                       "longitude": msg.get("longitude")},
         )
         await conversations_repo.register_inbound(convo["id"], stored_text)
+
+        # --- UNPROCESSABLE VOICE / AUDIO (spec scenarios 1-4) ------------------
+        # Detect media BEFORE any model call so the agent never hallucinates a
+        # transcript. First voice note → text fallback; second distinct → human
+        # intervention + handover; duplicates/held → store only.
+        media_kind = msg.get("media_kind") or "text"
+        if media_kind == "audio":
+            await _handle_unprocessable_voice(
+                convo, customer, sender, masked, wa_id, inbound_msg, live=live, mode=mode
+            )
+            processed += 1
+            continue
+        # A valid text/interactive turn clears any pending voice-escalation state.
+        if media_kind in ("text", "interactive") and (text or "").strip():
+            try:
+                await conversations_repo.reset_voice_state(convo["id"])
+            except Exception:  # noqa: BLE001
+                pass
 
         # --- ESCALATION (interrupts everything, never auto-resolves) -----------
         category = detect_escalation(text)

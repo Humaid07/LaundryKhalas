@@ -218,6 +218,18 @@ class Settings(BaseSettings):
     # REQUIRE_AUTH=false (blank = first active facility). Never used with auth on.
     facility_dev_id: str = ""
 
+    # --- Facility handoff: direct customer-data sharing (privacy firewall) ----
+    # Which customer-contact fields the centralized facility-handoff serializer
+    # (services/facility_handoff.py) may include. Today facilities coordinate
+    # pickup directly, so these default ON. When the driver app arrives, set the
+    # relevant flags to false to STOP sharing customer contact with facilities —
+    # the handoff simply omits the disabled fields; routing, history and the
+    # driver workflow keep working (coarse area/city is always retained).
+    facility_share_customer_name: bool = True
+    facility_share_customer_phone: bool = True
+    facility_share_typed_address: bool = True
+    facility_share_location_pin: bool = True
+
     # --- Facility order photos (intake + pre-dispatch proof) -----------------
     # Where a facility's uploaded order photos are stored. "local" writes bytes
     # to a gitignored dev folder (apps/whatsapp-agent/storage/order-photos) and

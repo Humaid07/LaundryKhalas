@@ -215,6 +215,43 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               </DetailSectionCard>
             )}
 
+            {/* Additional order notes — customer instructions captured during the
+                WhatsApp booking, grouped by operational section (not raw JSON). */}
+            {order.additional_notes && Object.keys(order.additional_notes).length > 0 && (() => {
+              const NOTE_LABELS: Record<string, string> = {
+                PICKUP_INSTRUCTION: "Pickup Instructions",
+                DELIVERY_INSTRUCTION: "Delivery Instructions",
+                ACCESS_INSTRUCTION: "Building & Access Instructions",
+                CONTACT_PREFERENCE: "Contact Preferences",
+                TIMING_PREFERENCE: "Timing Preferences",
+                ITEM_HANDLING: "Item Handling",
+                STAIN_NOTE: "Stains",
+                EXISTING_DAMAGE: "Existing Damage",
+                SPECIAL_CARE: "Special Care",
+                FACILITY_INSTRUCTION: "Facility Instructions",
+                INSPECTION_REQUIREMENT: "Inspection Requirements",
+                OTHER_OPERATIONAL_NOTE: "Other Notes",
+              };
+              return (
+                <DetailSectionCard title="Additional Notes" icon={ClipboardList}>
+                  <div className="space-y-3.5">
+                    {Object.entries(order.additional_notes).map(([cat, texts]) => (
+                      <div key={cat}>
+                        <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">
+                          {NOTE_LABELS[cat] ?? cat}
+                        </p>
+                        <ul className="mt-1 space-y-1">
+                          {texts.map((t, i) => (
+                            <li key={i} className="text-sm text-ink">• {t}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </DetailSectionCard>
+              );
+            })()}
+
             {/* Order photos — intake + pre-dispatch proof */}
             <OrderPhotosSection orderId={orderId} status={order.status} canManage={canManage} />
 

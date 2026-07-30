@@ -74,7 +74,11 @@ async def return_to_bot(conversation_id: str) -> dict | None:
            set status = 'bot',
                priority = null,
                human_intervention_required = false,
-               handoff_reason = null
+               handoff_reason = null,
+               -- releasing to AI also resets the voice-escalation counters
+               unprocessed_voice_message_count = 0,
+               last_unprocessed_voice_message_id = null,
+               voice_escalation_status = 'none'
          where id = $1
         """,
         conversation_id,
@@ -85,6 +89,60 @@ async def return_to_bot(conversation_id: str) -> dict | None:
         conversation_id,
     )
     return await get_conversation(conversation_id)
+
+
+# --- Unprocessable-voice-note escalation state (migration 000033) ----------
+
+async def get_voice_state(conversation_id: str) -> dict:
+    """Durable voice-escalation counters for a conversation (see voice_fallback)."""
+    row = await database.fetchrow(
+        "select unprocessed_voice_message_count as count, "
+        "last_unprocessed_voice_message_id as last_message_id, "
+        "voice_escalation_status as escalation_status "
+        "from conversations where id = $1",
+        conversation_id,
+    )
+    return dict(row) if row else {"count": 0, "last_message_id": None, "escalation_status": "none"}
+
+
+async def set_voice_state(
+    conversation_id: str,
+    *,
+    count: int,
+    last_message_id: str | None,
+    escalation_status: str,
+    mark_fallback_sent: bool = False,
+) -> None:
+    await database.execute(
+        """
+        update conversations
+           set unprocessed_voice_message_count = $2,
+               last_unprocessed_voice_message_id = $3,
+               last_unprocessed_voice_message_at = now(),
+               voice_escalation_status = $4,
+               voice_text_fallback_sent_at = case when $5 then now() else voice_text_fallback_sent_at end,
+               updated_at = now()
+         where id = $1
+        """,
+        conversation_id, count, last_message_id, escalation_status, mark_fallback_sent,
+    )
+
+
+async def reset_voice_state(conversation_id: str) -> None:
+    """Reset counters — on a valid text message or a new conversation lifecycle."""
+    await database.execute(
+        "update conversations set unprocessed_voice_message_count = 0, "
+        "last_unprocessed_voice_message_id = null, voice_escalation_status = 'none', "
+        "updated_at = now() where id = $1 and unprocessed_voice_message_count > 0",
+        conversation_id,
+    )
+
+
+async def set_handoff_reason(conversation_id: str, reason: str) -> None:
+    await database.execute(
+        "update conversations set handoff_reason = $2, updated_at = now() where id = $1",
+        conversation_id, reason,
+    )
 
 
 async def resolve(conversation_id: str) -> dict | None:

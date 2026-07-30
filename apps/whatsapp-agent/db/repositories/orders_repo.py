@@ -535,9 +535,19 @@ _BOOKING_COLS = frozenset({
     # discount-requested flag that gates the 20%-over-200 tier.
     "eligible_subtotal", "discount_rule_code", "discount_percentage",
     "discount_threshold", "discount_amount", "discount_requested",
+    # Structured pickup address (human navigation) — 000033.
+    "building_name", "villa_number", "apartment_number", "floor", "room_number",
+    "landmark", "access_details",
+    # Location-pin capture metadata (coordinates use pickup_latitude/longitude) — 000033.
+    "location_source", "location_type", "location_name", "location_provider_address",
+    "location_message_id", "location_received_at", "location_accuracy", "location_pin_status",
+    # Confirmed-notes snapshot + facility-handoff status — 000033.
+    "confirmed_notes_snapshot", "notes_confirmed_at",
+    "facility_handoff_status", "facility_handoff_at", "facility_handoff_attempts",
+    "facility_handoff_last_error", "facility_handoff_payload",
 })
 # Columns written by the FSM that are jsonb and need an explicit cast.
-_JSONB_BOOKING_COLS = frozenset({"line_items"})
+_JSONB_BOOKING_COLS = frozenset({"line_items", "confirmed_notes_snapshot", "facility_handoff_payload"})
 _BOOKING_CONFIRMED = "booking_confirmed"
 _BOOKING_CANCELLED = "booking_cancelled"
 

@@ -347,6 +347,13 @@ export interface FacilityOrderDetail extends FacilityOrder {
   issues?: FacilityIssue[];
   driver_assignment?: DriverAssignment | null;
   driver?: FacilityDriver | null;
+  // Structured additional order notes grouped by operational section (customer
+  // instructions captured during the WhatsApp booking). Config-gated by the backend.
+  additional_notes?: Record<string, string[]>;
+  grouped_notes?: Record<string, string[]>;
+  pickup_address_full?: Record<string, string> | null;
+  location_pin?: { latitude?: number; longitude?: number; type?: string; name?: string } | null;
+  location_pin_status?: string | null;
 }
 
 export interface FacilityFinanceSummary {

@@ -18,6 +18,7 @@ import uuid
 import httpx
 
 from channels.whatsapp_base import SendResult, WhatsAppChannel
+from services.media_classification import MediaKind, classify_inbound_media
 from settings import get_settings
 
 
@@ -253,14 +254,16 @@ def parse_evolution_webhook(payload: dict) -> list[dict]:
         if remote_jid.endswith("@g.us") or remote_jid == "status@broadcast":
             continue
         message = msg.get("message") or {}
+        kind = classify_inbound_media(message)
         text = _extract_text(message)
         selection_id, sel_text = _extract_interactive(message)
         latitude, longitude = _extract_location(message)
         # An interactive reply's display text is the human-visible message; a bare
         # location has no text. Keep any message that carries text, a selection, or
-        # a location — only ack/receipt events with none of these are dropped.
+        # a location — plus AUDIO (which we must acknowledge/escalate rather than
+        # silently drop). Only ack/receipt events with none of these are dropped.
         display = text or sel_text
-        if not display and selection_id is None and latitude is None:
+        if not display and selection_id is None and latitude is None and kind != MediaKind.AUDIO:
             continue
         phone = _resolve_sender_phone(key)
         if not phone:
@@ -274,6 +277,9 @@ def parse_evolution_webhook(payload: dict) -> list[dict]:
                 "selection_id": selection_id,
                 "latitude": latitude,
                 "longitude": longitude,
+                "media_kind": kind.value,
+                # Raw location object (name/address/live flag) for structured capture.
+                "location_event": message.get("liveLocationMessage") or message.get("locationMessage"),
             }
         )
     return results

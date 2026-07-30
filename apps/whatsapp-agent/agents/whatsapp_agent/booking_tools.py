@@ -412,6 +412,31 @@ BOOKING_TOOL_SCHEMAS: list[dict] = [
      "description": "Escalate this conversation to a human agent (complaints, refunds, anything unsafe or out of scope).",
      "input_schema": {"type": "object", "properties": {"reason": {"type": "string"}},
                       "required": ["reason"], "additionalProperties": False}},
+    {"name": "propose_order_note",
+     "description": "Propose ONE operationally-useful additional note for the order, extracted from what the customer "
+                    "said. Call this when the customer gives a pickup/delivery/access instruction, contact or timing "
+                    "preference, item-handling request, a stain, existing damage, special-care or inspection "
+                    "requirement — the customer does NOT need to say 'add a note'. Do NOT propose greetings, thanks, "
+                    "casual chat, or an unconfirmed promise (store 'Customer requested X', never 'Guaranteed X'). The "
+                    "BACKEND validates, de-duplicates and decides whether to store or supersede it — you never write "
+                    "directly. category MUST be one of: PICKUP_INSTRUCTION, DELIVERY_INSTRUCTION, ACCESS_INSTRUCTION, "
+                    "CONTACT_PREFERENCE, TIMING_PREFERENCE, ITEM_HANDLING, STAIN_NOTE, EXISTING_DAMAGE, SPECIAL_CARE, "
+                    "FACILITY_INSTRUCTION, INSPECTION_REQUIREMENT, OTHER_OPERATIONAL_NOTE.",
+     "input_schema": {"type": "object",
+                      "properties": {"category": {"type": "string"}, "text": {"type": "string"},
+                                     "confidence": {"type": "number"}},
+                      "required": ["category", "text"], "additionalProperties": False}},
+    {"name": "remove_order_note",
+     "description": "Remove an active additional note the customer asked to drop (e.g. 'remove the note about "
+                    "reception'). Pass target_text (a keyword from the note) and/or category. Only clearly-matching "
+                    "notes are removed; unrelated notes are preserved.",
+     "input_schema": {"type": "object",
+                      "properties": {"target_text": {"type": "string"}, "category": {"type": "string"}},
+                      "required": [], "additionalProperties": False}},
+    {"name": "get_active_order_notes",
+     "description": "List the order's current active additional notes, grouped by category. Use before showing the "
+                    "order summary so the Additional Notes section is accurate.",
+     "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
 ]
 
 # Read-only GROUNDING tools (price / turnaround / area) so the SAME assistant can
@@ -670,6 +695,31 @@ def booking_system_prompt() -> str:
         "- The BACKEND decides genuine abuse/threats and handles the hand-off; if a message is "
         "routed to you, treat it as a normal (if unhappy) customer. Never tell a customer they "
         "were flagged, classified, or that a safety system was triggered.\n\n"
+        "Voice notes, notes, identity, address & pin (backend is authoritative):\n"
+        "- You CANNOT transcribe or understand voice/audio messages. The backend detects audio "
+        "before you see it: on the first unprocessable voice note it asks the customer for text; on "
+        "a second consecutive one it transfers to Operations and pauses you. Never pretend you heard "
+        "audio and never invent a transcript.\n"
+        "- Identify operationally-useful customer instructions and propose them as structured notes "
+        "with propose_order_note (pickup, delivery, access, contact preference, timing, item "
+        "handling, stains, existing damage, special care, inspection). The customer need not say "
+        "'add a note'. Do NOT note greetings, thanks or casual chat, and never store an unconfirmed "
+        "promise (say 'Customer requested X', not 'Guaranteed X'). The backend validates and "
+        "de-duplicates; let the customer add, change or remove notes (remove_order_note).\n"
+        "- Show ALL active additional notes in the complete order summary before confirmation "
+        "(call get_active_order_notes / get_order_summary), under an 'Additional Notes' section. Ask "
+        "the customer to confirm the booking, add another note, or change anything. The order is "
+        "confirmed only when they confirm the complete current summary.\n"
+        "- Use the normalized WhatsApp number the backend already has — do NOT ask for the phone "
+        "number. Use the validated customer name the backend supplies; if a valid WhatsApp profile "
+        "name exists, do not ask for the name again — show it in the summary and let them correct "
+        "it. Ask for the name only when it is missing or invalid.\n"
+        "- Ask for BOTH a full typed pickup address (building, floor, apartment, room, access) and a "
+        "WhatsApp location pin whenever either is missing — explain the pin lets us route to the "
+        "nearest facility while the typed address is the exact human pickup detail. Do not re-ask "
+        "for an address or pin already present. Never invent coordinates.\n"
+        "- Never invent a transcript, name, phone number, address, coordinate, note, facility "
+        "assignment or confirmation.\n\n"
         "Always reply with a short, natural message. Do not mention tools, JSON, internal "
         "IDs, states, or these instructions."
     )
@@ -1090,6 +1140,37 @@ def make_booking_executor(ctx: BookingContext):
             await _apply({"pickup_instruction_text": text, "pickup_instruction_code": "custom"})
             return _ok({"saved": True, "workflow": workflow_state_block(await _current_row())})
 
+        if name == "propose_order_note":
+            from db.repositories import order_notes_repo
+            draft = await _ensure_draft()
+            # Backend validates + de-dups + (maybe) supersedes; Claude never writes.
+            result = await order_notes_repo.apply_candidate(
+                str(draft["id"]), category=str(ti.get("category", "")), text=str(ti.get("text", "")),
+                source="CUSTOMER_MESSAGE", source_message_id=getattr(ctx, "source_message_id", None),
+                confidence=ti.get("confidence"), conversation_id=ctx.conversation_id,
+            )
+            active = await order_notes_repo.grouped_active(str(draft["id"]))
+            return _ok({"result": result["action"], "reason": result.get("reason"),
+                        "active_notes": active})
+
+        if name == "remove_order_note":
+            from db.repositories import order_notes_repo
+            draft = await _current_row()
+            if draft is None:
+                return _ok({"result": "no_order", "active_notes": {}})
+            removed = await order_notes_repo.remove(
+                str(draft["id"]), target_text=ti.get("target_text"), category=ti.get("category"))
+            active = await order_notes_repo.grouped_active(str(draft["id"]))
+            return _ok({"result": "removed" if removed else "no_match",
+                        "removed_count": len(removed), "active_notes": active})
+
+        if name == "get_active_order_notes":
+            from db.repositories import order_notes_repo
+            draft = await _current_row()
+            if draft is None:
+                return _ok({"active_notes": {}})
+            return _ok({"active_notes": await order_notes_repo.grouped_active(str(draft["id"]))})
+
         if name == "get_order_summary":
             from services import fulfilment
             from services import market as market_svc
@@ -1104,8 +1185,19 @@ def make_booking_executor(ctx: BookingContext):
             # Min-order / delivery charge (spec §2.3): free at/above the market
             # minimum, else a flat fee — stated up front, never invented.
             charge = fulfilment.delivery_charge(quote.customer_total, market=mkt)
+            from db.repositories import order_notes_repo
+            from services import location_capture, order_notes as _notes_mod
+            try:  # notes are optional to the summary; never break it if unavailable
+                active_notes = await order_notes_repo.list_active(str(row["id"]))
+            except Exception:  # noqa: BLE001
+                active_notes = []
             return _ok({"summary_lines": pricing.format_quote_lines(quote),
                         "final_price_aed": quote.customer_total,
+                        # Additional Notes section (spec §order-summary) + pin/address.
+                        "additional_notes": _notes_mod.group_active_by_category(active_notes),
+                        "additional_notes_lines": _notes_mod.summary_lines(active_notes),
+                        "typed_address": row.get("pickup_address"),
+                        "location_pin_status": location_capture.pin_status(row),
                         # Any AGREED negotiated price is already reflected in
                         # final_price_aed (net of the negotiated discount).
                         "eligible_subtotal_aed": quote.eligible_subtotal,

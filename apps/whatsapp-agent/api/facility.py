@@ -151,8 +151,33 @@ async def facility_order_detail(
     driver = None
     if assignment and assignment.get("driver_id"):
         driver = await facility_drivers_repo.get(fid, assignment["driver_id"])
+
+    # Additional order notes (grouped) + config-gated typed address / location pin,
+    # via the centralized facility-handoff serializer (privacy firewall). Best-effort.
+    additional_notes: dict = {}
+    handoff_extra: dict = {}
+    if row:
+        try:
+            from db.repositories import order_notes_repo
+            from services import facility_handoff, order_notes as _notes_mod
+            from settings import get_settings
+            active = await order_notes_repo.list_active(str(row["id"]))
+            additional_notes = _notes_mod.group_active_by_category(active)
+            share = facility_handoff.config_from_settings(get_settings())
+            payload = facility_handoff.build_facility_handoff_payload(
+                order=dict(row), active_notes=active, customer=None, share=share)
+            handoff_extra = {
+                "grouped_notes": payload.get("notes", {}),
+                "pickup_address_full": payload.get("pickup_address"),
+                "location_pin": payload.get("location_pin"),
+                "location_pin_status": payload.get("location_pin_status"),
+            }
+        except Exception:  # noqa: BLE001 — notes/address are additive to the detail
+            pass
+
     return {**order, "timeline": timeline, "related_issues": issues,
-            "driver_assignment": assignment, "driver": driver}
+            "driver_assignment": assignment, "driver": driver,
+            "additional_notes": additional_notes, **handoff_extra}
 
 
 @router.patch("/orders/{order_id}/status")
