@@ -1,11 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { MessageSquarePlus, Download, ArrowUpRight, SearchX } from "lucide-react";
+import {
+  MessageSquarePlus,
+  Download,
+  ArrowUpRight,
+  SearchX,
+  Gauge,
+  TrendingUp,
+  PieChart,
+  ClipboardList,
+  MessagesSquare,
+} from "lucide-react";
 import { ResponsivePageHeader } from "@/components/dashboard/shell/PageHeader";
 import { StatGrid } from "@/components/dashboard/ui/StatCard";
 import { ChartCard } from "@/components/dashboard/ui/ChartCard";
 import { Panel, PanelHeader, StatusBadge, KpiBand } from "@/components/dashboard/ui/primitives";
+import {
+  CollapsibleSectionsProvider,
+  CollapsibleDashboardSection,
+  CollapseAllControls,
+} from "@/components/dashboard/ui/CollapsibleSection";
 import { Button } from "@/components/dashboard/ui/Button";
 import { DataTable, type Column } from "@/components/dashboard/ui/DataTable";
 import { EmptyState, SnapshotBadge } from "@/components/dashboard/ui/states";
@@ -67,150 +82,195 @@ export default function OverviewPage() {
         }
       />
 
-      {/* KPI band — headline totals are period snapshots (labelled when filters are active);
-          the lists/charts below (orders, conversations, by-channel, by-city) are filter-aware. */}
-      <KpiBand label="Headline totals" aside={<SnapshotBadge active={activeFilterCount(filters) > 0} />}>
-        <StatGrid stats={overviewKpis} />
-      </KpiBand>
+      {/* Collapsible Overview sections — operators can fold away groups they aren't
+          working with; state persists per-user via localStorage. Headers stay visible;
+          only the content collapses. The page header above is never collapsible. */}
+      <CollapsibleSectionsProvider>
+        <div className="mb-4 flex items-center justify-end">
+          <CollapseAllControls />
+        </div>
 
-      {/* Primary trend charts */}
-      <div className="mb-6 grid gap-4 xl:grid-cols-3">
-        <ChartCard
-          title="Orders over time"
-          subtitle="By channel · last 3 weeks"
-          className="xl:col-span-2"
+        {/* KPI band — headline totals are period snapshots (labelled when filters are active);
+            the lists/charts below (orders, conversations, by-channel, by-city) are filter-aware. */}
+        <CollapsibleDashboardSection
+          id="headline"
+          title="Headline totals"
+          description="Period snapshot across every market"
+          icon={Gauge}
+          rightAction={<SnapshotBadge active={activeFilterCount(filters) > 0} />}
         >
-          <AreaTrend
-            data={ordersOverTime}
-            stacked
-            series={[
-              { key: "WhatsApp", color: CHART.rose },
-              { key: "Website", color: CHART.plum },
-              { key: "App", color: CHART.teal },
-            ]}
-          />
-        </ChartCard>
-        <ChartCard title="Revenue & profit" subtitle="AED · last 3 weeks">
-          <AreaTrend
-            data={revenueOverTime}
-            currency
-            series={[
-              { key: "Revenue", color: CHART.rose },
-              { key: "Profit", color: CHART.teal },
-            ]}
-          />
-        </ChartCard>
-      </div>
+          <KpiBand className="mb-0">
+            <StatGrid stats={overviewKpis} />
+          </KpiBand>
+        </CollapsibleDashboardSection>
 
-      {/* Breakdown charts */}
-      <div className="mb-6 grid gap-4 lg:grid-cols-3">
-        <ChartCard title="Orders by channel" subtitle="Share of volume">
-          <DonutChart data={byChannel} centerValue={formatNumber(channelTotal, true)} centerLabel="Orders" />
-        </ChartCard>
-        <ChartCard title="Orders by city" subtitle="Top markets">
-          {byCity.length > 0 ? (
-            <BarSeries data={byCity} horizontal colorByIndex height={264} />
-          ) : (
-            <EmptyState icon={SearchX} title="No cities match" description="Adjust or clear the filters." />
-          )}
-        </ChartCard>
-        <ChartCard title="Automation rate" subtitle="AI vs human handling">
-          <GroupedBars
-            data={automationRate}
-            series={[
-              { key: "Automated", color: CHART.rose, name: "AI" },
-              { key: "Human", color: CHART.slate, name: "Human" },
-            ]}
-          />
-        </ChartCard>
-      </div>
-
-      {/* Latest orders + side panels */}
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Panel className="xl:col-span-2">
-          <PanelHeader
-            title="Latest orders"
-            subtitle={`${filteredOrders.length} of ${orders.length} orders`}
-            action={
-              <Link href="/operations/customer-orders">
-                <Button variant="ghost" size="sm">
-                  View all <ArrowUpRight className="h-3.5 w-3.5" />
-                </Button>
-              </Link>
-            }
-          />
-          <DataTable
-            columns={latestOrderCols}
-            rows={filteredOrders.slice(0, 6)}
-            rowKey={(o) => o.id}
-            empty={<EmptyState icon={SearchX} title="No orders match" description="Try clearing a filter." />}
-          />
-        </Panel>
-
-        <Panel>
-          <PanelHeader
-            title="Pending approvals"
-            subtitle="Every agent action needs a human"
-            action={
-              <Link href="/finance-compliance/refunds-adjustments" className="inline-flex">
-                <StatusBadge tone="rose">{approvals.length}</StatusBadge>
-              </Link>
-            }
-          />
-          <div className="space-y-2.5">
-            {approvals.slice(0, 3).map((a) => (
-              <ApprovalCard key={a.id} approval={a} compact />
-            ))}
+        {/* Primary trend charts */}
+        <CollapsibleDashboardSection
+          id="trends"
+          title="Orders & revenue trends"
+          description="By channel · last 3 weeks"
+          icon={TrendingUp}
+        >
+          <div className="grid gap-4 xl:grid-cols-3">
+            <ChartCard
+              title="Orders over time"
+              subtitle="By channel · last 3 weeks"
+              className="xl:col-span-2"
+            >
+              <AreaTrend
+                data={ordersOverTime}
+                stacked
+                series={[
+                  { key: "WhatsApp", color: CHART.rose },
+                  { key: "Website", color: CHART.plum },
+                  { key: "App", color: CHART.teal },
+                ]}
+              />
+            </ChartCard>
+            <ChartCard title="Revenue & profit" subtitle="AED · last 3 weeks">
+              <AreaTrend
+                data={revenueOverTime}
+                currency
+                series={[
+                  { key: "Revenue", color: CHART.rose },
+                  { key: "Profit", color: CHART.teal },
+                ]}
+              />
+            </ChartCard>
           </div>
-        </Panel>
-      </div>
+        </CollapsibleDashboardSection>
 
-      {/* Conversations + tickets + activity */}
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Panel>
-          <PanelHeader
-            title="Recent WhatsApp conversations"
-            action={
-              <Link href="/operations/customer-facing">
-                <Button variant="ghost" size="sm">Open <ArrowUpRight className="h-3.5 w-3.5" /></Button>
-              </Link>
-            }
-          />
-          {filteredConversations.length === 0 && (
-            <EmptyState icon={SearchX} title="No conversations match" description="Adjust the filters to see conversations." />
-          )}
-          <ul className="space-y-3">
-            {filteredConversations.slice(0, 4).map((c) => (
-              <li key={c.id} className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose/12 font-display text-xs font-bold text-rose">
-                  {c.customer.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-medium text-ink">{c.customer}</p>
-                    <span className="shrink-0 text-xxs text-ink-faint">{formatRelativeTime(c.updatedAt)}</span>
-                  </div>
-                  <p className="truncate text-xs text-ink-muted">{c.lastMessage}</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <StatusBadge tone={convStatusTone[c.status]}>{c.status}</StatusBadge>
-                    <span className="text-xxs text-ink-faint">{maskPhone(c.phone)}</span>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Panel>
+        {/* Breakdown charts */}
+        <CollapsibleDashboardSection
+          id="breakdowns"
+          title="Breakdowns"
+          description="Channel, city and automation mix"
+          icon={PieChart}
+        >
+          <div className="grid gap-4 lg:grid-cols-3">
+            <ChartCard title="Orders by channel" subtitle="Share of volume">
+              <DonutChart data={byChannel} centerValue={formatNumber(channelTotal, true)} centerLabel="Orders" />
+            </ChartCard>
+            <ChartCard title="Orders by city" subtitle="Top markets">
+              {byCity.length > 0 ? (
+                <BarSeries data={byCity} horizontal colorByIndex height={264} />
+              ) : (
+                <EmptyState icon={SearchX} title="No cities match" description="Adjust or clear the filters." />
+              )}
+            </ChartCard>
+            <ChartCard title="Automation rate" subtitle="AI vs human handling">
+              <GroupedBars
+                data={automationRate}
+                series={[
+                  { key: "Automated", color: CHART.rose, name: "AI" },
+                  { key: "Human", color: CHART.slate, name: "Human" },
+                ]}
+              />
+            </ChartCard>
+          </div>
+        </CollapsibleDashboardSection>
 
-        <Panel>
-          <PanelHeader title="Tickets by category" subtitle="Open concerns" />
-          <BarSeries data={ticketsByCategory} colorByIndex height={230} />
-        </Panel>
+        {/* Latest orders + approvals */}
+        <CollapsibleDashboardSection
+          id="orders-approvals"
+          title="Orders & approvals"
+          description="Latest activity needing eyes"
+          icon={ClipboardList}
+        >
+          <div className="grid gap-4 xl:grid-cols-3">
+            <Panel className="xl:col-span-2">
+              <PanelHeader
+                title="Latest orders"
+                subtitle={`${filteredOrders.length} of ${orders.length} orders`}
+                action={
+                  <Link href="/operations/customer-orders">
+                    <Button variant="ghost" size="sm">
+                      View all <ArrowUpRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </Link>
+                }
+              />
+              <DataTable
+                columns={latestOrderCols}
+                rows={filteredOrders.slice(0, 6)}
+                rowKey={(o) => o.id}
+                empty={<EmptyState icon={SearchX} title="No orders match" description="Try clearing a filter." />}
+              />
+            </Panel>
 
-        <Panel>
-          <PanelHeader title="Activity" subtitle="Latest agent & ops events" />
-          <ActivityTimeline events={activityFeed} />
-        </Panel>
-      </div>
+            <Panel>
+              <PanelHeader
+                title="Pending approvals"
+                subtitle="Every agent action needs a human"
+                action={
+                  <Link href="/finance-compliance/refunds-adjustments" className="inline-flex">
+                    <StatusBadge tone="rose">{approvals.length}</StatusBadge>
+                  </Link>
+                }
+              />
+              <div className="space-y-2.5">
+                {approvals.slice(0, 3).map((a) => (
+                  <ApprovalCard key={a.id} approval={a} compact />
+                ))}
+              </div>
+            </Panel>
+          </div>
+        </CollapsibleDashboardSection>
+
+        {/* Conversations + tickets + activity */}
+        <CollapsibleDashboardSection
+          id="engagement"
+          title="Conversations & activity"
+          description="WhatsApp, tickets and the event feed"
+          icon={MessagesSquare}
+        >
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Panel>
+              <PanelHeader
+                title="Recent WhatsApp conversations"
+                action={
+                  <Link href="/operations/customer-facing">
+                    <Button variant="ghost" size="sm">Open <ArrowUpRight className="h-3.5 w-3.5" /></Button>
+                  </Link>
+                }
+              />
+              {filteredConversations.length === 0 && (
+                <EmptyState icon={SearchX} title="No conversations match" description="Adjust the filters to see conversations." />
+              )}
+              <ul className="space-y-3">
+                {filteredConversations.slice(0, 4).map((c) => (
+                  <li key={c.id} className="flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose/12 font-display text-xs font-bold text-rose">
+                      {c.customer.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-medium text-ink">{c.customer}</p>
+                        <span className="shrink-0 text-xxs text-ink-faint">{formatRelativeTime(c.updatedAt)}</span>
+                      </div>
+                      <p className="truncate text-xs text-ink-muted">{c.lastMessage}</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <StatusBadge tone={convStatusTone[c.status]}>{c.status}</StatusBadge>
+                        <span className="text-xxs text-ink-faint">{maskPhone(c.phone)}</span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+
+            <Panel>
+              <PanelHeader title="Tickets by category" subtitle="Open concerns" />
+              <BarSeries data={ticketsByCategory} colorByIndex height={230} />
+            </Panel>
+
+            <Panel>
+              <PanelHeader title="Activity" subtitle="Latest agent & ops events" />
+              <ActivityTimeline events={activityFeed} />
+            </Panel>
+          </div>
+        </CollapsibleDashboardSection>
+      </CollapsibleSectionsProvider>
     </div>
   );
 }

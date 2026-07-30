@@ -86,3 +86,41 @@ built in Stage 1; exposed as tools in Stage 3b.
 ## 15. Next week's plan
 Wire the live facility-cost lookup + re-seed the SLA table once the cost basis is confirmed; set the
 persona name; load the QAR price list; then a live-WhatsApp readiness review.
+
+---
+
+## Addendum — 2026-07-30 (Admin UI polish)
+
+Separate from the agent workstream, one **admin dashboard UX fix** shipped:
+
+- **Dashboard search → inline suggestions dropdown.** The topbar search used to open a
+  centered **modal with a full-screen dimming + blur backdrop**, so the whole dashboard
+  "popped"/darkened on every search. It's now a real **input in the topbar** whose
+  suggestions render in a dropdown **anchored under the bar** (a fixed sheet under the
+  header on mobile) — **no overlay, no page dimming, no page blur; the dashboard
+  background stays stable.** The dropdown got a premium **dark teal-tinted gradient card**
+  with hover + keyboard-active states, a clean empty state, and a soft entrance animation.
+  Keyboard nav (↑/↓/Enter), Esc, and click-outside all preserved. Theme-aware (reads well
+  in light **and** dark). New `TopbarSearch` component; old `CommandPalette` modal removed.
+  Gates: typecheck + lint clean (one pre-existing unrelated warning), production build ✓,
+  and a **15/15 Playwright** behavioural suite (desktop + mobile). Build report:
+  `build-reports/2026-07-30-dashboard-search-dropdown.md`. Demo:
+  `presentation-notes/week-03-dashboard-search-demo.md`.
+- **Search dropdown made solid + amber highlight, and Overview sections made collapsible.**
+  Follow-up to the above: the dropdown is now a **fully opaque surface** (removed the teal
+  gradient + backdrop-blur, so dashboard content no longer shows through), and its
+  hover/selected highlight moved to a **warm amber/gold** accent (distinct from the heavy
+  teal). The **Overview page** gained **collapsible sections** (Headline totals, Trends,
+  Breakdowns, Orders & approvals, Conversations & activity) — header stays visible, content
+  folds with a smooth height animation, state **persists in localStorage**, plus **Expand
+  all / Collapse all**. No data/cards/routes removed. Gates green + **18/18 Playwright**.
+  Build report: `build-reports/2026-07-30-search-solid-and-overview-collapse.md`.
+- **Sidebar: whole parent row now toggles its submenu.** Sections with subsections
+  (Operations, Sales, Partner Acquisition, SEO Agents, Marketing, Finance & Compliance,
+  Dev & Automation, Reports) expand/collapse when the **whole row** is clicked, not only
+  the chevron — the parent row is now a proper disclosure `<button>` (Enter/Space work).
+  Leaf items (Overview, Orders) still navigate. To keep each section's landing reachable,
+  a first **"Overview" child** (→ the section landing, `exact`-highlighted) was added.
+  No visual redesign — same layout/colors/icons/badges/chevron. Gates green + **30/30
+  Playwright** (desktop + mobile). Build report:
+  `build-reports/2026-07-30-sidebar-parent-row-toggle.md`.

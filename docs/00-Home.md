@@ -22,7 +22,38 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
-## Latest — WhatsApp Agent Tuning (staged, `apps/whatsapp-agent`, 2026-07-29)
+## Latest — Sidebar whole-row toggle (admin UI, 2026-07-30)
+
+Sidebar sections with subsections now expand/collapse when the **whole parent row** is
+clicked (not only the chevron) — the parent row is a disclosure `<button>` (Enter/Space
+work); leaf items still navigate. A first **"Overview" child** (→ the section landing,
+`exact`-highlighted) keeps each landing reachable. No visual redesign. Gates green +
+**30/30 Playwright** (desktop + mobile).
+Build report: `build-reports/2026-07-30-sidebar-parent-row-toggle.md`.
+
+## Earlier — Search dropdown solid + Overview collapsible sections (admin UI, 2026-07-30)
+
+Two follow-up admin-UI improvements: (1) the topbar search dropdown is now a **solid,
+opaque surface** (removed the gradient + backdrop-blur so dashboard content no longer
+shows through) with a **warm amber/gold** hover/selected highlight (distinct from the
+heavy teal); (2) the **Overview page** sections are now **collapsible** (Headline totals,
+Trends, Breakdowns, Orders & approvals, Conversations & activity) — header stays visible,
+content folds smoothly, state **persists in localStorage**, plus **Expand all / Collapse
+all**. New `CollapsibleSection.tsx`. Gates green + **18/18 Playwright**.
+Build report: `build-reports/2026-07-30-search-solid-and-overview-collapse.md`.
+
+## Earlier — Dashboard search dropdown (admin UI, 2026-07-30)
+
+The topbar search no longer opens a screen-dimming modal. It's now an **inline
+suggestions dropdown** anchored under the search bar (a fixed sheet under the header on
+mobile) — **no overlay, no page dimming, no page blur; the dashboard background stays
+stable** — with hover/keyboard-active states and a clean empty state. Keyboard nav, Esc,
+and click-outside preserved; theme-aware. New `TopbarSearch` component; old
+`CommandPalette` modal removed. Gates green (typecheck/lint/build) + **15/15 Playwright**
+(desktop + mobile). Build report: `build-reports/2026-07-30-dashboard-search-dropdown.md` ·
+Demo: `presentation-notes/week-03-dashboard-search-demo.md`.
+
+## Previous — WhatsApp Agent Tuning (staged, `apps/whatsapp-agent`, 2026-07-29)
 
 Staged tuning of the **WhatsApp Operations Agent** against the founder-approved spec
 (negotiation engine, min-order/delivery, express surcharge, AED/QAR, persona). One stage

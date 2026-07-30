@@ -21,6 +21,12 @@ export type NavChild = {
   href: string;
   /** Subsection-specific count badge. */
   badge?: number;
+  /**
+   * Match this child's active state on the EXACT path only (not descendants).
+   * Used by the section-landing "Overview" child so it isn't highlighted for
+   * every route under the section base.
+   */
+  exact?: boolean;
 };
 
 export type NavItem = {
@@ -53,6 +59,17 @@ function childrenOf(sectionKey: string, base: string): NavChild[] {
 }
 
 /**
+ * Children for a section, with an "Overview" child prepended that points at the
+ * section landing (`base`). Parent rows with children act as toggles (clicking the
+ * row opens/collapses the submenu rather than navigating), so this "Overview" child
+ * keeps the section's own landing page reachable from the sidebar. It is `exact` so
+ * it highlights only on the landing route, never on a subsection route.
+ */
+function childrenWithOverview(sectionKey: string, base: string): NavChild[] {
+  return [{ label: "Overview", href: base, exact: true }, ...childrenOf(sectionKey, base)];
+}
+
+/**
  * Primary sidebar sections — the ten command-center domains. Every domain
  * (except the single-page Overview) carries its subsections as `children`, so
  * operators reach a working page directly from the sidebar instead of opening a
@@ -71,7 +88,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Workflow,
     description: "WhatsApp agent, orders, tickets & driver assignment",
     badge: 6,
-    children: childrenOf("operations", "/operations"),
+    children: childrenWithOverview("operations", "/operations"),
   },
   {
     label: "Orders",
@@ -84,14 +101,14 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/facilities",
     icon: Factory,
     description: "Partner cleaning facilities — capacity, coverage, rates & compliance",
-    children: childrenOf("facilities", "/facilities"),
+    children: childrenWithOverview("facilities", "/facilities"),
   },
   {
     label: "Sales",
     href: "/sales",
     icon: TrendingUp,
     description: "Revenue, growth and customer performance",
-    children: childrenOf("sales", "/sales"),
+    children: childrenWithOverview("sales", "/sales"),
   },
   {
     label: "Partner Acquisition",
@@ -99,7 +116,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Handshake,
     description: "Partner pipeline, market intelligence & onboarding",
     badge: 5,
-    children: childrenOf("partner-acquisition", "/partner-acquisition"),
+    children: childrenWithOverview("partner-acquisition", "/partner-acquisition"),
   },
   {
     label: "SEO Agents",
@@ -107,7 +124,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Search,
     description: "Autonomous SEO agents, tasks and daily brief",
     badge: 3,
-    children: childrenOf("seo-agents", "/seo-agents"),
+    children: childrenWithOverview("seo-agents", "/seo-agents"),
   },
   {
     label: "Marketing",
@@ -115,14 +132,14 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Megaphone,
     description: "Social analytics, creative studio and approvals",
     badge: 4,
-    children: childrenOf("marketing", "/marketing"),
+    children: childrenWithOverview("marketing", "/marketing"),
   },
   {
     label: "Finance & Compliance",
     href: "/finance-compliance",
     icon: ShieldCheck,
     description: "Revenue, cost, profit plus compliance & risk oversight",
-    children: childrenOf("finance-compliance", "/finance-compliance"),
+    children: childrenWithOverview("finance-compliance", "/finance-compliance"),
   },
   {
     label: "Dev & Automation",
@@ -130,20 +147,20 @@ export const NAV_ITEMS: NavItem[] = [
     icon: TerminalSquare,
     description: "Agent health, automations, API & system status",
     badge: 3,
-    children: childrenOf("dev-automation", "/dev-automation"),
+    children: childrenWithOverview("dev-automation", "/dev-automation"),
   },
   {
     label: "Reports",
     href: "/reports",
     icon: FileBarChart,
     description: "Scheduled briefs and executive reports",
-    children: childrenOf("reports", "/reports"),
+    children: childrenWithOverview("reports", "/reports"),
   },
   {
     label: "Settings",
     href: "/settings",
     icon: Settings,
     description: "Team, markets, connected apps and preferences",
-    children: childrenOf("settings", "/settings"),
+    children: childrenWithOverview("settings", "/settings"),
   },
 ];

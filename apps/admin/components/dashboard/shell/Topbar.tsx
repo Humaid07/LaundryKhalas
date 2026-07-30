@@ -4,17 +4,17 @@ import { useEffect, useState } from "react";
 import { Bell, Menu, Search } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserMenu } from "./UserMenu";
-import { CommandPalette } from "./CommandPalette";
+import { TopbarSearch } from "./TopbarSearch";
 
 export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
-  // Global ⌘K / Ctrl+K opens the command palette.
+  // Global ⌘K / Ctrl+K opens the search suggestions.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setPaletteOpen((o) => !o);
+        setSearchOpen((o) => !o);
       }
     };
     document.addEventListener("keydown", onKey);
@@ -33,27 +33,17 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
         <Menu className="h-4 w-4" />
       </button>
 
-      {/* Search → opens the command palette */}
-      <button
-        type="button"
-        onClick={() => setPaletteOpen(true)}
-        aria-label="Search and jump to a section"
-        aria-keyshortcuts="Meta+K Control+K"
-        className="relative hidden max-w-md flex-1 items-center gap-2 rounded-lg border border-border bg-surface pl-9 pr-2 text-left transition-colors hover:border-border-strong sm:flex"
-      >
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-        <span className="h-9 flex-1 truncate py-2 text-sm text-ink-faint">Search orders, customers, conversations…</span>
-        <kbd className="hidden shrink-0 rounded border border-border bg-surface-2 px-1.5 py-0.5 text-xxs font-medium text-ink-faint md:block">
-          ⌘K
-        </kbd>
-      </button>
+      {/* Search → inline suggestions dropdown (no modal / no page overlay) */}
+      <TopbarSearch open={searchOpen} onOpenChange={setSearchOpen} />
 
       <div className="flex flex-1 items-center justify-end gap-2 sm:flex-none">
         {/* Mobile search icon */}
         <button
           type="button"
-          onClick={() => setPaletteOpen(true)}
+          data-search-trigger
+          onClick={() => setSearchOpen((o) => !o)}
           aria-label="Search"
+          aria-expanded={searchOpen}
           className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted hover:text-ink sm:hidden"
         >
           <Search className="h-4 w-4" />
@@ -74,8 +64,6 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
         {/* Profile + sign out */}
         <UserMenu />
       </div>
-
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </header>
   );
 }

@@ -21,7 +21,11 @@ function inSection(pathname: string, href: string) {
 
 function ChildRow({ child, onNavigate }: { child: NavChild; onNavigate?: () => void }) {
   const pathname = usePathname();
-  const active = pathname === child.href || pathname.startsWith(`${child.href}/`);
+  // The section-landing "Overview" child matches its exact route only, so it isn't
+  // highlighted for every subsection route under the same base.
+  const active = child.exact
+    ? pathname === child.href
+    : pathname === child.href || pathname.startsWith(`${child.href}/`);
   const accent = accentClasses(accentForHref(child.href));
   return (
     <Link
@@ -94,63 +98,81 @@ function ParentRow({
     );
   }
 
+  const submenuId = `submenu-${item.href.replace(/\W+/g, "-").replace(/^-|-$/g, "")}`;
+  const toggle = () => setOpen((o) => !(o ?? (active || !!item.defaultOpen)));
+
+  // Shared row grammar (icon · label · badge · chevron) + the active/hover styling,
+  // identical whether the row is a toggle button (has children) or a link (no children).
+  const rowClasses = cn(
+    // Fixed 4-column grid: icon · label · badge (reserved) · chevron (reserved).
+    "lk-navrow relative grid h-11 w-full grid-cols-[24px_1fr_auto_18px] items-center gap-2.5 rounded-xl px-3 text-sm font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rose/40",
+    filled
+      ? cn(accent.softBg, accent.text)
+      : active
+        ? cn(accent.text, accent.hoverBg)
+        : cn("text-ink-muted", accent.hoverBg, "hover:text-ink"),
+  );
+
+  const rowInner = (
+    <>
+      {/* left active indicator */}
+      {active && <span className={cn("absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full", accent.rail)} />}
+
+      {/* 1 · icon — persistent subtle section tint, brightens on hover/active */}
+      <Icon className={cn("h-[18px] w-[18px] justify-self-center transition-all duration-200", accent.text, active ? "opacity-100" : "opacity-60 group-hover:opacity-100")} />
+
+      {/* 2 · label */}
+      <NavLabel label={item.label} />
+
+      {/* 3 · badge (column always present; empty when no count) */}
+      <span className="flex min-w-0 justify-end">
+        {typeof item.badge === "number" && (
+          <span className={cn("grid h-[22px] min-w-[24px] place-items-center rounded-full px-1.5 text-xxs font-semibold tnum", active ? cn(accent.strongBg, accent.text) : "bg-ink/8 text-ink-muted")}>
+            {item.badge}
+          </span>
+        )}
+      </span>
+
+      {/* 4 · chevron (column always reserved; icon only when the section has children) */}
+      <span className="flex w-[18px] items-center justify-center">
+        {!!item.children?.length && (
+          <ChevronDown className={cn("h-4 w-4 transition-transform duration-200 ease-out-quint", active ? accent.text : "text-ink-faint group-hover:text-ink-muted", expanded && "rotate-180")} />
+        )}
+      </span>
+    </>
+  );
+
   return (
     <div className="group relative">
-      <Link
-        href={item.href}
-        onClick={onNavigate}
-        aria-current={exact ? "page" : undefined}
-        title={item.label}
-        className={cn(
-          // Fixed 4-column grid: icon · label · badge (reserved) · chevron (reserved).
-          "lk-navrow relative grid h-11 grid-cols-[24px_1fr_auto_18px] items-center gap-2.5 rounded-xl px-3 text-sm font-medium transition-colors duration-200",
-          filled
-            ? cn(accent.softBg, accent.text)
-            : active
-              ? cn(accent.text, accent.hoverBg)
-              : cn("text-ink-muted", accent.hoverBg, "hover:text-ink"),
-        )}
-      >
-        {/* left active indicator */}
-        {active && <span className={cn("absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full", accent.rail)} />}
-
-        {/* 1 · icon — persistent subtle section tint, brightens on hover/active */}
-        <Icon className={cn("h-[18px] w-[18px] justify-self-center transition-all duration-200", accent.text, active ? "opacity-100" : "opacity-60 group-hover:opacity-100")} />
-
-        {/* 2 · label */}
-        <NavLabel label={item.label} />
-
-        {/* 3 · badge (column always present; empty when no count) */}
-        <span className="flex min-w-0 justify-end">
-          {typeof item.badge === "number" && (
-            <span className={cn("grid h-[22px] min-w-[24px] place-items-center rounded-full px-1.5 text-xxs font-semibold tnum", active ? cn(accent.strongBg, accent.text) : "bg-ink/8 text-ink-muted")}>
-              {item.badge}
-            </span>
-          )}
-        </span>
-
-        {/* 4 · chevron (column always reserved; icon only when the section has children) */}
-        <span className="flex w-[18px] items-center justify-center">
-          {!!item.children?.length && (
-            <ChevronDown className={cn("h-4 w-4 transition-transform duration-200 ease-out-quint", active ? accent.text : "text-ink-faint", expanded && "rotate-180")} />
-          )}
-        </span>
-      </Link>
-
-      {/* Transparent hit target over the chevron column — toggles the submenu
-          without navigating. Sits on top of the Link's right edge. */}
-      {hasChildren && (
+      {hasChildren ? (
+        // Section with subsections → the WHOLE row is the disclosure toggle.
+        // (Enter/Space work natively; the landing page stays reachable via the
+        // "Overview" child.)
         <button
           type="button"
-          onClick={() => setOpen((o) => !(o ?? (active || !!item.defaultOpen)))}
-          aria-label={expanded ? `Collapse ${item.label}` : `Expand ${item.label}`}
+          onClick={toggle}
+          title={item.label}
           aria-expanded={expanded}
-          className="absolute inset-y-0 right-0 w-9 rounded-r-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40"
-        />
+          aria-controls={submenuId}
+          className={cn(rowClasses, "text-left")}
+        >
+          {rowInner}
+        </button>
+      ) : (
+        // Leaf section (no subsections) → the row navigates.
+        <Link
+          href={item.href}
+          onClick={onNavigate}
+          aria-current={exact ? "page" : undefined}
+          title={item.label}
+          className={rowClasses}
+        >
+          {rowInner}
+        </Link>
       )}
 
       {expanded && (
-        <div className="mb-1 mt-1 ml-[19px] space-y-0.5 border-l border-border pl-2.5">
+        <div id={submenuId} className="mb-1 mt-1 ml-[19px] space-y-0.5 border-l border-border pl-2.5">
           {item.children!.map((child) => (
             <ChildRow key={child.href} child={child} onNavigate={onNavigate} />
           ))}
