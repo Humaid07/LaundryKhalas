@@ -9,13 +9,13 @@ mode (the supabase branch only triggers when DATABASE_MODE=supabase).
 """
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import database, get_db
 from db.repositories import conversations_repo, order_events_repo, orders_repo
 from schemas import OrderMetrics, OrderPage, OrderRead, OrderStatusUpdate
-from services import notifications, order_store
+from services import notifications, order_photos as photo_svc, order_store
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
@@ -108,6 +108,47 @@ async def order_events(order_id: str):
     if read is None:
         raise HTTPException(status_code=404, detail="Order not found.")
     return await order_events_repo.list_for_order(read["id"])
+
+
+@router.get("/{order_id}/photos")
+async def order_photos_list(order_id: str):
+    """Read-only ops view of an order's facility photos (intake + pre-dispatch),
+    with per-stage counts. Ops/admin see any facility's order photos. Supabase-only.
+    PII-safe metadata only; bytes come from the content endpoint below."""
+    if not database.is_supabase_mode():
+        return {"photos": [], "counts": {"intake": 0, "pre_dispatch": 0}}
+    read = await orders_repo.get_read(order_id)
+    if read is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    all_photos = await photo_svc.list_photos(read["id"])
+    counts = {"intake": 0, "pre_dispatch": 0}
+    for p in all_photos:
+        if p["stage"] in counts:
+            counts[p["stage"]] += 1
+    return {"photos": all_photos, "counts": counts}
+
+
+@router.get("/{order_id}/photos/{photo_id}/content")
+async def order_photo_content(order_id: str, photo_id: str):
+    """Stream an order photo's bytes for the internal read-only gallery. Ops-guarded
+    at the router level; the photo must belong to the order. Supabase-only."""
+    if not database.is_supabase_mode():
+        raise HTTPException(status_code=404, detail="Photo not found.")
+    read = await orders_repo.get_read(order_id)
+    if read is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    result = await photo_svc.read_content_by_id(photo_id, order_uuid=read["id"])
+    if result is None:
+        raise HTTPException(status_code=404, detail="Photo not found.")
+    data, content_type, file_name = result
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "private, max-age=300",
+            "Content-Disposition": f'inline; filename="{file_name}"',
+        },
+    )
 
 
 @router.get("/{order_id}/conversation")

@@ -9,8 +9,9 @@ import pytest
 from fastapi import HTTPException
 
 import api.facility_order_photos as api_photos
+import api.orders as api_orders
 from db import database
-from db.repositories import facility_orders_repo, order_events_repo, order_photos_repo
+from db.repositories import facility_orders_repo, order_events_repo, order_photos_repo, orders_repo
 from services import order_photos as svc
 
 
@@ -252,3 +253,45 @@ async def test_upload_maps_validation_error_to_status(monkeypatch):
             principal=_principal(),
         )
     assert exc.value.status_code == 415
+
+
+# ===================== internal ops read-only view =========================
+async def test_ops_photos_list_counts_by_stage(monkeypatch):
+    monkeypatch.setattr(database, "is_supabase_mode", lambda: True)
+
+    async def get_read(order_id):
+        return {"id": "ord-uuid-1"}
+    async def list_photos(order_uuid, stage=None):
+        return [{"id": "p1", "stage": "intake"}, {"id": "p2", "stage": "intake"},
+                {"id": "p3", "stage": "pre_dispatch"}]
+    monkeypatch.setattr(orders_repo, "get_read", get_read)
+    monkeypatch.setattr(svc, "list_photos", list_photos)
+
+    res = await api_orders.order_photos_list("LK-ANY")   # ops see any facility's order
+    assert res["counts"] == {"intake": 2, "pre_dispatch": 1}
+    assert len(res["photos"]) == 3
+
+
+async def test_ops_photo_content_requires_matching_order(monkeypatch):
+    monkeypatch.setattr(database, "is_supabase_mode", lambda: True)
+
+    async def get_read(order_id):
+        return {"id": "ord-uuid-1"}
+    monkeypatch.setattr(orders_repo, "get_read", get_read)
+
+    # read_content_by_id returns None when the photo isn't on this order → 404.
+    async def none_content(photo_id, *, order_uuid=None):
+        return None
+    monkeypatch.setattr(svc, "read_content_by_id", none_content)
+    with pytest.raises(HTTPException) as exc:
+        await api_orders.order_photo_content("LK-ANY", "p1")
+    assert exc.value.status_code == 404
+
+
+async def test_ops_photo_content_by_id_scopes_to_order(monkeypatch):
+    # Service-level: get_any returns a row for another order → None when order_uuid differs.
+    async def get_any(photo_id):
+        return {"id": photo_id, "order_id": "other-order", "storage_key": "k/x.jpg",
+                "content_type": "image/jpeg", "file_name": "order-photo-x.jpg"}
+    monkeypatch.setattr(order_photos_repo, "get_any", get_any)
+    assert await svc.read_content_by_id("p1", order_uuid="ord-uuid-1") is None

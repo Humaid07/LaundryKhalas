@@ -102,6 +102,24 @@ The order **list** response also carries `intake_photo_count` /
   endpoint is Bearer-guarded (no open URL), and photos are garment/item only.
 - The content bytes are streamed with `Cache-Control: private`.
 
+## Internal (ops/admin) read-only view
+
+Ops/operations + admin can **view** any facility's order photos (read-only — no
+upload/delete on the internal side).
+
+- Backend (`api/orders.py`, guarded by `require_ops`):
+  - `GET /api/orders/{order_id}/photos` — photos + per-stage counts (resolves the
+    order via `orders_repo.get_read`, so ops see any facility's order).
+  - `GET /api/orders/{order_id}/photos/{photo_id}/content` — stream bytes; the
+    photo must belong to the order (`services/order_photos.read_content_by_id` with
+    an `order_uuid` guard). `order_photos_repo.get_any` is the non-facility-scoped
+    getter (ops-only).
+- Frontend (`apps/admin`): `components/dashboard/orders/OrderPhotosPanel.tsx` — a
+  read-only gallery rendered inside the live Orders section's order drawer
+  (`OrdersSection.tsx` → `OrderDetailPanel`, route `/orders`). Uses `agentApi`
+  (`getOrderPhotos` + `orderPhotoObjectUrl` blob fetch). Degrades to a quiet empty
+  state when an order has no photos.
+
 ## Storage modes
 
 - `FACILITY_ORDER_PHOTO_STORAGE=local` (default) — dev/local folder, gitignored.
@@ -113,6 +131,4 @@ The order **list** response also carries `intake_photo_count` /
 
 - Cloud storage provider (Supabase Storage / R2) + signed URLs.
 - Future stages (`damage_report` / `issue_photo` / `quality_check`) — schema-ready.
-- Internal (ops) dashboard read-only gallery — the data + `order_events` are in
-  place for it; the internal UI is not built here.
 - Image thumbnailing / server-side compression (bytes are stored as uploaded).

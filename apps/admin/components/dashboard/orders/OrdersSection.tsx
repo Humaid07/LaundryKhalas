@@ -18,6 +18,7 @@ import {
 import {
   DASHBOARD_STATUS_OPTIONS, ORDER_VIEWS, statusMeta,
 } from "@/lib/dashboard/order-status";
+import { OrderPhotosPanel } from "./OrderPhotosPanel";
 
 const POLL_MS = 15000;
 
@@ -207,6 +208,8 @@ function OrderDetailPanel({ order, onClose, onChanged }: {
               </Button>
             </div>
           </Panel>
+
+          <OrderPhotosPanel orderId={full.order_id} />
 
           <Panel padded className="!rounded-xl">
             <PanelHeader title="Order timeline" subtitle={`${events.length} event${events.length === 1 ? "" : "s"}`} />

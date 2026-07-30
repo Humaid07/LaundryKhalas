@@ -128,5 +128,38 @@
     manual UI → privacy → API smoke).
 
 25. **Next recommended step:** wire a real cloud storage provider (R2/Supabase Storage)
-    behind the existing `storage_provider` switch + signed URLs, then add the read-only
-    ops gallery on the internal order detail (data + events already exist).
+    behind the existing `storage_provider` switch + signed URLs.
+
+---
+
+## Addendum (same day) — internal ops read-only view
+
+Added the read-only ops/admin view of order photos (was listed as deferred above;
+now built).
+
+- **Backend** (`api/orders.py`, `require_ops` = admin + operations):
+  - `GET /api/orders/{order_id}/photos` — photos + per-stage counts (any facility's
+    order, via `orders_repo.get_read`).
+  - `GET /api/orders/{order_id}/photos/{photo_id}/content` — stream bytes; the photo
+    must belong to the order.
+  - New `order_photos_repo.get_any` (non-facility-scoped, ops-only) +
+    `services/order_photos.read_content_by_id` (with an `order_uuid` guard).
+- **Frontend** (`apps/admin`): new `components/dashboard/orders/OrderPhotosPanel.tsx`
+  (read-only gallery, blob-fetched thumbnails, empty state), wired into the live
+  Orders section drawer (`OrdersSection.tsx`); `agentApi.getOrderPhotos` +
+  `orderPhotoObjectUrl` + a blob helper in `lib/dashboard/whatsapp-agent-api.ts`.
+- **Files:** created `apps/admin/components/dashboard/orders/OrderPhotosPanel.tsx`;
+  modified `apps/whatsapp-agent/api/orders.py`, `services/order_photos.py`,
+  `db/repositories/order_photos_repo.py`, `tests/test_facility_order_photos.py`,
+  `apps/admin/lib/dashboard/whatsapp-agent-api.ts`,
+  `apps/admin/components/dashboard/orders/OrdersSection.tsx`.
+- **Read-only:** ops cannot upload or delete — those stay facility-side.
+- **Tests/verify:** backend photo tests now **16 passed** (+3 ops); ruff clean; admin
+  `tsc` clean + `next lint` clean on changed files. Live: ops-role login → `/orders`
+  → open LK-TEST-FAC-002 → Order photos panel renders 2 intake thumbnails (Playwright:
+  2 figures / 2 `<img>` / 0 skeleton; in-browser probe list=200 content=200
+  `image/jpeg`; 0 console errors). Admin full `next build` skipped (a dev server was
+  live on :3000 — Windows 500.html rename quirk; verified via tsc + lint + Playwright
+  per repo guidance).
+- **Dev note:** created a throwaway ops account `ops-photocheck@laundrykhalas.com`
+  (dev/test Supabase) for the UI check; harmless, upserts by email.

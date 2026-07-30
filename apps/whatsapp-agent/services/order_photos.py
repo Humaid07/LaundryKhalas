@@ -208,6 +208,24 @@ async def read_content(photo_id: str, facility_id: str) -> tuple[bytes, str, str
     return path.read_bytes(), row["content_type"], row["file_name"]
 
 
+async def read_content_by_id(
+    photo_id: str, *, order_uuid: str | None = None
+) -> tuple[bytes, str, str] | None:
+    """Return (bytes, content_type, file_name) for a photo by id — NOT facility
+    scoped (for the internal ops/admin read-only view). When ``order_uuid`` is
+    given, the photo must belong to that order (defence against id-mixing).
+    Callers must already be ops-authorized."""
+    row = await order_photos_repo.get_any(photo_id)
+    if not row:
+        return None
+    if order_uuid and str(row["order_id"]) != str(order_uuid):
+        return None
+    path = _STORAGE_ROOT / row["storage_key"]
+    if not path.exists():
+        return None
+    return path.read_bytes(), row["content_type"], row["file_name"]
+
+
 async def delete_photo(
     photo_id: str, facility_id: str, *, actor_name: str | None = None
 ) -> dict | None:

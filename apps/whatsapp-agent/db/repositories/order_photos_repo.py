@@ -114,6 +114,16 @@ async def count_for_stage(order_uuid: str, stage: str) -> int:
     ) or 0)
 
 
+async def get_any(photo_id: str) -> dict | None:
+    """One non-deleted photo by id, NOT facility-scoped — for the internal
+    (ops/admin) read-only view, which may see any facility's order photos.
+    Callers must already be ops-authorized (require_ops)."""
+    return await database.fetchrow(
+        f"select {_SELECT_COLS} from order_photos where id = $1 and deleted_at is null",
+        photo_id,
+    )
+
+
 async def get(photo_id: str, facility_id: str) -> dict | None:
     """One non-deleted photo by id, SCOPED to the facility. None if not the
     facility's — a mismatched facility is indistinguishable from missing."""

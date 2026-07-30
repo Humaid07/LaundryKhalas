@@ -36,7 +36,11 @@ and 4 facility-scoped endpoints (list/upload/delete/**Bearer-guarded content str
 uploads write an `order_events` audit row. 3 seeded dev orders **LK-TEST-FAC-001/002/003**.
 Migration applied + verified on dev/test Supabase; live end-to-end verified (upload/reject/
 delete + Playwright thumbnails, no overflow, 0 console errors). **13 backend + 44 regression
-tests green; frontend tsc/lint/build clean.** No cloud storage secrets. Architecture:
+tests green; frontend tsc/lint/build clean.** No cloud storage secrets. **+ internal ops
+read-only view** (`apps/admin`): `GET /api/orders/{id}/photos` (+`/content`, `require_ops`) +
+`OrderPhotosPanel` in the live Orders drawer — ops view any facility's order photos, no
+upload/delete (16 backend tests; admin tsc/lint clean; Playwright-verified 2 thumbnails).
+Architecture:
 [[facility-order-photos]] · test script: [[facility-order-photos-test-script]] · build report:
 `build-reports/2026-07-30-facility-order-photo-upload.md`.
 

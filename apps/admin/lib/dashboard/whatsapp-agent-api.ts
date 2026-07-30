@@ -364,6 +364,48 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** GET binary content (an order photo) as a revocable object URL. The content
+ *  endpoint is Bearer-guarded, so an <img src> can't hit it directly — fetch the
+ *  bytes with the token and hand back a blob: URL the caller must revoke. */
+async function requestObjectUrl(path: string): Promise<string> {
+  let res: Response;
+  const token = getToken();
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new AgentApiError(0, "Could not reach the WhatsApp agent backend. Is it running?");
+  }
+  if (res.status === 401) {
+    clearSession();
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+    }
+    throw new AgentApiError(401, "Your session has expired. Please sign in again.");
+  }
+  if (!res.ok) throw new AgentApiError(res.status, res.statusText);
+  return URL.createObjectURL(await res.blob());
+}
+
+/** PII-safe order-photo metadata (read-only ops view). Bytes fetched separately. */
+export interface OrderPhotoDTO {
+  id: string;
+  stage: "intake" | "pre_dispatch" | string;
+  file_name?: string | null;
+  content_type?: string | null;
+  file_size?: number | null;
+  uploaded_by?: string | null;
+  url?: string | null;
+  created_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface OrderPhotosResponseDTO {
+  photos: OrderPhotoDTO[];
+  counts: { intake: number; pre_dispatch: number };
+}
+
 export const agentApi = {
   baseUrl: BASE_URL,
 
@@ -474,6 +516,11 @@ export const agentApi = {
   getOrderEvents: (id: string) => request<OrderEventDTO[]>(`/api/orders/${id}/events`),
   getOrderConversation: (id: string) =>
     request<InboxConversationDTO>(`/api/orders/${id}/conversation`),
+  // Read-only ops view of an order's facility photos (intake + pre-dispatch).
+  getOrderPhotos: (id: string) =>
+    request<OrderPhotosResponseDTO>(`/api/orders/${id}/photos`),
+  orderPhotoObjectUrl: (id: string, photoId: string) =>
+    requestObjectUrl(`/api/orders/${id}/photos/${photoId}/content`),
   updateOrderStatus: (id: string, status: string, actor_name?: string) =>
     request<OrderDTO>(`/api/orders/${id}/status`, {
       method: "PATCH",
