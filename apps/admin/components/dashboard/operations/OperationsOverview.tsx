@@ -53,11 +53,11 @@ const QUICK_LINKS: { slug: string; label: string; icon: LucideIcon; badge: numbe
 export function OperationsOverview() {
   return (
     <div className="space-y-5">
-      {/* KPI row */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      {/* KPI row — 3-up on desktop (2 tidy rows) rather than a cramped 6-across wall */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         {KPIS.map((k) => (
           <Panel key={k.label} className="p-4">
-            <div className={cn("font-mono text-2xl font-semibold tnum", k.tone ? toneText[k.tone] : "text-ink")}>{k.value}</div>
+            <div className={cn("font-mono text-metric font-semibold tnum", k.tone ? toneText[k.tone] : "text-ink")}>{k.value}</div>
             <p className="mt-1 text-xs font-medium text-ink">{k.label}</p>
             {k.hint && <p className="mt-0.5 truncate text-xxs text-ink-faint">{k.hint}</p>}
           </Panel>
