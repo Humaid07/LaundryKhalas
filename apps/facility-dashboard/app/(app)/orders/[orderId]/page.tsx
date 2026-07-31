@@ -3,6 +3,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { CopyButton } from "@/components/ui/CopyButton";
 import {
   Package,
   ClipboardList,
@@ -148,6 +149,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               {slaLabel(order.sla_status)}
             </StatusBadge>
           )}
+          <CopyButton value={String(displayId)} label="order reference" />
         </>
       }
       actions={
