@@ -6,6 +6,7 @@ import {
   AlertTriangle, Clock, PackageCheck, type LucideIcon,
 } from "lucide-react";
 import { Panel, PanelHeader, StatusBadge } from "@/components/dashboard/ui/primitives";
+import { toneText } from "@/components/dashboard/ui/tones";
 import type { Tone } from "@/lib/dashboard/types";
 import { cn } from "@/lib/utils";
 
@@ -48,13 +49,6 @@ const QUICK_LINKS: { slug: string; label: string; icon: LucideIcon; badge: numbe
   { slug: "drivers", label: "Drivers", icon: Truck, badge: 12 },
   { slug: "customer-orders", label: "Customer Orders", icon: ClipboardList, badge: 82 },
 ];
-
-const toneText: Record<Tone, string> = {
-  rose: "text-rose", success: "text-emerald-600 dark:text-emerald-400",
-  warning: "text-amber-600 dark:text-amber-400", danger: "text-red-600 dark:text-red-400",
-  info: "text-sky-600 dark:text-sky-400", plum: "text-purple-600 dark:text-purple-400",
-  neutral: "text-ink",
-};
 
 export function OperationsOverview() {
   return (
