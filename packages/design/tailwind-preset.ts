@@ -54,15 +54,14 @@ const preset = {
           strong: token("rose-strong"),
           contrast: token("rose-contrast"),
         },
-        // DEFAULT is the theme-aware token; soft/text are static for backward-compat
-        // with legacy /admin pages.
-        success: { DEFAULT: token("success"), soft: "#ecfdf5", text: "#065f46" },
-        warning: { DEFAULT: token("warning"), soft: "#fffbeb", text: "#92400e" },
-        danger: { DEFAULT: token("danger"), soft: "#fef2f2", text: "#991b1b" },
-        info: { DEFAULT: token("info"), soft: "#eff6ff", text: "#1e40af" },
-        // Legacy-only aliases (old indigo admin) — not used by the new UI.
-        brand: { DEFAULT: "#4f46e5", hover: "#4338ca", soft: "#eef2ff" },
-        neutral: { soft: "#f3f4f6", text: "#374151" },
+        // Theme-aware semantic tokens. Use opacity utilities for soft fills
+        // (e.g. bg-success/10 text-success) — the old static soft/text hex aliases
+        // and the legacy brand/neutral palette were removed once every consumer
+        // migrated to tokens (the whole codebase is now token-based).
+        success: token("success"),
+        warning: token("warning"),
+        danger: token("danger"),
+        info: token("info"),
       },
       fontFamily: {
         display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
