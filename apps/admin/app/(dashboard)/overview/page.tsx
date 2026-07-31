@@ -45,9 +45,15 @@ import { orderStatusTone, convStatusTone } from "@/lib/dashboard/status-maps";
 import { useFilters } from "@/components/dashboard/shell/FiltersProvider";
 import { filterOrders, filterConversations, filterCategory, activeFilterCount } from "@/lib/dashboard/filters";
 import type { Order } from "@/lib/dashboard/types";
+import { CopyButton } from "@/components/dashboard/ui/CopyButton";
 
 const latestOrderCols: Column<Order>[] = [
-  { key: "id", header: "Order", primary: true, cell: (o) => <span className="font-mono text-xs font-semibold text-ink">{o.id}</span> },
+  { key: "id", header: "Order", primary: true, cell: (o) => (
+    <span className="group/copy inline-flex items-center gap-1.5">
+      <span className="font-mono text-xs font-semibold text-ink">{o.id}</span>
+      <CopyButton value={o.id} label="order reference" className="opacity-0 transition-opacity group-hover/copy:opacity-100 focus-visible:opacity-100" />
+    </span>
+  ) },
   { key: "customer", header: "Customer", cell: (o) => <span className="text-ink">{o.customer}</span> },
   { key: "service", header: "Service", cell: (o) => <span className="text-ink-muted">{o.service}</span> },
   { key: "city", header: "City", cell: (o) => <span className="text-ink-muted">{o.city}</span> },
