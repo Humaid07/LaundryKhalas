@@ -36,7 +36,7 @@ function ChildRow({ child, onNavigate }: { child: NavChild; onNavigate?: () => v
       className={cn(
         "lk-navrow group/child relative grid h-9 grid-cols-[16px_1fr_auto] items-center gap-2.5 rounded-lg pl-3 pr-2 text-[13px] transition-colors duration-200",
         active
-          ? cn(accent.softBg, "font-semibold", accent.text)
+          ? "bg-surface-sunken font-semibold text-ink"
           : cn("font-medium text-ink-muted", accent.hoverBg, "hover:text-ink"),
       )}
     >
@@ -92,7 +92,7 @@ function ParentRow({
         aria-current={exact ? "page" : undefined}
         className={cn(
           "group relative grid h-11 place-items-center rounded-xl transition-colors duration-200",
-          filled ? cn(accent.softBg, accent.text) : cn("text-ink-faint", accent.hoverBg, "hover:text-ink"),
+          filled ? "bg-surface-sunken text-ink" : cn("text-ink-faint", accent.hoverBg, "hover:text-ink"),
         )}
       >
         {active && <span className={cn("absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full", accent.rail)} />}
@@ -109,9 +109,9 @@ function ParentRow({
     // Fixed 4-column grid: icon · label · badge (reserved) · chevron (reserved).
     "lk-navrow relative grid h-11 w-full grid-cols-[24px_1fr_auto_18px] items-center gap-2.5 rounded-xl px-3 text-sm font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rose/40",
     filled
-      ? cn(accent.softBg, accent.text)
+      ? "bg-surface-sunken font-semibold text-ink"
       : active
-        ? cn(accent.text, accent.hoverBg)
+        ? cn("text-ink", accent.hoverBg)
         : cn("text-ink-muted", accent.hoverBg, "hover:text-ink"),
   );
 
