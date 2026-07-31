@@ -81,8 +81,17 @@ async def get_pool() -> "asyncpg.Pool":  # type: ignore[name-defined]
                 "DATABASE_URL is not a Postgres DSN. Set DATABASE_MODE=supabase and point "
                 "DATABASE_URL at the dev/test Supabase connection string."
             )
+        # Keep a couple of connections warm and don't recycle idle ones
+        # (max_inactive_connection_lifetime=0): under the dashboard's frequent
+        # polling, min_size=1 kept dropping to a single connection and opening
+        # new ones, and every new connection re-resolves the Supabase pooler
+        # hostname — an occasional transient `getaddrinfo failed` there surfaced
+        # as a one-off 500 that recovered on the next request. Warm, persistent
+        # connections make those DNS lookups rare. max_size unchanged (5) to
+        # respect the session-mode pooler's limited client slots.
         _pool = await asyncpg.create_pool(
-            dsn=dsn, min_size=1, max_size=5, ssl=_ssl_context(), init=_init_conn
+            dsn=dsn, min_size=2, max_size=5, ssl=_ssl_context(), init=_init_conn,
+            max_inactive_connection_lifetime=0,
         )
     return _pool
 

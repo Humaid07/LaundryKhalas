@@ -108,6 +108,13 @@ class Settings(BaseSettings):
     # by default; set this True only to restore that automatic behaviour (rollback).
     auto_order_discount_enabled: bool = False
 
+    # --- Pre-confirmation review gate (owner decision 2026-07-31) -------------
+    # Backend hard gate: an order can only be confirmed from a turn AFTER its full
+    # summary was shown (and any edit re-arms it), so the customer always gets a
+    # turn to add notes, check the details, or change anything before confirmation.
+    # Set False to restore the previous behaviour (rollback).
+    preconfirm_review_gate_enabled: bool = True
+
     # --- WhatsApp AI-agent personas (persistent per customer) ----------------
     # ONE approved persona name is pinned to a customer for life (chosen once on
     # first contact, never changed across orders/conversations/restarts). Only the

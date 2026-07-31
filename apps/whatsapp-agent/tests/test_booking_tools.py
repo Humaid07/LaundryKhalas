@@ -139,15 +139,87 @@ async def test_full_booking_via_write_tools_then_idempotent_confirm():
     assert err is False and wf["workflow"]["ready_to_confirm"] is True
     assert wf["workflow"]["missing_fields"] == []
 
-    data, err = await _call(execute, "confirm_order")
+    # Show the full summary (arms the pre-confirmation review gate) — a same-turn
+    # confirm is then refused; the customer must get a turn to review first.
+    await _call(execute, "get_order_summary")
+    _, err = await _call(execute, "confirm_order")
+    assert err is True and repo.confirm_calls == 0
+
+    # A LATER turn (new executor) confirms after the customer reviewed the summary.
+    execute2 = make_booking_executor(_ctx(repo))
+    data, err = await _call(execute2, "confirm_order")
     assert err is False and data["confirmed"] is True and data["created_now"] is True
 
     # Idempotency: a repeated confirm (duplicate model request) creates no 2nd
     # order — the executor reports the existing one without a second real confirm.
-    data, err = await _call(execute, "confirm_order")
+    data, err = await _call(execute2, "confirm_order")
     assert data["created_now"] is False
     assert repo.confirm_calls == 1
     assert repo.row["status"] == order_store.PICKUP_SCHEDULED
+
+
+async def _drive_to_ready(execute, category, item):
+    """Run the write-tools that bring a fresh draft to ready_to_confirm (one turn)."""
+    await _call(execute, "save_customer_name", name="Sara Ahmed")
+    await _call(execute, "save_service_selection", service=category["name"])
+    await _call(execute, "save_order_item", item=item["canonical_name"], quantity=3)
+    await _call(execute, "save_pickup_date", date_text="tomorrow")
+    await _call(execute, "save_pickup_time", slot="1")
+    await _call(execute, "save_pickup_address", address="Villa 12, Dubai Marina")
+
+
+async def test_confirm_blocked_until_summary_shown_in_a_prior_turn():
+    """Backend hard gate: an order can't be confirmed in the same turn its summary is
+    first shown — the customer must get a turn to review, add notes, or edit first."""
+    category, item = _pick_category_and_item()
+    if not category:
+        pytest.skip("no unambiguous category/item pair in the catalogue")
+    repo = FakeOrdersRepo("conv-rg1")
+    ctx = _ctx(repo)
+
+    # Turn 1: build the order, show the summary, then try to confirm the SAME turn.
+    turn1 = make_booking_executor(ctx)
+    await _drive_to_ready(turn1, category, item)
+    await _call(turn1, "get_order_summary")
+    data, err = await _call(turn1, "confirm_order")
+    assert err is True and "REVIEW_REQUIRED" in data["error"]
+    assert repo.row["status"] == order_store.DRAFT       # nothing confirmed
+    assert repo.confirm_calls == 0
+
+    # Turn 2: a later turn (new executor) — the review was shown last turn, so an
+    # explicit confirm now goes through.
+    turn2 = make_booking_executor(ctx)
+    data, err = await _call(turn2, "confirm_order")
+    assert err is False and data["confirmed"] is True
+    assert repo.row["status"] == order_store.PICKUP_SCHEDULED
+
+
+async def test_edit_after_summary_rearms_the_review_gate():
+    """Owner rule (2026-07-31): any edit after the summary re-arms the gate — a
+    changed order must be re-reviewed before it can be confirmed."""
+    category, item = _pick_category_and_item()
+    if not category:
+        pytest.skip("no unambiguous category/item pair in the catalogue")
+    repo = FakeOrdersRepo("conv-rg2")
+    ctx = _ctx(repo)
+
+    # Turn 1: build + show the summary (gate armed for a future turn).
+    turn1 = make_booking_executor(ctx)
+    await _drive_to_ready(turn1, category, item)
+    await _call(turn1, "get_order_summary")
+
+    # Turn 2: the customer edits the pickup time, then tries to confirm — the edit
+    # invalidated the shown summary, so confirm is refused.
+    turn2 = make_booking_executor(ctx)
+    await _call(turn2, "save_pickup_time", slot="2")
+    data, err = await _call(turn2, "confirm_order")
+    assert err is True and "REVIEW_REQUIRED" in data["error"]
+    assert repo.row["status"] == order_store.DRAFT
+
+    # Turn 3 re-shows the updated summary; Turn 4 can then confirm.
+    await _call(make_booking_executor(ctx), "get_order_summary")
+    data, err = await _call(make_booking_executor(ctx), "confirm_order")
+    assert err is False and data["confirmed"] is True
 
 
 async def test_negotiate_order_price_ladder_carpet_600(monkeypatch):
@@ -263,8 +335,11 @@ async def test_claude_confirm_triggers_post_confirmation_effects(spy_post_confir
     await _call(execute, "save_pickup_date", date_text="tomorrow")
     await _call(execute, "save_pickup_time", slot="1")
     await _call(execute, "save_pickup_address", address="Villa 12, Dubai Marina")
+    # Turn 1 shows the summary (review gate); Turn 2 confirms.
+    await _call(execute, "get_order_summary")
 
-    data, err = await _call(execute, "confirm_order")
+    execute2 = make_booking_executor(ctx)
+    data, err = await _call(execute2, "confirm_order")
     assert err is False and data["created_now"] is True
     # Ran exactly once, with the confirmed order row + the customer id.
     assert len(spy_post_confirm) == 1
@@ -273,7 +348,7 @@ async def test_claude_confirm_triggers_post_confirmation_effects(spy_post_confir
     assert customer_id == "cust-uuid-9"
 
     # Duplicate confirm (idempotent) must NOT re-run the side effects.
-    await _call(execute, "confirm_order")
+    await _call(execute2, "confirm_order")
     assert len(spy_post_confirm) == 1
 
 

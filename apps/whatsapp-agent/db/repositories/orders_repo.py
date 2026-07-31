@@ -543,6 +543,8 @@ _BOOKING_COLS = frozenset({
     "location_message_id", "location_received_at", "location_accuracy", "location_pin_status",
     # Confirmed-notes snapshot + facility-handoff status — 000033.
     "confirmed_notes_snapshot", "notes_confirmed_at",
+    # Pre-confirmation review gate marker — 000035.
+    "review_summary_shown_at",
     "facility_handoff_status", "facility_handoff_at", "facility_handoff_attempts",
     "facility_handoff_last_error", "facility_handoff_payload",
 })

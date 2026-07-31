@@ -638,7 +638,13 @@ def booking_system_prompt() -> str:
         "- When the customer changes one detail, update only that field and keep the rest.\n"
         "- Never treat an unconfirmed WhatsApp profile name as the customer's name; ask.\n"
         "- Never say a booking is confirmed unless confirm_order returns confirmed=true, "
-        "and only confirm after the customer explicitly agrees and nothing is missing.\n\n"
+        "and only confirm after the customer explicitly agrees and nothing is missing.\n"
+        "- BEFORE confirming you MUST, in a PRIOR turn, have shown the FULL order summary "
+        "(items, price, pickup date/time, full address, and any Additional Notes) and asked "
+        "the customer: anything to add? / is everything correct? / would you like to change "
+        "anything? Call confirm_order ONLY after they reply with an explicit yes in a LATER "
+        "message. NEVER show the summary and confirm in the same turn; if they edit anything "
+        "after the summary, re-show it and re-ask before confirming.\n\n"
         "After an order is confirmed (workflow_state ORDER_CONFIRMED) — this is a HARD STOP:\n"
         "- Send exactly ONE concise confirmation with the order reference, pickup date/time, "
         "address and total, then STOP. That confirmation is the final message of the turn.\n"
@@ -857,6 +863,12 @@ def make_booking_executor(ctx: BookingContext):
     })
     _NEW_STATE = {"workflow_state": "new", "missing_fields": ["service_items"],
                   "ready_to_confirm": False}
+    # Pre-confirmation review gate (owner 2026-07-31): tracks, WITHIN this turn,
+    # whether get_order_summary freshly armed the review this turn. confirm_order is
+    # refused while freshly_armed is True (summary + confirm in one turn) or the
+    # persisted orders.review_summary_shown_at marker is unset — so the customer
+    # always gets a turn to add notes / check details / edit before confirmation.
+    review_state = {"freshly_armed": False}
 
     async def _current_row() -> dict | None:
         # Always operate on THIS conversation's open draft — ownership by scope.
@@ -873,7 +885,14 @@ def make_booking_executor(ctx: BookingContext):
     async def _apply(updates: dict, state: str | None = None) -> dict | None:
         row = await _ensure_draft()
         new_state = state or row.get("conversation_state") or bf.WAITING_FOR_SERVICE
-        return await ctx.repo.apply_booking_updates(row["id"], updates, new_state)
+        data = dict(updates or {})
+        # Any content edit invalidates a previously shown review summary (owner
+        # 2026-07-31: an edit re-arms the pre-confirmation review gate). The
+        # summary-marker write itself — its ONLY key — is the sole exception.
+        if data and set(data) != {"review_summary_shown_at"}:
+            data["review_summary_shown_at"] = None
+            review_state["freshly_armed"] = False
+        return await ctx.repo.apply_booking_updates(row["id"], data, new_state)
 
     async def execute(name: str, tool_input: dict) -> tuple[str, bool]:
         tool_input = tool_input or {}
@@ -1199,6 +1218,13 @@ def make_booking_executor(ctx: BookingContext):
                 active_notes = await order_notes_repo.list_active(str(row["id"]))
             except Exception:  # noqa: BLE001
                 active_notes = []
+            # Arm the pre-confirmation review gate: the customer is being shown the
+            # full summary now, so confirmation is allowed only from a LATER turn
+            # (owner 2026-07-31). Set once — re-showing an unchanged summary must not
+            # keep pushing the marker forward, which would loop the gate.
+            if not row.get("review_summary_shown_at"):
+                await _apply({"review_summary_shown_at": ctx.local_now()})
+                review_state["freshly_armed"] = True
             return _ok({"summary_lines": pricing.format_quote_lines(quote),
                         "final_price_aed": quote.customer_total,
                         # Additional Notes section (spec §order-summary) + pin/address.
@@ -1363,6 +1389,22 @@ def make_booking_executor(ctx: BookingContext):
             if state["missing_fields"]:
                 return _err(f"Cannot confirm — still missing: {state['missing_fields']}. "
                             "Collect these first; do not tell the customer it's confirmed.")
+            # Pre-confirmation review gate (owner 2026-07-31): the full summary must
+            # have been shown in a PRIOR turn — never confirm in the same turn it was
+            # first shown, and any edit re-arms it — so the customer always gets a
+            # turn to add notes, check the details, or change anything. Enforced by
+            # the backend, not the model. Rollback: preconfirm_review_gate_enabled.
+            from settings import get_settings as _get_settings
+            if _get_settings().preconfirm_review_gate_enabled and (
+                    not row.get("review_summary_shown_at") or review_state["freshly_armed"]):
+                return _err(
+                    "REVIEW_REQUIRED — before confirming, show the FULL order summary "
+                    "(items, price, pickup date/time, full address, and any Additional "
+                    "Notes) and ask the customer to: (1) add any notes or special "
+                    "instructions, (2) check every detail is correct, and (3) tell you if "
+                    "they want to change anything. Confirm ONLY after they reply with an "
+                    "explicit yes in a LATER message — never in the same turn you first "
+                    "show the summary.")
             confirmed, created_now = await ctx.repo.confirm_booking(row["id"])
             if confirmed is None:
                 return _err("Confirmation failed on the backend; escalate to a human.")
