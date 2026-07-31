@@ -23,7 +23,7 @@ export function ManualReplyBox({
   };
 
   return (
-    <div className="border-t border-border bg-white p-4">
+    <div className="border-t border-border bg-surface p-4">
       {notice && <p className="mb-2 text-xs text-ink-muted">{notice}</p>}
       <div className="flex items-end gap-2">
         <textarea
@@ -31,10 +31,10 @@ export function ManualReplyBox({
           onChange={(e) => setText(e.target.value)}
           placeholder="Type a manual reply…"
           rows={2}
-          className="flex-1 resize-none rounded-lg border border-border-strong bg-white px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand/30"
+          className="flex-1 resize-none rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-rose/30"
         />
         <Button variant="primary" onClick={handleSend} disabled={isSending || !text.trim()}>
-          {isSending ? <InlineSpinner className="text-white" /> : <Send className="h-3.5 w-3.5" />}
+          {isSending ? <InlineSpinner className="text-rose-contrast" /> : <Send className="h-3.5 w-3.5" />}
           Send Manual Reply
         </Button>
       </div>

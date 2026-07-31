@@ -15,7 +15,7 @@ export function ConversationList({ rows }: { rows: ConversationRow[] }) {
     {
       header: "Conversation",
       cell: (row) => (
-        <Link href={`/admin/conversations/${row.id}`} className="font-medium text-brand hover:text-brand-hover">
+        <Link href={`/admin/conversations/${row.id}`} className="font-medium text-rose hover:text-rose-strong">
           {shortId(row.id)}
         </Link>
       ),

@@ -57,7 +57,7 @@ export function ConversationContextPanel({
         <CardBody>
           {order ? (
             <Link href={`/admin/orders/${order.id}`} className="block space-y-2.5 text-sm">
-              <Row label="Order" value={<span className="font-medium text-brand">{shortId(order.id)}</span>} />
+              <Row label="Order" value={<span className="font-medium text-rose">{shortId(order.id)}</span>} />
               <Row label="Status" value={<StatusBadge status={order.status} />} />
               <Row label="Service" value={order.service_type.replace(/_/g, " ")} />
               <Row label="Total" value={formatCurrency(order.estimated_total)} />
@@ -92,14 +92,14 @@ export function ConversationContextPanel({
                     <button
                       onClick={() => onReject(a.id)}
                       disabled={isDeciding}
-                      className="rounded-lg border border-border-strong px-2.5 py-1 text-xs font-medium text-ink hover:bg-neutral-soft disabled:opacity-50"
+                      className="rounded-lg border border-border-strong px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface-2 disabled:opacity-50"
                     >
                       Reject
                     </button>
                     <button
                       onClick={() => onApprove(a.id)}
                       disabled={isDeciding}
-                      className="rounded-lg bg-brand px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-hover disabled:opacity-50"
+                      className="rounded-lg bg-rose px-2.5 py-1 text-xs font-medium text-rose-contrast hover:bg-rose-strong disabled:opacity-50"
                     >
                       Approve
                     </button>
@@ -116,7 +116,7 @@ export function ConversationContextPanel({
           <h2 className="text-sm font-semibold text-ink">Latest AI action logs</h2>
           <Link
             href={`/admin/ai-logs?conversation_id=${conversation.id}`}
-            className="text-xs font-medium text-brand hover:text-brand-hover"
+            className="text-xs font-medium text-rose hover:text-rose-strong"
           >
             View all
           </Link>
@@ -144,7 +144,7 @@ export function ConversationContextPanel({
         </CardBody>
       </Card>
 
-      <div className="flex items-start gap-2 rounded-2xl border border-info/20 bg-info-soft px-4 py-3 text-xs text-info-text">
+      <div className="flex items-start gap-2 rounded-2xl border border-info/20 bg-info/10 px-4 py-3 text-xs text-info">
         <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0" />
         <p>
           Privacy firewall active: customer phone, email, and full address are never sent to the

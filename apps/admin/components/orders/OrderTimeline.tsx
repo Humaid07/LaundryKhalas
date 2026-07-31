@@ -18,7 +18,7 @@ export function OrderTimeline({ events }: { events: OrderEvent[] }) {
             {events.map((event, idx) => (
               <li key={event.id} className="relative flex gap-3">
                 <div className="flex flex-col items-center">
-                  <span className="h-2 w-2 rounded-full bg-brand" />
+                  <span className="h-2 w-2 rounded-full bg-rose" />
                   {idx < events.length - 1 && <span className="mt-1 w-px flex-1 bg-border" />}
                 </div>
                 <div className="flex-1 pb-1">

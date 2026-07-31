@@ -14,7 +14,7 @@ export function AIActionLogTable({ logs }: { logs: AIActionLog[] }) {
       header: "Conversation",
       cell: (l) =>
         l.conversation_id ? (
-          <Link href={`/admin/conversations/${l.conversation_id}`} className="text-brand hover:text-brand-hover">
+          <Link href={`/admin/conversations/${l.conversation_id}`} className="text-rose hover:text-rose-strong">
             {shortId(l.conversation_id)}
           </Link>
         ) : (
@@ -25,7 +25,7 @@ export function AIActionLogTable({ logs }: { logs: AIActionLog[] }) {
       header: "Order",
       cell: (l) =>
         l.order_id ? (
-          <Link href={`/admin/orders/${l.order_id}`} className="text-brand hover:text-brand-hover">
+          <Link href={`/admin/orders/${l.order_id}`} className="text-rose hover:text-rose-strong">
             {shortId(l.order_id)}
           </Link>
         ) : (

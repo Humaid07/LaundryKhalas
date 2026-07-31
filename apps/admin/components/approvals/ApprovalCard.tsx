@@ -42,7 +42,7 @@ export function ApprovalCard({
           {approval.conversation_id && (
             <Link
               href={`/admin/conversations/${approval.conversation_id}`}
-              className="font-medium text-brand hover:text-brand-hover"
+              className="font-medium text-rose hover:text-rose-strong"
             >
               Conversation {shortId(approval.conversation_id)}
             </Link>
@@ -50,7 +50,7 @@ export function ApprovalCard({
           {approval.order_id && (
             <Link
               href={`/admin/orders/${approval.order_id}`}
-              className="font-medium text-brand hover:text-brand-hover"
+              className="font-medium text-rose hover:text-rose-strong"
             >
               Order {shortId(approval.order_id)}
             </Link>
@@ -73,7 +73,7 @@ export function ApprovalCard({
             <button
               onClick={onReject}
               disabled={isDeciding}
-              className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-white px-3 py-1.5 text-xs font-medium text-ink hover:bg-neutral-soft disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-2 disabled:opacity-50"
             >
               <X className="h-3.5 w-3.5" />
               Reject
@@ -81,7 +81,7 @@ export function ApprovalCard({
             <button
               onClick={onApprove}
               disabled={isDeciding}
-              className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-hover disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg bg-rose px-3 py-1.5 text-xs font-medium text-rose-contrast hover:bg-rose-strong disabled:opacity-50"
             >
               <Check className="h-3.5 w-3.5" />
               Approve Reply
