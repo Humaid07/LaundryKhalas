@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, Menu, Search } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserMenu } from "./UserMenu";
 import { TopbarSearch } from "./TopbarSearch";
@@ -50,16 +50,6 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
         </button>
 
         <ThemeToggle />
-
-        {/* Notifications */}
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="lk-control lk-control--pill relative"
-        >
-          <Bell className="h-4 w-4" />
-          <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-rose ring-2 ring-surface" />
-        </button>
 
         {/* Profile + sign out */}
         <UserMenu />

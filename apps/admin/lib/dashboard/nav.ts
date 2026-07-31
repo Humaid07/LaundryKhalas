@@ -51,10 +51,12 @@ export type NavItem = {
  * these routes already exists under app/(dashboard)/.
  */
 function childrenOf(sectionKey: string, base: string): NavChild[] {
+  // Note: subsection `badge` counts are intentionally NOT surfaced in the sidebar
+  // — they were hardcoded placeholders, and showing invented counts on every page
+  // is misleading (CLAUDE.md §7). Re-add once wired to real per-section data.
   return subsectionsOf(sectionKey).map((s) => ({
     label: s.label,
     href: `${base}/${s.slug}`,
-    badge: s.badge,
   }));
 }
 
@@ -87,7 +89,6 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/operations",
     icon: Workflow,
     description: "WhatsApp agent, orders, tickets & driver assignment",
-    badge: 6,
     children: childrenWithOverview("operations", "/operations"),
   },
   {
@@ -115,7 +116,6 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/partner-acquisition",
     icon: Handshake,
     description: "Partner pipeline, market intelligence & onboarding",
-    badge: 5,
     children: childrenWithOverview("partner-acquisition", "/partner-acquisition"),
   },
   {
@@ -123,7 +123,6 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/seo-agents",
     icon: Search,
     description: "Autonomous SEO agents, tasks and daily brief",
-    badge: 3,
     children: childrenWithOverview("seo-agents", "/seo-agents"),
   },
   {
@@ -131,7 +130,6 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/marketing",
     icon: Megaphone,
     description: "Social analytics, creative studio and approvals",
-    badge: 4,
     children: childrenWithOverview("marketing", "/marketing"),
   },
   {
@@ -146,7 +144,6 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/dev-automation",
     icon: TerminalSquare,
     description: "Agent health, automations, API & system status",
-    badge: 3,
     children: childrenWithOverview("dev-automation", "/dev-automation"),
   },
   {
