@@ -4,7 +4,6 @@
  */
 
 // Page-level frame
-export { MinimalPageHeader } from "./MinimalPageHeader";
 export { MinimalKpiStrip, type MinimalKpi } from "./MinimalKpiStrip";
 
 // Workflow/status filters for the current page
