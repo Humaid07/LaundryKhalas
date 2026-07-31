@@ -31,7 +31,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // No maximumScale — allow pinch-zoom (WCAG 1.4.4 resize; blocking zoom hurts
+  // low-vision users). The layout is responsive, so zoom does not break it.
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#faf7f8" },
     { media: "(prefers-color-scheme: dark)", color: "#0d0f13" },

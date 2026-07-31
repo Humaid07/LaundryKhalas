@@ -83,7 +83,7 @@ export default function DriversPage() {
         {SUMMARY_TILES.map((t) => (
           <div key={t.key} className="min-w-0 px-4 py-4 text-center sm:text-left">
             <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">{t.label}</p>
-            <p className={cn("mt-1.5 font-mono text-2xl font-semibold leading-none tnum", t.tone)}>
+            <p className={cn("mt-1.5 font-mono text-metric font-semibold leading-none tnum", t.tone)}>
               {summary ? (summary[t.key] as number) ?? 0 : "—"}
             </p>
           </div>
