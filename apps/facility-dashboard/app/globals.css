@@ -3,101 +3,11 @@
 @tailwind utilities;
 
 /*
-  LaundryKhalas Internal Dashboard — design tokens.
-  Pink is a signal, not a fill: rose is reserved for brand, active states,
-  primary actions and one hero chart hue. Surfaces stay clean.
-  All semantic colors are "R G B" triplets so Tailwind's <alpha-value>
-  utilities (e.g. bg-rose/10) work, and charts recolor on theme switch.
+  LaundryKhalas Partner Portal — base layer + animation utilities.
+  Design TOKENS (the :root / .dark CSS variables) now live in the shared preset
+  at packages/design/ and are injected via addBase — do NOT redefine them here
+  (that reintroduces cross-app drift). This file keeps only base rules + .lk-* .
 */
-:root {
-  --canvas: 248 244 246; /* #f8f4f6 deeper warm rose-white — cards read elevated */
-  --surface: 255 255 255;
-  --surface-2: 249 245 247; /* #f9f5f7 warm inset (wells, table interiors) */
-  --surface-raised: 255 255 255;
-  --surface-sunken: 244 239 242; /* #f4eff2 deepest layer (KPI band, page wells) */
-  --border: 230 222 226; /* stronger, still tasteful definition */
-  --border-strong: 212 201 208;
-  --ink: 26 20 24; /* near-black, warm */
-  --ink-muted: 107 99 104;
-  --ink-faint: 150 143 148;
-
-  --rose: 214 51 108; /* #d6336c primary accent */
-  --rose-strong: 180 45 94; /* hover / pressed */
-  --rose-contrast: 255 255 255; /* text on rose */
-
-  --success: 5 150 105;
-  --warning: 217 119 6;
-  --danger: 220 38 38;
-  --info: 37 99 235;
-
-  /* Categorical chart palette — rose leads, supports separate cleanly */
-  --c-rose: 214 51 108;
-  --c-plum: 124 58 173;
-  --c-teal: 13 148 136;
-  --c-amber: 217 119 6;
-  --c-slate: 71 85 105;
-  --c-sky: 2 132 199;
-
-  /* Section-accent tokens — one hue per facility section (see lib/accents.ts).
-     rose stays the master brand; these are wayfinding accents, never status. */
-  --accent-teal: 13 148 136; /* Home */
-  --accent-amber: 194 120 3; /* Issues */
-  --accent-violet: 124 58 237; /* Drivers */
-  --accent-slate: 71 85 105;
-  --accent-sky: 2 132 199; /* Orders */
-  --accent-indigo: 79 70 229;
-  --accent-fuchsia: 192 38 211;
-  --accent-cyan: 8 145 178; /* Finance */
-  --accent-steel: 55 71 105;
-  --accent-plum: 147 51 190;
-
-  --ring: 214 51 108;
-  --shadow-color: 24 15 20;
-}
-
-.dark {
-  --canvas: 13 15 19; /* #0d0f13 deep slate */
-  --surface: 22 27 34; /* #161b22 */
-  --surface-2: 28 34 43;
-  --surface-raised: 30 36 46;
-  --surface-sunken: 17 21 27;
-  --border: 44 51 62;
-  --border-strong: 60 69 82;
-  --ink: 237 233 236;
-  --ink-muted: 158 164 174;
-  --ink-faint: 112 119 129;
-
-  --rose: 232 76 136; /* #e84c88 brighter for dark */
-  --rose-strong: 240 106 162;
-  --rose-contrast: 20 12 16;
-
-  --success: 52 211 153;
-  --warning: 251 191 36;
-  --danger: 248 113 113;
-  --info: 96 165 250;
-
-  --c-rose: 232 76 136;
-  --c-plum: 167 139 250;
-  --c-teal: 45 212 191;
-  --c-amber: 251 191 36;
-  --c-slate: 148 163 184;
-  --c-sky: 56 189 248;
-
-  /* Section accents — brighter for dark. */
-  --accent-teal: 45 212 191;
-  --accent-amber: 251 191 36;
-  --accent-violet: 167 139 250;
-  --accent-slate: 148 163 184;
-  --accent-sky: 56 189 248;
-  --accent-indigo: 129 140 248;
-  --accent-fuchsia: 232 121 249;
-  --accent-cyan: 34 211 238;
-  --accent-steel: 130 148 184;
-  --accent-plum: 192 132 252;
-
-  --ring: 232 76 136;
-  --shadow-color: 0 0 0;
-}
 
 html,
 body {

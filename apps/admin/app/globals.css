@@ -3,105 +3,13 @@
 @tailwind utilities;
 
 /*
-  LaundryKhalas Internal Dashboard — design tokens.
+  LaundryKhalas Internal Dashboard — base layer + animation utilities.
+  Design TOKENS (the :root / .dark CSS variables) now live in the shared preset
+  at packages/design/ and are injected via addBase — do NOT redefine them here
+  (that reintroduces cross-app drift). This file keeps only base rules + .lk-* .
   Pink is a signal, not a fill: rose is reserved for brand, active states,
-  primary actions and one hero chart hue. Surfaces stay clean.
-  All semantic colors are "R G B" triplets so Tailwind's <alpha-value>
-  utilities (e.g. bg-rose/10) work, and charts recolor on theme switch.
+  primary actions and one hero chart hue.
 */
-:root {
-  --canvas: 248 244 246; /* #f8f4f6 deeper warm rose-white — cards read elevated */
-  --surface: 255 255 255;
-  --surface-2: 249 245 247; /* #f9f5f7 warm inset (wells, table interiors) */
-  --surface-raised: 255 255 255;
-  --surface-sunken: 244 239 242; /* #f4eff2 deepest layer (KPI band, page wells) */
-  --border: 230 222 226; /* stronger, still tasteful definition */
-  --border-strong: 212 201 208; /* clear dividers / raised-tier borders */
-  --ink: 26 20 24; /* near-black, warm */
-  --ink-muted: 107 99 104;
-  --ink-faint: 150 143 148;
-
-  --rose: 214 51 108; /* #d6336c primary accent */
-  --rose-strong: 180 45 94; /* hover / pressed */
-  --rose-contrast: 255 255 255; /* text on rose */
-
-  --success: 5 150 105;
-  --warning: 217 119 6;
-  --danger: 220 38 38;
-  --info: 37 99 235;
-
-  /* Categorical chart palette — rose leads, supports separate cleanly */
-  --c-rose: 214 51 108;
-  --c-plum: 124 58 173;
-  --c-teal: 13 148 136;
-  --c-amber: 217 119 6;
-  --c-slate: 71 85 105;
-  --c-sky: 2 132 199;
-
-  /* Module-accent tokens — restrained ERP colour-coding via families.
-     rose stays the master brand; these four are wayfinding accents only
-     (nav-active, eyebrow, icon chip, section rule) — never status colours.
-     Green + warning-amber hues are deliberately avoided. */
-  --accent-teal: 13 148 136; /* #0d9488 Operations */
-  --accent-amber: 194 120 3; /* #c27803 Sales */
-  --accent-violet: 124 58 237; /* #7c3aed Partner Acquisition */
-  --accent-slate: 71 85 105; /* #475569 Overview */
-  --accent-sky: 2 132 199; /* #0284c7 Orders */
-  --accent-indigo: 79 70 229; /* #4f46e5 SEO Agents */
-  --accent-fuchsia: 192 38 211; /* #c026d3 Marketing */
-  --accent-cyan: 8 145 178; /* #0891b2 Finance & Compliance */
-  --accent-steel: 55 71 105; /* #374769 Dev & Automation */
-  --accent-plum: 147 51 190; /* #9333be Reports */
-  --accent-orange: 234 88 12; /* #ea580c Facilities */
-
-  --ring: 214 51 108;
-  --shadow-color: 24 15 20;
-}
-
-.dark {
-  --canvas: 13 15 19; /* #0d0f13 deep slate */
-  --surface: 22 27 34; /* #161b22 */
-  --surface-2: 28 34 43;
-  --surface-raised: 30 36 46;
-  --surface-sunken: 17 21 27; /* below surface — KPI band / page wells */
-  --border: 44 51 62; /* slightly stronger definition */
-  --border-strong: 60 69 82;
-  --ink: 237 233 236;
-  --ink-muted: 158 164 174;
-  --ink-faint: 112 119 129;
-
-  --rose: 232 76 136; /* #e84c88 brighter for dark */
-  --rose-strong: 240 106 162;
-  --rose-contrast: 20 12 16;
-
-  --success: 52 211 153;
-  --warning: 251 191 36;
-  --danger: 248 113 113;
-  --info: 96 165 250;
-
-  --c-rose: 232 76 136;
-  --c-plum: 167 139 250;
-  --c-teal: 45 212 191;
-  --c-amber: 251 191 36;
-  --c-slate: 148 163 184;
-  --c-sky: 56 189 248;
-
-  /* Module accents — brighter for dark, one hue per section. */
-  --accent-teal: 45 212 191; /* #2dd4bf Operations */
-  --accent-amber: 251 191 36; /* #fbbf24 Sales */
-  --accent-violet: 167 139 250; /* #a78bfa Partner Acquisition */
-  --accent-slate: 148 163 184; /* #94a3b8 Overview */
-  --accent-sky: 56 189 248; /* #38bdf8 Orders */
-  --accent-indigo: 129 140 248; /* #818cf8 SEO Agents */
-  --accent-fuchsia: 232 121 249; /* #e879f9 Marketing */
-  --accent-cyan: 34 211 238; /* #22d3ee Finance & Compliance */
-  --accent-steel: 130 148 184; /* #8294b8 Dev & Automation */
-  --accent-plum: 192 132 252; /* #c084fc Reports */
-  --accent-orange: 251 146 60; /* #fb923c Facilities */
-
-  --ring: 232 76 136;
-  --shadow-color: 0 0 0;
-}
 
 html,
 body {
