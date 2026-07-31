@@ -78,7 +78,7 @@ export function FacilityHeader() {
               type="button"
               onClick={() => setNotifOpen(true)}
               aria-label="Open notifications"
-              className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+              className="lk-control lk-control--pill relative"
             >
               <Bell className="h-[1.1rem] w-[1.1rem]" />
               {unread > 0 && (
@@ -94,7 +94,7 @@ export function FacilityHeader() {
               type="button"
               onClick={logout}
               aria-label="Sign out"
-              className="hidden h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-ink-muted transition-colors hover:border-border-strong hover:text-ink sm:flex"
+              className="lk-control lk-control--pill hidden sm:inline-flex"
             >
               <LogOut className="h-[1.05rem] w-[1.05rem]" />
             </button>

@@ -51,7 +51,7 @@ export function StatCard({
       </div>
       <div className="mt-3 flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-mono text-[1.6rem] font-semibold leading-none tracking-tight text-ink tnum">
+          <div className="font-mono text-metric font-semibold leading-none tracking-tight text-ink tnum">
             {stat.value}
           </div>
           {stat.hint && <p className="mt-1.5 truncate text-xs text-ink-muted">{stat.hint}</p>}
@@ -114,7 +114,7 @@ export function HeroStat({
 
       <div className="mt-4 flex items-end justify-between gap-4">
         <div className="min-w-0">
-          <div className="font-mono text-[2.4rem] font-bold leading-none tracking-tight text-ink tnum">
+          <div className="font-mono text-metric-lg font-bold leading-none tracking-tight text-ink tnum">
             {stat.value}
           </div>
           {stat.hint && <p className="mt-2 truncate text-xs text-ink-muted">{stat.hint}</p>}

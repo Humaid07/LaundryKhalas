@@ -16,7 +16,10 @@ const toVars = (t: Record<string, string>): Record<string, string> =>
   Object.fromEntries(Object.entries(t).map(([k, v]) => [`--${k}`, v]));
 
 /** Minimal shape of the Tailwind plugin API surface we use. */
-type PluginApi = { addBase: (base: Record<string, Record<string, string>>) => void };
+type PluginApi = {
+  addBase: (base: Record<string, Record<string, string>>) => void;
+  addComponents: (components: Record<string, Record<string, unknown>>) => void;
+};
 
 const preset = {
   darkMode: "class" as const,
@@ -89,10 +92,19 @@ const preset = {
     },
   },
   plugins: [
-    ({ addBase }: PluginApi) => {
+    ({ addBase, addComponents }: PluginApi) => {
       addBase({
         ":root": toVars(LIGHT_TOKENS),
         ".dark": toVars(DARK_TOKENS),
+      });
+      // Shared interactive-chrome recipe for icon buttons / small controls so
+      // hover + focus never drift across apps. Rose focus ring = the one signal.
+      addComponents({
+        ".lk-control": {
+          "@apply inline-flex items-center justify-center rounded-full border border-border bg-surface text-ink-muted transition-colors hover:border-border-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40":
+            {},
+        },
+        ".lk-control--pill": { "@apply h-10 w-10": {} },
       });
     },
   ],

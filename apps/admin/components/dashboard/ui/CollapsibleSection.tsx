@@ -157,7 +157,7 @@ export function CollapsibleDashboardSection({
             </span>
           )}
           <div className="min-w-0">
-            <h2 id={headerId} className="font-display text-[0.95rem] font-semibold leading-tight text-ink">
+            <h2 id={headerId} className="font-display text-card-title font-semibold leading-tight text-ink">
               {title}
             </h2>
             {description && <p className="mt-0.5 truncate text-xs text-ink-muted">{description}</p>}

@@ -53,7 +53,7 @@ export function CompactRecordCard({
             </StatusBadge>
           )}
         </div>
-        <p className="mt-1.5 truncate text-[0.95rem] font-semibold text-ink">{title}</p>
+        <p className="mt-1.5 truncate text-card-title font-semibold text-ink">{title}</p>
         {preview.length > 0 && (
           <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-2">
             {preview.map((f, i) => (

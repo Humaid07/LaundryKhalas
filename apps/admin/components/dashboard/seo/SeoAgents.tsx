@@ -87,7 +87,7 @@ function BriefCard() {
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose/12 text-rose"><Sparkles className="h-4 w-4" /></span>
         <div className="min-w-0">
           <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">Daily SEO brief · {seoBrief.date}</p>
-          <h3 className="truncate font-display text-[0.95rem] font-semibold text-ink">{seoBrief.headline}</h3>
+          <h3 className="truncate font-display text-card-title font-semibold text-ink">{seoBrief.headline}</h3>
         </div>
       </div>
       <ul className="mt-4 space-y-2.5">

@@ -37,7 +37,7 @@ export function ServiceTaxonomyWarning() {
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-display text-[0.95rem] font-semibold text-ink">
+            <h3 className="font-display text-card-title font-semibold text-ink">
               Service taxonomy mismatch detected.
             </h3>
             <StatusBadge tone="danger">Action needed</StatusBadge>

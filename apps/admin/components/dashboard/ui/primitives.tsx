@@ -60,7 +60,7 @@ export function PanelHeader({
           </span>
         )}
         <div className="min-w-0">
-          <h3 className="font-display text-[0.95rem] font-semibold text-ink">{title}</h3>
+          <h3 className="font-display text-card-title font-semibold text-ink">{title}</h3>
           {subtitle && <p className="mt-0.5 text-xs text-ink-muted">{subtitle}</p>}
         </div>
       </div>

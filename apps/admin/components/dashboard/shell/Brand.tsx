@@ -20,7 +20,7 @@ export function BrandWordmark({ collapsed }: { collapsed?: boolean }) {
       <BrandMark />
       {!collapsed && (
         <div className="leading-tight">
-          <p className="font-display text-[0.95rem] font-bold tracking-tight text-ink">LaundryKhalas</p>
+          <p className="font-display text-card-title font-bold tracking-tight text-ink">LaundryKhalas</p>
           <p className="text-xxs font-medium uppercase tracking-eyebrow text-ink-faint">Command Center</p>
         </div>
       )}

@@ -73,7 +73,7 @@ export function ResponsivePageHeader({
             {eyebrow && (
               <p className={cn("mb-1 text-xxs font-semibold uppercase tracking-eyebrow", accent.text)}>{eyebrow}</p>
             )}
-            <h1 className="font-display text-2xl font-bold tracking-tight text-ink md:text-[1.7rem]">{title}</h1>
+            <h1 className="font-display text-page-title font-bold tracking-tight text-ink">{title}</h1>
             {description && <p className="mt-1.5 max-w-2xl text-sm text-ink-muted">{description}</p>}
           </div>
         </div>

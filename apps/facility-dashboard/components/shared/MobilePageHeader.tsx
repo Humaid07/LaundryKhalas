@@ -40,7 +40,7 @@ export function MobilePageHeader({
           {eyebrow && (
             <p className={cn("mb-1 text-xxs font-semibold uppercase tracking-eyebrow", accent.text)}>{eyebrow}</p>
           )}
-          <h1 className="font-display text-xl font-semibold tracking-tight text-ink sm:text-2xl">{title}</h1>
+          <h1 className="font-display text-page-title font-semibold tracking-tight text-ink">{title}</h1>
           {description && <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-muted">{description}</p>}
         </div>
       </div>

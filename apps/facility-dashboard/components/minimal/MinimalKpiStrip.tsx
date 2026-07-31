@@ -37,7 +37,7 @@ export function MinimalKpiStrip({
             <p className="text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint">{k.label}</p>
             <p
               className={cn(
-                "mt-2 font-mono text-2xl font-semibold leading-none tracking-tight tnum",
+                "mt-2 font-mono text-metric font-semibold leading-none tracking-tight tnum",
                 k.tone && k.tone !== "neutral" ? toneText[k.tone] : "text-ink",
               )}
             >

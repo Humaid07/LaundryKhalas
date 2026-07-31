@@ -28,7 +28,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
         type="button"
         onClick={onOpenMobile}
         aria-label="Open navigation"
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted transition-colors hover:text-ink lg:hidden"
+        className="lk-control lk-control--pill lg:hidden"
       >
         <Menu className="h-4 w-4" />
       </button>
@@ -44,7 +44,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
           onClick={() => setSearchOpen((o) => !o)}
           aria-label="Search"
           aria-expanded={searchOpen}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted hover:text-ink sm:hidden"
+          className="lk-control lk-control--pill sm:hidden"
         >
           <Search className="h-4 w-4" />
         </button>
@@ -55,7 +55,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
         <button
           type="button"
           aria-label="Notifications"
-          className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+          className="lk-control lk-control--pill relative"
         >
           <Bell className="h-4 w-4" />
           <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-rose ring-2 ring-surface" />

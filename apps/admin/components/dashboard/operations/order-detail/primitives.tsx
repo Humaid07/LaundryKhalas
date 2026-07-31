@@ -23,7 +23,7 @@ export function SectionCard({
         <header className="flex items-center justify-between gap-3 border-b border-border/60 px-5 py-3.5">
           <div className="flex items-center gap-2.5">
             {Icon && <Icon className="h-4 w-4 text-rose" />}
-            <h2 className="font-display text-[0.95rem] font-semibold text-ink">{title}</h2>
+            <h2 className="font-display text-card-title font-semibold text-ink">{title}</h2>
           </div>
           {action}
         </header>

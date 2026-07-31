@@ -40,7 +40,7 @@ function Modal({ title, onClose, children, footer }: { title: string; onClose: (
       <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-surface shadow-pop">
         <header className="flex items-center justify-between border-b border-border px-5 py-3.5">
-          <h2 className="font-display text-[0.95rem] font-semibold text-ink">{title}</h2>
+          <h2 className="font-display text-card-title font-semibold text-ink">{title}</h2>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted hover:bg-surface-2 hover:text-ink"><X className="h-4 w-4" /></button>
         </header>
         <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
