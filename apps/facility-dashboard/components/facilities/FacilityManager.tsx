@@ -9,6 +9,8 @@ import { LoadingState, ErrorState, EmptyState } from "@/components/ui/states";
 import { useAuth } from "@/lib/auth-context";
 import { canManageFacility } from "@/lib/roles";
 import { facilityApi, type FacilityManageInput, type FacilityProfile } from "@/lib/api-client";
+import { operatingLabel, operatingTone, OPERATING_STATUSES } from "@/lib/status";
+import { toneChip } from "@/components/ui/tones";
 
 const EMIRATES = [
   "Abu Dhabi", "Dubai", "Sharjah", "Ajman",
@@ -19,14 +21,6 @@ const CAPACITY_UNITS = [
   { value: "kg_per_day", label: "Kilograms / day" },
   { value: "pieces_per_day", label: "Pieces / day" },
 ];
-const STATUSES = ["open", "busy", "paused", "closed"];
-const STATUS_TONE: Record<string, string> = {
-  open: "bg-success/10 text-success",
-  busy: "bg-warning/10 text-warning",
-  paused: "bg-ink/8 text-ink-muted",
-  closed: "bg-danger/10 text-danger",
-};
-
 const inputCls =
   "h-11 w-full rounded-lg border border-border bg-canvas px-3 text-sm text-ink placeholder:text-ink-faint focus:border-rose focus-visible:outline-none";
 const labelCls = "mb-1 block text-xxs font-semibold uppercase tracking-eyebrow text-ink-faint";
@@ -108,7 +102,7 @@ export function FacilityManager() {
   return (
     <div className="space-y-5">
       <SectionCard title={String(f.name ?? "Your facility")} icon={Building2}
-        action={<span className={`rounded-full px-2.5 py-0.5 text-xxs font-semibold ${STATUS_TONE[status] ?? "bg-ink/8 text-ink-muted"}`}>{status}</span>}>
+        action={<span className={`rounded-full px-2.5 py-0.5 text-xxs font-semibold ${toneChip[operatingTone(status)]}`}>{operatingLabel(status)}</span>}>
         <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
           <Info label="Full address" value={f.full_address as string} />
           <Info label="Area / City" value={[f.area, f.city].filter(Boolean).join(" · ")} />
@@ -162,7 +156,7 @@ function StatusControl({ facility, onChanged }: { facility: FacilityProfile; onC
       onChange={(e) => m.mutate(e.target.value)}
       aria-label="Change operating status"
     >
-      {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+      {OPERATING_STATUSES.map((s) => <option key={s} value={s}>{operatingLabel(s)}</option>)}
     </select>
   );
 }
@@ -253,7 +247,7 @@ function FacilityForm({
           <div>
             <label className={labelCls}>Operating status</label>
             <select className={inputCls} value={form.operating_status} onChange={(e) => set("operating_status", e.target.value)}>
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              {OPERATING_STATUSES.map((s) => <option key={s} value={s}>{operatingLabel(s)}</option>)}
             </select>
           </div>
           <div><label className={labelCls}>Latitude</label><input className={inputCls} inputMode="decimal" value={form.latitude} onChange={(e) => set("latitude", e.target.value)} placeholder="-90 to 90" /></div>

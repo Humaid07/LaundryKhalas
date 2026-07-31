@@ -94,11 +94,17 @@ export function issueStatusLabel(status: unknown): string {
   return titleCase(status);
 }
 
+// Canonical facility operating-status vocabulary (single source of truth for the
+// header chip, the facilities management page and the status dropdown). Covers
+// every status the backend supports — open/busy/paused/closed — plus the
+// "accepting" alias. Ramp: open=success, busy=warning (operating but strained),
+// paused=neutral (deliberately off), closed=danger (hard stop).
 const OPERATING_TONE: Record<string, Tone> = {
   accepting: "success",
   open: "success",
-  paused: "warning",
-  closed: "neutral",
+  busy: "warning",
+  paused: "neutral",
+  closed: "danger",
 };
 
 export function operatingTone(status: unknown): Tone {
@@ -108,11 +114,16 @@ export function operatingTone(status: unknown): Tone {
 export function operatingLabel(status: unknown): string {
   const s = norm(status);
   if (!s) return "Unknown";
-  if (s === "accepting" || s === "open") return "Accepting orders";
+  if (s === "accepting") return "Accepting orders";
+  if (s === "open") return "Open";
+  if (s === "busy") return "Busy";
   if (s === "paused") return "Paused";
   if (s === "closed") return "Closed";
   return titleCase(status);
 }
+
+/** The operating statuses a partner may set on their own facility. */
+export const OPERATING_STATUSES = ["open", "busy", "paused", "closed"] as const;
 
 /* ---------------------------------------------------------------- Drivers --- */
 
