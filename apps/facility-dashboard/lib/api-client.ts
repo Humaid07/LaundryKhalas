@@ -644,7 +644,19 @@ export const facilityApi = {
   baseUrl: BASE_URL,
 
   // --- Identity / overview ---
-  me: () => request<FacilityProfile>("/api/facility/me"),
+  // The backend returns an envelope { facility: {...}|null, role } — NOT a flat
+  // profile. Unwrap to the FacilityProfile the header/UI reads (else `.name` is
+  // always undefined and the header shows its fallback). `facility` is null
+  // outside supabase mode; the caller's own fallback then applies. Tolerant of a
+  // bare-profile response too, in case the endpoint shape changes.
+  me: async (): Promise<FacilityProfile> => {
+    const res = await request<AnyRec>("/api/facility/me");
+    const rec = (res ?? {}) as AnyRec;
+    const facility = ("facility" in rec ? rec.facility : rec) as FacilityProfile | null;
+    const role =
+      (rec.role as string | undefined) ?? ((facility as AnyRec | null)?.role as string | undefined);
+    return { ...(facility ?? {}), ...(role ? { role } : {}) } as FacilityProfile;
+  },
   overview: () => request<FacilityOverview>("/api/facility/overview"),
 
   // --- Orders ---

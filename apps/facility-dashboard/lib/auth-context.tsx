@@ -38,7 +38,10 @@ const DEV_USER: AuthUser = {
   email: "partner@local",
   full_name: "Facility Partner",
   role: "facility_owner",
-  facility_name: "Your Facility",
+  // No hardcoded facility name — the real name comes from the facility profile
+  // (`GET /api/facility/me`). Leaving this null lets the header show its loading
+  // state, then the live facility name, instead of a static placeholder.
+  facility_name: null,
 };
 
 const AuthContext = createContext<AuthState | null>(null);

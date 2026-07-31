@@ -23,13 +23,20 @@ export function FacilityHeader() {
   const [notifOpen, setNotifOpen] = useState(false);
   const unread = useUnreadCount();
 
-  const { data: profile } = useQuery({
+  const { data: profile, isLoading } = useQuery({
     queryKey: ["facility", "me"],
     queryFn: () => facilityApi.me(),
     staleTime: 60_000,
   });
 
-  const facilityName = profile?.name ?? user?.facility_name ?? "Your Facility";
+  // Prefer the live facility profile name; fall back to the session's cached
+  // name. `trim()||` treats empty/whitespace names as missing. Resolved once so
+  // the loading check below doesn't re-access `profile` inside the `isLoading`
+  // chain (which would correlate the two into a `never` via react-query's union).
+  const resolvedName = profile?.name?.trim() || user?.facility_name?.trim();
+  const facilityName = resolvedName || "Facility Dashboard";
+  // Only a genuine loading state (no name resolved yet) shows the skeleton.
+  const nameLoading = isLoading && !resolvedName;
   const status = profile?.operating_status ?? "accepting";
   const tone = operatingTone(status);
 
@@ -43,7 +50,16 @@ export function FacilityHeader() {
               <BrandWordmark />
             </div>
             <div className="hidden min-w-0 md:block">
-              <p className="truncate font-display text-base font-semibold text-ink">{facilityName}</p>
+              {nameLoading ? (
+                <span className="block h-4 w-32 animate-pulse rounded bg-border" aria-hidden />
+              ) : (
+                <p
+                  className="truncate font-display text-base font-semibold text-ink"
+                  title={facilityName}
+                >
+                  {facilityName}
+                </p>
+              )}
             </div>
           </div>
 
