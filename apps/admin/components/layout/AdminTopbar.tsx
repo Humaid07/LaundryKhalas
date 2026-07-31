@@ -12,12 +12,12 @@ const FLAGS = [
 export function AdminTopbar() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-surface/95 px-4 backdrop-blur md:px-6">
-      <div className="flex items-center gap-2 rounded-full border border-warning/30 bg-warning-soft px-3 py-1.5">
+      <div className="flex items-center gap-2 rounded-full border border-warning/30 bg-warning/10 px-3 py-1.5">
         <FlaskConical size={14} className="text-warning" />
-        <span className="text-xs font-semibold uppercase tracking-wide text-warning-text">
+        <span className="text-xs font-semibold uppercase tracking-wide text-warning">
           Review Mode
         </span>
-        <span className="hidden text-xs text-warning-text/70 sm:inline">
+        <span className="hidden text-xs text-warning/70 sm:inline">
           No live WhatsApp messages are being sent.
         </span>
       </div>

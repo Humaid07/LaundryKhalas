@@ -50,7 +50,7 @@ export default function OrdersPage() {
     {
       header: "Order",
       cell: (o) => (
-        <Link href={`/admin/orders/${o.id}`} className="font-medium text-brand hover:text-brand-hover">
+        <Link href={`/admin/orders/${o.id}`} className="font-medium text-rose hover:text-rose-strong">
           {shortId(o.id)}
         </Link>
       ),
@@ -82,7 +82,7 @@ export default function OrdersPage() {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="rounded-lg border border-border-strong bg-white px-3 py-1.5 text-sm capitalize text-ink"
+          className="rounded-lg border border-border-strong bg-surface px-3 py-1.5 text-sm capitalize text-ink"
         >
           {statusOptions.map((s) => (
             <option key={s} value={s}>
@@ -94,7 +94,7 @@ export default function OrdersPage() {
         <select
           value={serviceType}
           onChange={(e) => setServiceType(e.target.value)}
-          className="rounded-lg border border-border-strong bg-white px-3 py-1.5 text-sm capitalize text-ink"
+          className="rounded-lg border border-border-strong bg-surface px-3 py-1.5 text-sm capitalize text-ink"
         >
           {serviceOptions.map((s) => (
             <option key={s} value={s}>
@@ -106,7 +106,7 @@ export default function OrdersPage() {
         <select
           value={market}
           onChange={(e) => setMarket(e.target.value)}
-          className="rounded-lg border border-border-strong bg-white px-3 py-1.5 text-sm text-ink"
+          className="rounded-lg border border-border-strong bg-surface px-3 py-1.5 text-sm text-ink"
         >
           <option value="all">All markets</option>
           {(marketsQ.data ?? []).map((m) => (
@@ -121,7 +121,7 @@ export default function OrdersPage() {
           placeholder="Search by order or customer id…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="ml-auto min-w-[220px] flex-1 rounded-lg border border-border-strong bg-white px-3 py-1.5 text-sm text-ink placeholder:text-ink-faint"
+          className="ml-auto min-w-[220px] flex-1 rounded-lg border border-border-strong bg-surface px-3 py-1.5 text-sm text-ink placeholder:text-ink-faint"
         />
       </Card>
 

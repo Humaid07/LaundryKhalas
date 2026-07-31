@@ -47,7 +47,7 @@ export default function MockWhatsAppConsolePage() {
                 <select
                   value={marketCode}
                   onChange={(e) => setMarketCode(e.target.value)}
-                  className="w-full rounded-lg border border-border-strong bg-white px-3 py-2 text-sm text-ink"
+                  className="w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-ink"
                 >
                   {MARKET_CODES.map((code) => (
                     <option key={code} value={code}>
@@ -61,7 +61,7 @@ export default function MockWhatsAppConsolePage() {
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   placeholder="+971501234567"
-                  className="w-full rounded-lg border border-border-strong bg-white px-3 py-2 text-sm text-ink"
+                  className="w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-ink"
                 />
               </Field>
             </div>
@@ -71,7 +71,7 @@ export default function MockWhatsAppConsolePage() {
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 placeholder="Jane Doe"
-                className="w-full rounded-lg border border-border-strong bg-white px-3 py-2 text-sm text-ink"
+                className="w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-ink"
               />
             </Field>
 
@@ -81,7 +81,7 @@ export default function MockWhatsAppConsolePage() {
                 onChange={(e) => setMessage(e.target.value)}
                 rows={4}
                 placeholder="I need laundry pickup tomorrow"
-                className="w-full resize-none rounded-lg border border-border-strong bg-white px-3 py-2 text-sm text-ink"
+                className="w-full resize-none rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-ink"
               />
             </Field>
 
@@ -90,7 +90,7 @@ export default function MockWhatsAppConsolePage() {
                 <button
                   key={sample}
                   onClick={() => setMessage(sample)}
-                  className="rounded-full border border-border-strong bg-white px-2.5 py-1 text-xs text-ink-muted hover:bg-neutral-soft"
+                  className="rounded-full border border-border-strong bg-surface px-2.5 py-1 text-xs text-ink-muted hover:bg-surface-2"
                 >
                   {sample}
                 </button>
@@ -98,7 +98,7 @@ export default function MockWhatsAppConsolePage() {
             </div>
 
             {matchedHint && (
-              <p className="rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning-text">
+              <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
                 {matchedHint.hint}
               </p>
             )}
@@ -135,7 +135,7 @@ export default function MockWhatsAppConsolePage() {
               <div className="space-y-3">
                 <Link
                   href={`/admin/conversations/${mutation.data.conversation_id}`}
-                  className="flex items-center justify-between rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success-text hover:bg-success-soft/70"
+                  className="flex items-center justify-between rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-sm font-medium text-success hover:bg-success/20"
                 >
                   Open conversation
                   <ArrowRight className="h-4 w-4" />

@@ -108,7 +108,7 @@ export default function ConversationsPage() {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="rounded-lg border border-border-strong bg-white px-3 py-1.5 text-sm text-ink"
+          className="rounded-lg border border-border-strong bg-surface px-3 py-1.5 text-sm text-ink"
         >
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>
@@ -120,7 +120,7 @@ export default function ConversationsPage() {
         <select
           value={market}
           onChange={(e) => setMarket(e.target.value)}
-          className="rounded-lg border border-border-strong bg-white px-3 py-1.5 text-sm text-ink"
+          className="rounded-lg border border-border-strong bg-surface px-3 py-1.5 text-sm text-ink"
         >
           <option value="all">All markets</option>
           {(marketsQ.data ?? []).map((m) => (
@@ -145,7 +145,7 @@ export default function ConversationsPage() {
           placeholder="Search by customer id or message…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="ml-auto min-w-[220px] flex-1 rounded-lg border border-border-strong bg-white px-3 py-1.5 text-sm text-ink placeholder:text-ink-faint"
+          className="ml-auto min-w-[220px] flex-1 rounded-lg border border-border-strong bg-surface px-3 py-1.5 text-sm text-ink placeholder:text-ink-faint"
         />
       </Card>
 

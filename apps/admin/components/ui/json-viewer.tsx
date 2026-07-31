@@ -28,13 +28,13 @@ export function JsonViewer({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:text-brand-hover"
+        className="inline-flex items-center gap-1 text-xs font-medium text-rose hover:text-rose-strong"
       >
         <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-90")} />
         {label}
       </button>
       {open && (
-        <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-ink px-3 py-2.5 text-xxs leading-relaxed text-neutral-soft">
+        <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-ink px-3 py-2.5 text-xxs leading-relaxed text-canvas">
           {JSON.stringify(data, null, 2)}
         </pre>
       )}

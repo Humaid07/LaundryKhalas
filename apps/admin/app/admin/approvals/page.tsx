@@ -62,7 +62,7 @@ export default function ApprovalsPage() {
             onClick={() => setTab(t)}
             className={`border-b-2 px-3 py-2 text-sm font-medium capitalize transition-colors ${
               tab === t
-                ? "border-brand text-brand"
+                ? "border-rose text-rose"
                 : "border-transparent text-ink-muted hover:text-ink"
             }`}
           >

@@ -109,7 +109,7 @@ function RecentConversations({ conversations }: { conversations: import("@/lib/t
     <Card>
       <CardHeader className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink">Recent conversations</h2>
-        <Link href="/admin/conversations" className="text-xs font-medium text-brand hover:text-brand-hover">
+        <Link href="/admin/conversations" className="text-xs font-medium text-rose hover:text-rose-strong">
           View all
         </Link>
       </CardHeader>
@@ -122,7 +122,7 @@ function RecentConversations({ conversations }: { conversations: import("@/lib/t
               <li key={c.id}>
                 <Link
                   href={`/admin/conversations/${c.id}`}
-                  className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-neutral-soft/60"
+                  className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-surface-2/60"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink">Conversation {shortId(c.id)}</p>
@@ -149,7 +149,7 @@ function RecentApprovals({ approvals }: { approvals: import("@/lib/types").Human
     <Card>
       <CardHeader className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink">Recent approvals</h2>
-        <Link href="/admin/approvals" className="text-xs font-medium text-brand hover:text-brand-hover">
+        <Link href="/admin/approvals" className="text-xs font-medium text-rose hover:text-rose-strong">
           View all
         </Link>
       </CardHeader>
@@ -181,7 +181,7 @@ function RecentOrders({ orders }: { orders: import("@/lib/types").Order[] }) {
     <Card>
       <CardHeader className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink">Recent orders</h2>
-        <Link href="/admin/orders" className="text-xs font-medium text-brand hover:text-brand-hover">
+        <Link href="/admin/orders" className="text-xs font-medium text-rose hover:text-rose-strong">
           View all
         </Link>
       </CardHeader>
@@ -194,7 +194,7 @@ function RecentOrders({ orders }: { orders: import("@/lib/types").Order[] }) {
               <li key={o.id}>
                 <Link
                   href={`/admin/orders/${o.id}`}
-                  className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-neutral-soft/60"
+                  className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-surface-2/60"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink">Order {shortId(o.id)}</p>

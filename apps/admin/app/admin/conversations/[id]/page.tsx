@@ -155,12 +155,12 @@ export default function ConversationDetailPage() {
       </div>
 
       {runAgentMutation.isError && (
-        <p className="mb-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-text">
+        <p className="mb-3 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
           {(runAgentMutation.error as Error).message}
         </p>
       )}
       {conversation.manual_takeover && (
-        <p className="mb-3 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning-text">
+        <p className="mb-3 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
           Manual takeover is active. Agent auto-run is disabled - release it to let the agent run again.
         </p>
       )}

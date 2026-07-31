@@ -71,7 +71,7 @@ function AiLogsContent() {
       />
 
       {scopeLabel && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg bg-info-soft px-3 py-2 text-xs text-info-text">
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-info/10 px-3 py-2 text-xs text-info">
           <span>Filtered to {scopeLabel}</span>
           <a href={clearScopeHref} className="ml-auto flex items-center gap-1 font-medium hover:underline">
             <X className="h-3 w-3" />
@@ -84,7 +84,7 @@ function AiLogsContent() {
         <select
           value={agent}
           onChange={(e) => setAgent(e.target.value)}
-          className="rounded-lg border border-border-strong bg-white px-3 py-1.5 text-sm text-ink"
+          className="rounded-lg border border-border-strong bg-surface px-3 py-1.5 text-sm text-ink"
         >
           {agentOptions.map((a) => (
             <option key={a} value={a}>
@@ -96,7 +96,7 @@ function AiLogsContent() {
         <select
           value={result}
           onChange={(e) => setResult(e.target.value as typeof result)}
-          className="rounded-lg border border-border-strong bg-white px-3 py-1.5 text-sm text-ink"
+          className="rounded-lg border border-border-strong bg-surface px-3 py-1.5 text-sm text-ink"
         >
           <option value="all">All results</option>
           <option value="success">Success only</option>

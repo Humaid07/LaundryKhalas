@@ -116,7 +116,7 @@ export default function OrderDetailPage() {
               {linkedConversationId ? (
                 <Link
                   href={`/admin/conversations/${linkedConversationId}`}
-                  className="text-sm font-medium text-brand hover:text-brand-hover"
+                  className="text-sm font-medium text-rose hover:text-rose-strong"
                 >
                   Conversation {shortId(linkedConversationId)}
                 </Link>
@@ -152,7 +152,7 @@ export default function OrderDetailPage() {
             <div className="border-t border-border px-5 py-2.5">
               <Link
                 href={`/admin/ai-logs?order_id=${order.id}`}
-                className="text-xs font-medium text-brand hover:text-brand-hover"
+                className="text-xs font-medium text-rose hover:text-rose-strong"
               >
                 View all in AI Logs
               </Link>

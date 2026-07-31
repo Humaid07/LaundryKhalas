@@ -4,11 +4,11 @@ import { titleCase } from "@/lib/formatters";
 type Tone = "success" | "warning" | "danger" | "info" | "neutral";
 
 const TONE_CLASSES: Record<Tone, string> = {
-  success: "bg-success-soft text-success-text",
-  warning: "bg-warning-soft text-warning-text",
-  danger: "bg-danger-soft text-danger-text",
-  info: "bg-info-soft text-info-text",
-  neutral: "bg-neutral-soft text-neutral-text",
+  success: "bg-success/10 text-success",
+  warning: "bg-warning/10 text-warning",
+  danger: "bg-danger/10 text-danger",
+  info: "bg-info/10 text-info",
+  neutral: "bg-surface-2 text-ink-muted",
 };
 
 const STATUS_TONE: Record<string, Tone> = {
