@@ -31,6 +31,13 @@ ToolExecutor = Callable[[str, dict], Awaitable[tuple[str, bool]]]
 class LLMMessage:
     role: str  # "system" | "user" | "assistant"
     content: str
+    # Prompt-cache hint for the Anthropic provider (ignored by mock/openai):
+    #   None  → no breakpoint here (dynamic content — must stay AFTER the last one)
+    #   "1h"  → stable prefix, 1-hour ephemeral cache (system prompt)
+    #   "5m"  → reusable conversation prefix, 5-minute ephemeral cache (history)
+    # Any byte change before a breakpoint invalidates it, so only mark blocks that
+    # are byte-identical across turns/customers.
+    cache: str | None = None
 
 
 @dataclass
@@ -52,9 +59,13 @@ class LLMResult:
     tokens_in: int = 0
     tokens_out: int = 0
     # Prompt-cache accounting (Anthropic only; 0 elsewhere). cache_read is
-    # billed at ~0.1x, cache_write at ~1.25x — see llm/costs.py.
+    # billed at ~0.1x, cache_write at ~1.25x (5m) / ~2x (1h) — see llm/costs.py.
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    # Split of cache-write tokens by TTL when the SDK reports it (Anthropic
+    # usage.cache_creation.ephemeral_{5m,1h}_input_tokens); 0 when unavailable.
+    cache_write_5m_tokens: int = 0
+    cache_write_1h_tokens: int = 0
     stop_reason: str | None = None
     tool_calls: list[ToolCall] = field(default_factory=list)
     # Estimated USD cost of this turn (all API round-trips summed). 0 for mock.
@@ -63,6 +74,18 @@ class LLMResult:
     request_id: str | None = None
     # Total tool rounds the loop ran (0 for a plain text reply).
     tool_rounds: int = 0
+
+    @property
+    def cache_hit(self) -> bool:
+        """True when any part of the prompt was served from cache this turn."""
+        return self.cache_read_tokens > 0
+
+    @property
+    def total_input_tokens(self) -> int:
+        """Full prompt size: uncached input + cache reads + cache writes.
+        ``tokens_in`` alone is only the uncached remainder (Anthropic reports the
+        cached buckets separately) — see llm/costs.py / shared prompt-caching."""
+        return self.tokens_in + self.cache_read_tokens + self.cache_write_tokens
 
 
 class LLMProvider(ABC):

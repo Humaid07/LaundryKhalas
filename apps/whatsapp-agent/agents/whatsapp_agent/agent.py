@@ -19,10 +19,10 @@ from agents.whatsapp_agent.actions import (
     actions_by_ids,
     resolve_intent_override,
 )
+from agents.whatsapp_agent.context_assembly import build_cached_messages
 from agents.whatsapp_agent.llm_tools import TOOL_SCHEMAS, execute_tool
 from agents.whatsapp_agent.prompts import build_system_prompt
 from llm import service as llm_service
-from llm.providers.base import LLMMessage
 from rules import escalation_rules
 from services.domain_guard import REFUSAL_MESSAGE, Domain, classify
 from services.escalation import detect_escalation
@@ -284,19 +284,21 @@ async def handle_message(
     facts, actions = _build_facts(intent=intent, history=history, text=text)
     settings = get_settings()
 
-    messages = [
-        LLMMessage(role="system", content=build_system_prompt()),
-        LLMMessage(role="system", content=" ".join(facts)),
-    ]
-    for role, content in _windowed_history(
+    # Stable system prompt is cached (1h); the per-turn `facts` are DYNAMIC and go
+    # into the final user turn AFTER the cache breakpoints (see context_assembly),
+    # so the shared prompt prefix stays byte-identical and actually caches.
+    windowed = _windowed_history(
         history,
         message_limit=settings.anthropic_history_message_limit,
         char_limit=settings.anthropic_history_character_limit,
-    ):
-        messages.append(
-            LLMMessage(role="user" if role == "customer" else "assistant", content=content)
-        )
-    messages.append(LLMMessage(role="user", content=text))
+    )
+    messages = build_cached_messages(
+        system_prompt=build_system_prompt(),
+        history=windowed,
+        dynamic_state=" ".join(facts) if facts else None,
+        user_text=text,
+        history_cache_ttl=settings.anthropic_history_cache_ttl,
+    )
 
     # When a real Claude provider is configured, run the tool-enabled turn so
     # the model can answer with GROUNDED figures (pricing/turnaround/coverage)

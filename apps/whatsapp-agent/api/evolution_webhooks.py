@@ -62,6 +62,7 @@ from services import (
     order_confirmation,
     order_store,
     post_confirmation,
+    reply_style,
     voice_fallback,
 )
 from services.auto_reply import SENDER_NOT_ALLOWED, should_auto_reply
@@ -254,6 +255,35 @@ def _final_confirmation_text(row: dict) -> str:
     return "\n".join(lines)
 
 
+def _normalize_text(convo_id: str | None, text: str | None, *, source: str) -> str:
+    """Run the deterministic no-dash style normaliser on ONE customer-facing string
+    immediately before it is sent (spec 2026-07-31). Logs safe metadata only — the
+    conversation id, how many dashes were found, which rules fired, and whether the
+    result validated clean — never the full customer message (privacy)."""
+    result = reply_style.normalize_customer_reply(text)
+    if result.changed or not result.valid:
+        logger.info(
+            "customer_reply_style_normalized",
+            conversation=convo_id,
+            source=source,
+            dash_count=result.dash_count,
+            rules_applied=result.rules_applied,
+            valid=result.valid,
+        )
+    return result.text
+
+
+def _normalize_reply(convo_id: str | None, reply) -> None:
+    """Normalise a BookingReply's customer-facing prose in place: the text body and,
+    when present, the interactive prompt body. Structured option labels (service
+    names, numbered choices) are left untouched — they are labels, not prose."""
+    if getattr(reply, "text", None):
+        reply.text = _normalize_text(convo_id, reply.text, source="booking_text")
+    interactive = getattr(reply, "interactive", None)
+    if interactive is not None and getattr(interactive, "body", None):
+        interactive.body = _normalize_text(convo_id, interactive.body, source="booking_interactive")
+
+
 async def _send_reply(channel, phone: str, reply) -> str:
     """Send a booking reply. Interactive list/buttons are attempted via Evolution
     only when EVOLUTION_USE_INTERACTIVE=true; otherwise (the default, because this
@@ -332,6 +362,9 @@ async def _deliver(channel, phone: str, convo_id: str, reply, *, turn_id: str | 
     logical turn: a reply whose idem key was already delivered is skipped, so a
     redelivered webhook / restart re-drive / retry never double-sends (spec §§
     duplicate-prevention)."""
+    # Normalise customer-facing prose (no-dash style) BEFORE the idem key is derived
+    # from the body, so dedup keys off the exact text the customer receives.
+    _normalize_reply(convo_id, reply)
     idem_key = _reply_idem_key(turn_id, reply)
     try:
         if idem_key and await messages_repo.agent_reply_key_seen(convo_id, idem_key):
@@ -354,6 +387,7 @@ async def _send_plain(convo_id: str, phone: str, text: str, *, kind: str) -> Non
         if await messages_repo.agent_reply_key_seen(convo_id, idem):
             logger.info("duplicate_outbound_prevented", conversation=convo_id, kind=kind)
             return
+        text = _normalize_text(convo_id, text, source=kind)
         await EvolutionWhatsAppChannel.from_settings().send_text(to_phone=phone, text=text)
         await messages_repo.add_message(convo_id, "agent", text, status="sent",
                                         metadata={"kind": kind, "idem_key": idem})
@@ -781,6 +815,7 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
     if will_send:
         agent_reply = await handle_message(text=text, history=history, db=None)
         out_text = (agent_reply.text or "").strip() or _AI_FALLBACK_TEXT
+        out_text = _normalize_text(convo["id"], out_text, source="auto_reply")
         try:
             await EvolutionWhatsAppChannel.from_settings().send_text(
                 to_phone=phone, text=out_text)

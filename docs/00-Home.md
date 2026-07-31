@@ -22,6 +22,21 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — WhatsApp Haiku 4.5 + no-dash replies + prompt caching (2026-07-31)
+
+The customer-facing WhatsApp agent now runs **Claude Haiku 4.5** (centralised in the
+single `ANTHROPIC_WHATSAPP_MODEL` setting; no hidden Sonnet fallback), writes
+**natural prose with no dash formatting** (stable system-prompt rules plus a
+deterministic `services/reply_style.py` normaliser that runs before every send and
+preserves identifiers/URLs/refs like `LK-AE-1024`), and uses a **mixed Anthropic
+prompt cache**: a **1-hour** cache on the stable system prompt + tool definitions and
+a **5-minute** cache on the reusable conversation history, with all dynamic backend
+state and the newest message placed after the last breakpoint (new
+`agents/whatsapp_agent/context_assembly.py`). Real `usage` cache fields are captured
+and an aggregate `metrics.build_llm_cost_report` reports hit rate + cost per
+conversation. Backend/DB stay authoritative for every state change. Build report:
+`build-reports/2026-07-31-whatsapp-haiku-nodash-promptcache.md`.
+
 ## Latest — Cloudflare R2 media storage (2026-07-30)
 
 Actual media **files** now live in **Cloudflare R2** (a private, S3-compatible

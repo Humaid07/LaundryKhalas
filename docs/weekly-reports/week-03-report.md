@@ -141,3 +141,28 @@ Separate from the agent workstream, one **admin dashboard UX fix** shipped:
   source of truth, mirrored to the URL). Gates: typecheck + lint clean; Playwright verified
   (desktop, dark, mobile — all 15 requested cases). Build report:
   `build-reports/2026-07-30-inbox-filter-popover.md`.
+
+## Update 2026-07-31 — WhatsApp: Haiku 4.5, no-dash replies, prompt caching
+
+Three related changes shipped to the customer-facing WhatsApp runtime as one update
+(mock-first; nothing new enabled live):
+
+- **Model → Claude Haiku 4.5**, centralised in the single `ANTHROPIC_WHATSAPP_MODEL`
+  setting (overrides legacy `ANTHROPIC_MODEL`/`LLM_MODEL`). No hidden Sonnet fallback —
+  the only fallback is the safe deterministic mock, and a `refusal` stop reason routes
+  there too instead of being sent. Cost: Haiku is ~3x cheaper input / ~3x cheaper output
+  than Sonnet 5.
+- **No-dash customer replies** — stable system-prompt style rules plus a deterministic
+  `services/reply_style.py` normaliser that runs before every send (converts dash bullets,
+  en/em dashes, `6 PM - 8 PM`→`6 PM to 8 PM`, `1-2 days`→`1 to 2 days`) while preserving
+  identifiers/URLs/emails/refs like `LK-AE-1024`. Logs metadata only.
+- **Mixed Anthropic prompt cache** — 1h on the stable system prompt + tool definitions,
+  5m on the reusable conversation history, dynamic state + newest message after the last
+  breakpoint (new `agents/whatsapp_agent/context_assembly.py`). Real `usage` cache fields
+  captured; `metrics.build_llm_cost_report` aggregates hit rate + cost per conversation.
+
+Backend/DB remain authoritative for every state change. New offline tests: reply style,
+model selection, prompt-cache structure, cost report (all pass) plus regression suites.
+Deferred: live Haiku verification + historical-replay run (consume live tokens) and a
+dashboard surface for the cost report. Build report:
+`build-reports/2026-07-31-whatsapp-haiku-nodash-promptcache.md`.

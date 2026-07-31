@@ -90,17 +90,21 @@ async def test_tool_loop_calls_backend_then_produces_final_reply():
 
 
 async def test_system_prompt_and_tools_are_cached():
+    # Mixed cache strategy (spec 2026-07-31): the stable system prompt + tool
+    # definitions get the 1-hour ephemeral cache, and the extended-cache beta
+    # header is sent whenever a 1h breakpoint is in play.
     script = [_Resp([_text("hi")], "end_turn", _Usage(10, 5))]
     client = _FakeClient(script)
     provider = AnthropicProvider("k", DEFAULT_MODEL, client=client)
     await provider.complete_with_tools(
-        [LLMMessage(role="system", content="BIG STABLE PROMPT"),
+        [LLMMessage(role="system", content="BIG STABLE PROMPT", cache="1h"),
          LLMMessage(role="user", content="hi")],
         tools=TOOL_SCHEMAS, executor=execute_tool,
     )
     call = client.messages.calls[0]
-    assert call["system"][0]["cache_control"] == {"type": "ephemeral"}
-    assert call["tools"][-1]["cache_control"] == {"type": "ephemeral"}
+    assert call["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+    assert call["tools"][-1]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+    assert call["extra_headers"]["anthropic-beta"] == "extended-cache-ttl-2025-04-11"
 
 
 async def test_plain_complete_captures_usage_and_cost():

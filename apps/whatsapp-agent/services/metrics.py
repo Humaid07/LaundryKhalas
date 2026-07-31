@@ -23,6 +23,58 @@ def pct(numerator, denominator) -> float:
     return round(ratio(numerator, denominator) * 100, 1)
 
 
+def build_llm_cost_report(raw: dict) -> dict:
+    """Assemble the prompt-cache + LLM-cost aggregate report from raw counts/sums
+    (gathered from the persisted per-turn usage metadata). Pure and divide-by-zero
+    safe. ``raw`` keys (all optional, default 0):
+
+      turns, conversations, input_tokens, output_tokens, cache_read_tokens,
+      cache_creation_tokens, cache_hit_turns, cost_usd, haiku_error_turns,
+      tool_validation_failures, human_intervention_conversations, style_normalized_turns
+
+    Cache hit rate uses actual Anthropic usage (a turn is a hit when it reported any
+    cache_read tokens) — never estimated from prompt length. Cost uses the real
+    per-turn estimate summed upstream from actual token buckets (see llm/costs.py)."""
+    turns = int(raw.get("turns", 0) or 0)
+    convos = int(raw.get("conversations", 0) or 0)
+    input_tokens = int(raw.get("input_tokens", 0) or 0)
+    output_tokens = int(raw.get("output_tokens", 0) or 0)
+    cache_read = int(raw.get("cache_read_tokens", 0) or 0)
+    cache_create = int(raw.get("cache_creation_tokens", 0) or 0)
+    cache_hit_turns = int(raw.get("cache_hit_turns", 0) or 0)
+    cost = float(raw.get("cost_usd", 0.0) or 0)
+
+    return {
+        "turns": turns,
+        "conversations": convos,
+        "prompt_cache": {
+            "hit_rate_pct": pct(cache_hit_turns, turns),
+            "miss_rate_pct": round(100.0 - pct(cache_hit_turns, turns), 1) if turns else 0.0,
+            "cache_read_tokens": cache_read,
+            "cache_creation_tokens": cache_create,
+        },
+        "tokens": {
+            "avg_input_tokens_per_conversation": round(ratio(input_tokens, convos), 1),
+            "avg_output_tokens_per_conversation": round(ratio(output_tokens, convos), 1),
+            "total_input_tokens": input_tokens,
+            "total_output_tokens": output_tokens,
+        },
+        "cost": {
+            "total_cost_usd": round(cost, 6),
+            "avg_cost_usd_per_conversation": round(ratio(cost, convos), 6),
+            "avg_cost_usd_per_turn": round(ratio(cost, turns), 6),
+        },
+        "reliability": {
+            "haiku_error_rate_pct": pct(raw.get("haiku_error_turns", 0), turns),
+            "tool_validation_failure_rate_pct": pct(raw.get("tool_validation_failures", 0), turns),
+            "human_intervention_rate_pct": pct(
+                raw.get("human_intervention_conversations", 0), convos),
+            "reply_style_normalization_rate_pct": pct(
+                raw.get("style_normalized_turns", 0), turns),
+        },
+    }
+
+
 def build_quality_report(raw: dict) -> dict:
     """Assemble the quality report from raw counts. ``raw`` keys (all optional,
     default 0) are the consumer/escalation counts + the by-dimension breakdowns.

@@ -40,22 +40,30 @@ def _cleanup_test_db():
 
 @pytest_asyncio.fixture(autouse=True)
 async def _reset_orders():
-    """Give every test a pristine set of demo orders (LK-AE-1024..1027).
+    """Give every test a pristine agent database: the demo orders
+    (LK-AE-1024..1027) and NO leftover transactional state.
 
-    Orders live in the shared session database, so without this a booking or
-    a cancel/change request in one test would leak into the next. Reset +
-    reseed before each test keeps the order-flow tests deterministic
-    regardless of run order.
+    ALL agent state (orders, conversations, messages, agent logs) lives in the
+    shared session database, so a reset that clears only orders lets a
+    booking/conversation from one test leak into the next (e.g. a later test
+    sees a mid-booking reply instead of a greeting), and residual demo-order
+    rows collide with the re-seed (UNIQUE constraint failed: orders.order_id
+    during autoflush). Clearing every transactional table in one committed
+    transaction before re-seeding keeps each test hermetic regardless of run
+    order or how a previous run ended. Catalogue/pricing reference tables are
+    left intact.
     """
     from sqlalchemy import delete
 
     from db import AsyncSessionLocal, init_db
-    from models import Order
+    from models import AgentLog, Conversation, Message, Order
     from services import order_store
 
     await init_db()
     async with AsyncSessionLocal() as session:
-        await session.execute(delete(Order))
+        # Children before parents (messages/orders reference conversations).
+        for model in (Message, AgentLog, Order, Conversation):
+            await session.execute(delete(model))
         await session.commit()
         await order_store.seed_demo_orders(session)
     yield

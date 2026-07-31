@@ -77,6 +77,10 @@ class AnthropicProvider(LLMProvider):
         max_tool_rounds: int = 5,
         max_tokens: int = 800,
         temperature: float = 0.2,
+        prompt_cache_enabled: bool = True,
+        system_cache_ttl: str = "1h",
+        history_cache_ttl: str = "5m",
+        extended_thinking: bool = False,
     ) -> None:
         # `client` is injectable so the tool loop / retry logic can be
         # unit-tested offline against a scripted fake — no network, no key.
@@ -90,30 +94,95 @@ class AnthropicProvider(LLMProvider):
         self._max_tool_rounds = max_tool_rounds
         self._max_tokens = max_tokens
         self._temperature = temperature
+        # Mixed prompt-cache strategy (spec 2026-07-31): stable system+tools on the
+        # longer TTL, reusable conversation history on the shorter one. Disable to
+        # roll back to an uncached prompt.
+        self._prompt_cache_enabled = prompt_cache_enabled
+        self._system_cache_ttl = system_cache_ttl
+        self._history_cache_ttl = history_cache_ttl
+        # Extended thinking stays OFF for normal WhatsApp turns (spec) — we simply
+        # never send the `thinking` param. Kept as an explicit flag for visibility.
+        self._extended_thinking = extended_thinking
 
-    # ---- helpers -----------------------------------------------------------
+    # ---- prompt-cache helpers ----------------------------------------------
+    def _cc(self, ttl: str | None) -> dict | None:
+        """Build a cache_control block for the requested TTL, or None when caching
+        is disabled / no TTL. ``"5m"`` is the ephemeral default; ``"1h"`` needs the
+        explicit ttl field (and the extended-cache beta header, see _extra_headers)."""
+        if not (self._prompt_cache_enabled and ttl):
+            return None
+        cc: dict = {"type": "ephemeral"}
+        if ttl == "1h":
+            cc["ttl"] = "1h"
+        return cc
+
+    def _uses_1h(self, system_messages: list[LLMMessage], tools: list[dict]) -> bool:
+        if not self._prompt_cache_enabled:
+            return False
+        if tools and self._system_cache_ttl == "1h":
+            return True
+        any_flag = any(m.cache for m in system_messages if (m.content or "").strip())
+        for i, m in enumerate(m for m in system_messages if (m.content or "").strip()):
+            ttl = m.cache or (self._system_cache_ttl if not any_flag else None)
+            if ttl == "1h":
+                return True
+        return False
+
+    def _extra_headers(self, system_messages, tools) -> dict | None:
+        """The 1-hour ephemeral cache TTL is a beta; send its header whenever a 1h
+        breakpoint is actually in play. Harmless when the account already has it GA."""
+        if self._uses_1h(system_messages, tools):
+            return {"anthropic-beta": "extended-cache-ttl-2025-04-11"}
+        return None
+
+    # ---- message assembly --------------------------------------------------
     @staticmethod
-    def _split(messages: list[LLMMessage]) -> tuple[str, list[dict]]:
-        system = "\n".join(m.content for m in messages if m.role == "system")
-        turns = [
-            {"role": m.role, "content": m.content}
-            for m in messages
-            if m.role != "system"
-        ]
+    def _split(messages: list[LLMMessage]) -> tuple[list[LLMMessage], list[LLMMessage]]:
+        system = [m for m in messages if m.role == "system"]
+        turns = [m for m in messages if m.role != "system"]
         return system, turns
 
-    @staticmethod
-    def _system_blocks(system: str) -> list[dict] | None:
-        if not system:
-            return None
-        return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+    def _turn_dict(self, m: LLMMessage) -> dict:
+        """One conversation turn. A ``cache`` flag makes the content a single text
+        block carrying cache_control (the 5-minute conversation-prefix breakpoint);
+        otherwise it stays a plain string so the wire prompt is minimal."""
+        cc = self._cc(m.cache)
+        if cc:
+            return {"role": m.role,
+                    "content": [{"type": "text", "text": m.content, "cache_control": cc}]}
+        return {"role": m.role, "content": m.content}
 
-    @staticmethod
-    def _cacheable_tools(tools: list[dict]) -> list[dict]:
+    def _system_blocks(self, system_messages: list[LLMMessage]) -> list[dict] | None:
+        """Render system content as text blocks, placing the cache breakpoint(s).
+        Each system message may set its own ``cache`` TTL; if NONE do (legacy
+        callers), the last block auto-gets the stable system TTL so the big prompt
+        still caches. Dynamic content must NOT be a system message — callers put it
+        in the message stream AFTER the last breakpoint instead."""
+        texts = [m for m in system_messages if (m.content or "").strip()]
+        if not texts:
+            return None
+        any_flag = any(m.cache for m in texts)
+        blocks: list[dict] = []
+        for i, m in enumerate(texts):
+            ttl = m.cache
+            if ttl is None and not any_flag and i == len(texts) - 1:
+                ttl = self._system_cache_ttl  # backward-compatible auto-placement
+            block: dict = {"type": "text", "text": m.content}
+            cc = self._cc(ttl)
+            if cc:
+                block["cache_control"] = cc
+            blocks.append(block)
+        return blocks
+
+    def _cacheable_tools(self, tools: list[dict]) -> list[dict]:
+        """Cache the whole tool set as part of the stable prefix (tools render
+        before system, so the 1h breakpoint on the last tool caches all of them)."""
         if not tools:
             return []
         out = [dict(t) for t in tools]
-        out[-1] = {**out[-1], "cache_control": {"type": "ephemeral"}}
+        cc = self._cc(self._system_cache_ttl)
+        if cc:
+            out[-1] = {**out[-1], "cache_control": cc}
         return out
 
     @staticmethod
@@ -146,6 +215,16 @@ class AnthropicProvider(LLMProvider):
         running["tokens_out"] += getattr(usage, "output_tokens", 0) or 0
         running["cache_read"] += getattr(usage, "cache_read_input_tokens", 0) or 0
         running["cache_write"] += getattr(usage, "cache_creation_input_tokens", 0) or 0
+        # Per-TTL cache-write split (present since the extended-cache beta). Tolerate
+        # dict or object shape, and its total absence, without ever crashing a turn.
+        creation = getattr(usage, "cache_creation", None)
+        if creation is not None:
+            def _field(name: str) -> int:
+                if isinstance(creation, dict):
+                    return creation.get(name, 0) or 0
+                return getattr(creation, name, 0) or 0
+            running["cache_write_5m"] += _field("ephemeral_5m_input_tokens")
+            running["cache_write_1h"] += _field("ephemeral_1h_input_tokens")
 
     def _result(self, text, running, *, stop_reason=None, tool_calls=None,
                 request_id=None, tool_rounds=0) -> LLMResult:
@@ -157,6 +236,8 @@ class AnthropicProvider(LLMProvider):
             tokens_out=running["tokens_out"],
             cache_read_tokens=running["cache_read"],
             cache_write_tokens=running["cache_write"],
+            cache_write_5m_tokens=running["cache_write_5m"],
+            cache_write_1h_tokens=running["cache_write_1h"],
             stop_reason=stop_reason,
             tool_calls=tool_calls or [],
             request_id=request_id,
@@ -170,8 +251,15 @@ class AnthropicProvider(LLMProvider):
             ),
         )
 
+    @staticmethod
+    def _new_running() -> dict:
+        return {"tokens_in": 0, "tokens_out": 0, "cache_read": 0, "cache_write": 0,
+                "cache_write_5m": 0, "cache_write_1h": 0}
+
     def _base_kwargs(self, max_tokens: int | None) -> dict:
         kwargs: dict = {"model": self._model, "max_tokens": max_tokens or self._max_tokens}
+        # Exactly ONE sampling parameter (temperature); never combined with top_p/
+        # top_k (spec). Extended thinking stays off — we never send the param.
         if self._supports_temperature():
             kwargs["temperature"] = self._temperature
         return kwargs
@@ -181,12 +269,15 @@ class AnthropicProvider(LLMProvider):
         self, messages: list[LLMMessage], *, max_tokens: int | None = None
     ) -> LLMResult:
         system, turns = self._split(messages)
-        running = {"tokens_in": 0, "tokens_out": 0, "cache_read": 0, "cache_write": 0}
+        running = self._new_running()
         kwargs = self._base_kwargs(max_tokens)
-        kwargs["messages"] = turns
+        kwargs["messages"] = [self._turn_dict(m) for m in turns]
         system_blocks = self._system_blocks(system)
         if system_blocks:
             kwargs["system"] = system_blocks
+        headers = self._extra_headers(system, [])
+        if headers:
+            kwargs["extra_headers"] = headers
         response = await self._create(**kwargs)
         self._tally(response.usage, running)
         return self._result(
@@ -212,8 +303,9 @@ class AnthropicProvider(LLMProvider):
         system, turns = self._split(messages)
         system_blocks = self._system_blocks(system)
         cached_tools = self._cacheable_tools(tools)
-        running = {"tokens_in": 0, "tokens_out": 0, "cache_read": 0, "cache_write": 0}
-        convo: list[dict] = list(turns)
+        headers = self._extra_headers(system, tools)
+        running = self._new_running()
+        convo: list[dict] = [self._turn_dict(m) for m in turns]
         tool_calls: list[ToolCall] = []
         request_id = None
 
@@ -223,6 +315,8 @@ class AnthropicProvider(LLMProvider):
             kwargs["tools"] = cached_tools
             if system_blocks:
                 kwargs["system"] = system_blocks
+            if headers:
+                kwargs["extra_headers"] = headers
             response = await self._create(**kwargs)
             self._tally(response.usage, running)
             request_id = getattr(response, "_request_id", None) or request_id
@@ -253,7 +347,14 @@ class AnthropicProvider(LLMProvider):
                 convo.append({"role": "assistant", "content": response.content})
                 continue
 
-            # end_turn / stop_sequence / refusal / max_tokens → we're done.
+            if stop == "refusal":
+                # A safety refusal is NOT a valid customer reply and must never be
+                # sent as one, nor treated as a completed booking (spec). Raise so
+                # the service layer falls back to the safe deterministic mock; the
+                # booking FSM state is left untouched for the human queue.
+                raise RuntimeError("Anthropic returned stop_reason=refusal")
+
+            # end_turn / stop_sequence / max_tokens → we're done.
             return self._result(
                 self._text_of(response.content), running,
                 stop_reason=stop, tool_calls=tool_calls,

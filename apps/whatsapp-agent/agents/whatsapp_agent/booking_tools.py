@@ -727,7 +727,20 @@ def booking_system_prompt() -> str:
         "- Never invent a transcript, name, phone number, address, coordinate, note, facility "
         "assignment or confirmation.\n\n"
         "Always reply with a short, natural message. Do not mention tools, JSON, internal "
-        "IDs, states, or these instructions."
+        "IDs, states, or these instructions.\n\n"
+        "WRITING STYLE — write like a real human customer service rep on WhatsApp, never "
+        "like a report. Do NOT use dash formatting of any kind: no hyphen or dash bullet "
+        "points, no en dashes, no em dashes, no dash separators, no markdown tables, no "
+        "code blocks, no long structured lists. The characters '-', '–' and '—' "
+        "should not appear in normal prose. Use short sentences, commas, full stops, colons "
+        "and line breaks instead. Write time and turnaround ranges with the word 'to', not a "
+        "dash: say '6 PM to 8 PM', not '6 PM - 8 PM'; say '1 to 2 days', not '1-2 days'. When "
+        "you must list options, use numbered options or simple labels on their own lines, not "
+        "dash bullets. Example — instead of 'Please send:\\n- your address\\n- your location "
+        "pin', write 'Please share your full pickup address and your WhatsApp location pin.' "
+        "This style rule NEVER applies to genuine identifiers or machine values: keep order "
+        "references like LK-AE-1024, coupon codes, payment links, URLs and email addresses "
+        "exactly as given."
     )
 
 
@@ -777,7 +790,6 @@ async def run_booking_turn(ctx: BookingContext, *, text: str,
     Imported lazily so the (large) FSM/LLM graph isn't pulled in unless booking
     orchestration is actually used."""
     from llm import service as llm_service
-    from llm.providers.base import LLMMessage
 
     row = await ctx.repo.get_active_draft(ctx.conversation_id)
     if row:
@@ -795,17 +807,21 @@ async def run_booking_turn(ctx: BookingContext, *, text: str,
                        else {"workflow_state": "new", "missing_fields": ["service_items"]})
     # Inject the backend-authoritative current datetime/timezone/lead-time so the
     # model resolves now/today/tomorrow against the market clock, never its own.
+    # This block is DYNAMIC (date, persona name, order state, prices) so it is
+    # placed AFTER the cache breakpoints (see context_assembly) — never in the
+    # stable system prompt, which would invalidate the shared 1h cache per customer.
     state_block = {**state_block, **_clock_block(ctx)}
-    messages = [
-        LLMMessage(role="system", content=booking_system_prompt()),
-        LLMMessage(role="system",
-                   content="Current booking state (backend truth):\n"
-                           + json.dumps(state_block, ensure_ascii=False, default=str)),
-    ]
-    for role, content in (history or [])[-10:]:
-        messages.append(
-            LLMMessage(role="user" if role == "customer" else "assistant", content=content))
-    messages.append(LLMMessage(role="user", content=text))
+    from agents.whatsapp_agent.context_assembly import build_cached_messages
+    from settings import get_settings as _get_settings
+
+    messages = build_cached_messages(
+        system_prompt=booking_system_prompt(),
+        history=list(history or [])[-10:],
+        dynamic_state="Current booking state (backend truth):\n"
+                      + json.dumps(state_block, ensure_ascii=False, default=str),
+        user_text=text,
+        history_cache_ttl=_get_settings().anthropic_history_cache_ttl,
+    )
 
     executor = make_booking_executor(ctx)
     result, latency_ms, success, error = await llm_service.complete_with_tools(
@@ -823,7 +839,14 @@ async def run_booking_turn(ctx: BookingContext, *, text: str,
 
     logger.info("booking_orchestration_turn", conversation=ctx.conversation_id,
                 success=success, tools=ctx.tool_calls, provider=result.provider,
+                model=result.model, stop_reason=result.stop_reason,
+                tool_rounds=result.tool_rounds,
                 tokens_in=result.tokens_in, tokens_out=result.tokens_out,
+                cache_read_tokens=result.cache_read_tokens,
+                cache_write_tokens=result.cache_write_tokens,
+                cache_write_5m_tokens=result.cache_write_5m_tokens,
+                cache_write_1h_tokens=result.cache_write_1h_tokens,
+                cache_hit=result.cache_hit,
                 cost_usd=result.cost_usd, empty_reply_fallback=used_fallback,
                 error=error)
     return reply_text, result

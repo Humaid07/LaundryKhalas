@@ -25,7 +25,17 @@ def _select_provider() -> LLMProvider:
     provider = settings.ai_provider_effective
     if provider == "anthropic":
         model = settings.anthropic_model_effective
-        cache_key = ("anthropic", model, settings.anthropic_api_key)
+        # Cache key includes every field that changes provider behaviour so a
+        # settings reload (e.g. flipping the cache off, or changing the model for
+        # rollback) rebuilds the client instead of serving a stale one.
+        cache_key = (
+            "anthropic", model, settings.anthropic_api_key,
+            settings.anthropic_prompt_cache_enabled,
+            settings.anthropic_system_cache_ttl,
+            settings.anthropic_history_cache_ttl,
+            settings.anthropic_temperature_effective,
+            settings.anthropic_extended_thinking,
+        )
         cached = _provider_cache.get(cache_key)
         if cached is None:
             from llm.providers.anthropic import AnthropicProvider
@@ -37,7 +47,11 @@ def _select_provider() -> LLMProvider:
                 max_retries=settings.anthropic_max_retries,
                 max_tool_rounds=settings.anthropic_max_tool_rounds,
                 max_tokens=settings.anthropic_max_tokens,
-                temperature=settings.anthropic_temperature,
+                temperature=settings.anthropic_temperature_effective,
+                prompt_cache_enabled=settings.anthropic_prompt_cache_enabled,
+                system_cache_ttl=settings.anthropic_system_cache_ttl,
+                history_cache_ttl=settings.anthropic_history_cache_ttl,
+                extended_thinking=settings.anthropic_extended_thinking,
             )
             _provider_cache.clear()  # only the current config needs caching
             _provider_cache[cache_key] = cached

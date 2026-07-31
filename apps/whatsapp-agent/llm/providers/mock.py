@@ -63,7 +63,17 @@ class MockProvider(LLMProvider):
     async def complete(
         self, messages: list[LLMMessage], *, max_tokens: int = 300
     ) -> LLMResult:
-        system_text = " ".join(m.content for m in messages if m.role == "system")
+        # The agent builds structured facts ("Message intent: ...", "Booking slots
+        # collected so far ...", price facts). To keep the Anthropic prompt cache
+        # prefix stable, those per-turn DYNAMIC facts are now folded into the final
+        # user turn (after the cache breakpoints) instead of a system message, so we
+        # read the system blocks PLUS the last user turn. The fact patterns are
+        # specific enough that a customer's own text never matches them.
+        fact_parts = [m.content for m in messages if m.role == "system"]
+        last_user = next((m.content for m in reversed(messages) if m.role == "user"), "")
+        if last_user:
+            fact_parts.append(last_user)
+        system_text = " ".join(fact_parts)
 
         intent_match = _INTENT_FACT.search(system_text)
         intent = intent_match.group(1) if intent_match else None

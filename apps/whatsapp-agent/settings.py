@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     # ANTHROPIC_API_KEY and is never echoed in any status/validation output.
     ai_provider: str = ""            # falls back to llm_provider when blank
     anthropic_model: str = ""        # falls back to llm_model when blank
+    # THE single spec-facing model knob for the customer-facing WhatsApp runtime
+    # (founder decision 2026-07-31: Claude Haiku 4.5 to cut cost). Highest priority
+    # in anthropic_model_effective below, so the WhatsApp agent's model is centralised
+    # in exactly ONE setting — never hardcoded at a call site. Blank → falls back to
+    # ANTHROPIC_MODEL → LLM_MODEL → default. Use an exact id, no date suffix.
+    anthropic_whatsapp_model: str = ""
     anthropic_enabled: bool = True   # master kill-switch; false → never call Claude
     anthropic_tool_use_enabled: bool = True
     anthropic_log_usage: bool = True
@@ -86,9 +92,25 @@ class Settings(BaseSettings):
     anthropic_store_raw_content: bool = False
     anthropic_max_tokens: int = 800
     anthropic_temperature: float = 0.2   # ignored for models that reject sampling params
+    # Spec-facing WhatsApp temperature (ANTHROPIC_WHATSAPP_TEMPERATURE). Blank/<0 →
+    # falls back to anthropic_temperature (see anthropic_temperature_effective).
+    anthropic_whatsapp_temperature: float = -1.0
+    # Extended thinking is DELIBERATELY OFF for normal WhatsApp turns (spec): concise
+    # customer replies don't need it and it adds latency+cost. Kept as an explicit,
+    # documented flag so the "off" decision is visible, not implicit.
+    anthropic_extended_thinking: bool = False
     anthropic_timeout_seconds: int = 30
     anthropic_max_retries: int = 3       # APPLICATION-controlled retries (SDK retries are off)
     anthropic_max_tool_rounds: int = 5
+    # --- Prompt caching (mixed 1h stable + 5m conversation, spec 2026-07-31) ---
+    # The large stable system prompt + tool definitions are identical across every
+    # customer and turn → 1h ephemeral cache. The growing conversation history is
+    # reusable only while the customer stays active → 5m ephemeral cache (refreshed
+    # on each reuse). Dynamic backend state + the newest message sit AFTER the last
+    # breakpoint so they never invalidate the shared prefix. Disable for rollback.
+    anthropic_prompt_cache_enabled: bool = True
+    anthropic_system_cache_ttl: str = "1h"    # stable system prompt + tools
+    anthropic_history_cache_ttl: str = "5m"   # reusable conversation prefix
     anthropic_history_message_limit: int = 20
     anthropic_history_character_limit: int = 20000
     # Let Claude ORCHESTRATE the conversation (natural language) via controlled
@@ -493,10 +515,25 @@ class Settings(BaseSettings):
 
     @property
     def anthropic_model_effective(self) -> str:
-        """Resolved Anthropic model id: ANTHROPIC_MODEL → LLM_MODEL → default.
-        Never empty, so the provider always has a valid id (no hardcoding at the
-        call site)."""
-        return (self.anthropic_model or self.llm_model or DEFAULT_ANTHROPIC_MODEL).strip()
+        """Resolved Anthropic model id — the ONE place the WhatsApp runtime model is
+        decided. Priority: ANTHROPIC_WHATSAPP_MODEL → ANTHROPIC_MODEL → LLM_MODEL →
+        default. Never empty, so the provider always has a valid id (no hardcoding at
+        the call site). There is NO hidden per-message model switch: every normal
+        WhatsApp turn uses exactly this id."""
+        return (
+            self.anthropic_whatsapp_model
+            or self.anthropic_model
+            or self.llm_model
+            or DEFAULT_ANTHROPIC_MODEL
+        ).strip()
+
+    @property
+    def anthropic_temperature_effective(self) -> float:
+        """Resolved sampling temperature: ANTHROPIC_WHATSAPP_TEMPERATURE when set
+        (>= 0), else ANTHROPIC_TEMPERATURE. Only ONE sampling parameter is ever sent
+        (temperature); top_p/top_k are never combined with it (spec)."""
+        wa = float(self.anthropic_whatsapp_temperature)
+        return wa if wa >= 0.0 else float(self.anthropic_temperature)
 
     @property
     def live_llm_ready(self) -> bool:
@@ -522,6 +559,13 @@ class Settings(BaseSettings):
             "model_configured": bool(self.anthropic_model_effective) if provider == "anthropic" else False,
             "model": self.anthropic_model_effective if provider == "anthropic" else None,
             "tool_use_enabled": self.anthropic_tool_use_enabled,
+            "extended_thinking": self.anthropic_extended_thinking,
+            "temperature": self.anthropic_temperature_effective if provider == "anthropic" else None,
+            "prompt_cache_enabled": self.anthropic_prompt_cache_enabled,
+            "prompt_cache_ttls": {
+                "system": self.anthropic_system_cache_ttl,
+                "history": self.anthropic_history_cache_ttl,
+            },
             "live_ready": self.live_llm_ready,
         }
 
@@ -550,10 +594,18 @@ class Settings(BaseSettings):
         for name, (value, lo, hi) in checks.items():
             if not (isinstance(value, int) and lo <= value <= hi):
                 raise ValueError(f"{name} must be an integer in [{lo}, {hi}] (got {value!r}).")
-        if not (0.0 <= float(self.anthropic_temperature) <= 1.0):
+        if not (0.0 <= float(self.anthropic_temperature_effective) <= 1.0):
             raise ValueError(
-                f"ANTHROPIC_TEMPERATURE must be in [0.0, 1.0] (got {self.anthropic_temperature!r})."
+                "ANTHROPIC_WHATSAPP_TEMPERATURE / ANTHROPIC_TEMPERATURE must resolve "
+                f"to [0.0, 1.0] (got {self.anthropic_temperature_effective!r})."
             )
+        _valid_ttls = {"5m", "1h"}
+        for name, ttl in (
+            ("ANTHROPIC_SYSTEM_CACHE_TTL", self.anthropic_system_cache_ttl),
+            ("ANTHROPIC_HISTORY_CACHE_TTL", self.anthropic_history_cache_ttl),
+        ):
+            if ttl not in _valid_ttls:
+                raise ValueError(f"{name} must be one of {sorted(_valid_ttls)} (got {ttl!r}).")
 
     @property
     def _whatsapp_required_fields(self) -> list[str]:
