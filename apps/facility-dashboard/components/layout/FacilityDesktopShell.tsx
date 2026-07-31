@@ -27,7 +27,7 @@ function SidebarLink({ item, badge }: { item: NavItem; badge?: number }) {
       title={item.label}
       className={cn(
         "lk-navrow group relative grid h-11 grid-cols-[24px_1fr_auto] items-center gap-2.5 rounded-xl px-3 text-sm font-medium transition-colors duration-200",
-        on ? cn(accent.softBg, accent.text) : cn("text-ink-muted", accent.hoverBg, "hover:text-ink"),
+        on ? "bg-surface-sunken font-semibold text-ink" : cn("text-ink-muted", accent.hoverBg, "hover:text-ink"),
       )}
     >
       {on && <span className={cn("absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full", accent.rail)} />}
