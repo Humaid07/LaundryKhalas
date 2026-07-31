@@ -237,5 +237,12 @@ export const deleteFacilityRate = (id: string, serviceCode: string) =>
     { method: "DELETE" },
   );
 
-export const getCatalogueCategories = () =>
-  req<CatalogueCategory[]>("/api/catalogue/categories");
+// The backend returns an envelope `{ categories: [...] }`, not a bare array, so
+// unwrap it — otherwise consumers that call `.forEach`/`.map` on the result crash
+// ("categories.forEach is not a function"). Tolerant of a bare-array response too.
+export const getCatalogueCategories = async (): Promise<CatalogueCategory[]> => {
+  const res = await req<CatalogueCategory[] | { categories?: CatalogueCategory[] }>(
+    "/api/catalogue/categories",
+  );
+  return Array.isArray(res) ? res : res?.categories ?? [];
+};
