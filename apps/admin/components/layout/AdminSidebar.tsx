@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "@/components/dashboard/shell/Brand";
 
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; exact?: boolean }[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -28,12 +29,10 @@ export function AdminSidebar() {
   return (
     <aside className="fixed bottom-0 left-0 top-0 z-40 hidden w-60 flex-col border-r border-border bg-surface md:flex">
       <div className="flex items-center gap-2.5 border-b border-border px-5 py-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose text-sm font-bold text-rose-contrast">
-          LK
-        </div>
+        <BrandMark className="h-8 w-8" />
         <div>
           <p className="text-sm font-semibold leading-tight text-ink">LaundryKhalas</p>
-          <p className="text-[10px] font-medium text-ink-muted">WhatsApp Agent Ops</p>
+          <p className="text-[10px] font-medium uppercase tracking-eyebrow text-ink-faint">WhatsApp Agent Ops</p>
         </div>
       </div>
 
