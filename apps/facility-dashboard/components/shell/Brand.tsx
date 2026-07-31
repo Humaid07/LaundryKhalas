@@ -1,28 +1,16 @@
 import { cn } from "@/lib/utils";
 
-/** LaundryKhalas mark — a rose droplet inside a soft-cornered tile. */
+/** LaundryKhalas logo mark — transparent PNG, reads on light or dark surfaces. */
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <span
-      className={cn(
-        "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose text-rose-contrast shadow-rose-glow",
-        className,
-      )}
-    >
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden>
-        <path
-          d="M12 3.2c2.9 3.2 5 5.9 5 8.7a5 5 0 0 1-10 0c0-2.8 2.1-5.5 5-8.7Z"
-          fill="currentColor"
-          opacity="0.95"
-        />
-        <path
-          d="M9.6 12.4c0 1.6 1 2.7 2.4 2.9"
-          stroke="rgb(var(--rose))"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
-      </svg>
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/brand/laundrykhalas-logo.png"
+      alt="LaundryKhalas"
+      width={36}
+      height={36}
+      className={cn("h-9 w-9 shrink-0 object-contain", className)}
+    />
   );
 }
 

@@ -22,6 +22,19 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — LaundryKhalas logo in both dashboards (2026-07-31)
+
+Both dashboards now show the real LaundryKhalas **icon mark** in their brand area
+(admin "Command Center" sidebar + facility "Partner Portal" sidebar/mobile header),
+replacing the placeholder rose-tile droplet. A clean transparent 512×512 PNG was
+prepared from the supplied art (white background keyed out, watermark removed,
+squared) and wired into the shared `BrandMark` of each app, so it propagates to every
+sidebar, header, and login screen — including the admin **collapsed** sidebar
+(icon-only) and facility **mobile** top nav. The dynamic facility name in the
+facility header is untouched. typecheck / lint / build green for both apps; verified
+in light + dark via Playwright. Build report:
+`build-reports/2026-07-31-dashboard-brand-logo.md`.
+
 ## Latest — WhatsApp Haiku 4.5 + no-dash replies + prompt caching (2026-07-31)
 
 The customer-facing WhatsApp agent now runs **Claude Haiku 4.5** (centralised in the
