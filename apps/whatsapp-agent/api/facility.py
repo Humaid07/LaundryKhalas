@@ -29,8 +29,12 @@ from db.repositories import (
     facility_settings_repo,
     order_events_repo,
 )
+from services import facility_bank
 from services import facility_drivers as driver_svc
 from services import facility_orders as facility_actions
+from services import rating_service
+from services.facility_bank import BankValidationError
+from schemas import BankDetailsUpsert
 
 router = APIRouter(prefix="/api/facility", tags=["facility"])
 
@@ -357,6 +361,46 @@ async def patch_settings_operations(
     return await facility_settings_repo.update_settings(_fid(principal), **(body or {}))
 
 
+# --- bank details (payout banking) -----------------------------------------
+# Scoped to the caller's own facility (facility_id from the session). Reads return
+# MASKED values only; the full IBAN/account number are exposed solely via the
+# explicit reveal action, which is limited to owner/manager and audited.
+@router.get("/bank-details")
+async def get_bank_details(principal: dict = Depends(deps.require_facility_scope)):
+    if not database.is_supabase_mode():
+        return None
+    return await facility_bank.get_masked(_fid(principal))
+
+
+@router.put("/bank-details")
+async def put_bank_details(
+    body: BankDetailsUpsert, principal: dict = Depends(deps.require_facility_scope)
+):
+    _require_supabase_write()
+    _require_manage(principal)  # owner/manager only — staff cannot edit banking
+    try:
+        return await facility_bank.upsert(
+            _fid(principal), body.model_dump(exclude_unset=True),
+            actor_id=(principal or {}).get("id"), actor_type="partner",
+            source_app="partner_portal",
+        )
+    except BankValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.post("/bank-details/reveal")
+async def reveal_bank_details(principal: dict = Depends(deps.require_facility_scope)):
+    _require_supabase_write()
+    _require_manage(principal)  # explicit reveal is owner/manager only + audited
+    revealed = await facility_bank.reveal(
+        _fid(principal), actor_id=(principal or {}).get("id"),
+        actor_type="partner", source_app="partner_portal",
+    )
+    if revealed is None:
+        raise HTTPException(status_code=404, detail="No bank details on file.")
+    return revealed
+
+
 @router.get("/settings/timings")
 async def get_settings_timings(principal: dict = Depends(deps.require_facility_scope)):
     if not database.is_supabase_mode():
@@ -635,6 +679,53 @@ async def facility_driver_assignments(
     if await facility_drivers_repo.get(fid, driver_id) is None:
         raise HTTPException(status_code=404, detail="Driver not found for this facility.")
     return {"assignments": await driver_assignments_repo.list_for_driver(fid, driver_id)}
+
+
+# --- ratings (READ-ONLY for partners) --------------------------------------
+# A partner sees only its OWN facility rating and the ratings of drivers assigned
+# to its facility. Everything is partner-shaped (no internal notes / drafts /
+# evaluator identity); partners can never create or edit ratings.
+@router.get("/rating")
+async def facility_rating(principal: dict = Depends(deps.require_facility_scope)):
+    if not database.is_supabase_mode():
+        return {"summary": {"overall_score": None, "evaluation_count": 0,
+                            "latest_evaluation_date": None, "factor_averages": [], "trend": []},
+                "latest": None}
+    return await rating_service.facility_partner_view(_fid(principal))
+
+
+@router.get("/ratings/drivers")
+async def facility_driver_ratings(principal: dict = Depends(deps.require_facility_scope)):
+    if not database.is_supabase_mode():
+        return {"drivers": []}
+    fid = _fid(principal)
+    drivers = (await driver_svc.list_with_status(fid)).get("drivers", [])
+    out = []
+    for d in drivers:
+        view = await rating_service.driver_partner_view(str(d["id"]))
+        out.append({
+            "driver_id": str(d["id"]),
+            "name": d.get("name"),
+            "role": d.get("role"),
+            "summary": view["summary"],
+            "latest": view["latest"],
+        })
+    return {"drivers": out}
+
+
+@router.get("/drivers/{driver_id}/rating")
+async def facility_driver_rating(
+    driver_id: str, principal: dict = Depends(deps.require_facility_scope)
+):
+    if not database.is_supabase_mode():
+        return {"summary": {"overall_score": None, "evaluation_count": 0,
+                            "latest_evaluation_date": None, "factor_averages": [], "trend": []},
+                "latest": None}
+    fid = _fid(principal)
+    # Ownership: the driver must belong to THIS facility, else it's not visible.
+    if await facility_drivers_repo.get(fid, driver_id) is None:
+        raise HTTPException(status_code=404, detail="Driver not found for this facility.")
+    return await rating_service.driver_partner_view(driver_id)
 
 
 @router.post("/drivers")

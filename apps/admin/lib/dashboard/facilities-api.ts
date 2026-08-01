@@ -237,6 +237,51 @@ export const deleteFacilityRate = (id: string, serviceCode: string) =>
     { method: "DELETE" },
   );
 
+// --- bank details (admin-only edit/reveal; masked by default) ---------------
+export interface BankDetailsMasked {
+  facility_id?: string | null;
+  account_holder_name?: string | null;
+  bank_name?: string | null;
+  swift_bic?: string | null;
+  branch_name?: string | null;
+  bank_country?: string | null;
+  currency?: string | null;
+  iban_masked?: string | null;
+  iban_last4?: string | null;
+  account_number_masked?: string | null;
+  account_number_last4?: string | null;
+  has_iban?: boolean;
+  has_account_number?: boolean;
+  updated_at?: string | null;
+}
+export interface BankDetailsRevealed extends BankDetailsMasked {
+  iban?: string | null;
+  account_number?: string | null;
+}
+export interface BankDetailsInput {
+  account_holder_name?: string | null;
+  bank_name?: string | null;
+  iban?: string | null;
+  account_number?: string | null;
+  swift_bic?: string | null;
+  branch_name?: string | null;
+  bank_country?: string | null;
+  currency?: string | null;
+}
+
+export const getFacilityBankDetails = (id: string) =>
+  req<BankDetailsMasked | null>(`/api/internal/facilities/${id}/bank-details`);
+
+export const updateFacilityBankDetails = (id: string, body: BankDetailsInput) =>
+  req<BankDetailsMasked>(`/api/internal/facilities/${id}/bank-details`, {
+    method: "PUT", body: JSON.stringify(body),
+  });
+
+export const revealFacilityBankDetails = (id: string) =>
+  req<BankDetailsRevealed>(`/api/internal/facilities/${id}/bank-details/reveal`, {
+    method: "POST",
+  });
+
 // The backend returns an envelope `{ categories: [...] }`, not a bare array, so
 // unwrap it — otherwise consumers that call `.forEach`/`.map` on the result crash
 // ("categories.forEach is not a function"). Tolerant of a bare-array response too.

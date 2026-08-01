@@ -15,7 +15,7 @@ import { MobilePageHeader } from "@/components/shared/MobilePageHeader";
 
 const ITEMS: { href: string; label: string; description: string; icon: LucideIcon }[] = [
   { href: "/settings/profile", label: "Facility Profile", description: "Name, area and city.", icon: Building2 },
-  { href: "/settings/operations", label: "Operations", description: "Accepting orders, capacity, quality check.", icon: SlidersHorizontal },
+  { href: "/settings/operations", label: "Operations", description: "Accepting orders, capacity and handoff.", icon: SlidersHorizontal },
   { href: "/settings/timings", label: "Timings", description: "Weekly hours and blackout dates.", icon: Clock },
   { href: "/settings/price", label: "Price List", description: "View catalogue rates and request changes.", icon: Tag },
   { href: "/settings/teams", label: "Team", description: "Members, drivers and runners.", icon: Users },

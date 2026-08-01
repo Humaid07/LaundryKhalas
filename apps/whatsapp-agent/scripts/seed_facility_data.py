@@ -65,9 +65,9 @@ async def seed() -> None:
             continue
         await database.execute(
             """insert into facility_settings
-                 (facility_id, accepting_orders, daily_capacity, quality_check_required,
+                 (facility_id, accepting_orders, daily_capacity,
                   preferred_handoff_window, is_test_data, created_by_seed, seed_source)
-               values ($1, true, $2, true, '10:00-21:00', true, true, 'facility_dashboard_seed')
+               values ($1, true, $2, '10:00-21:00', true, true, 'facility_dashboard_seed')
                on conflict (facility_id) do nothing""",
             fid, cap,
         )

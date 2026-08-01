@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Check, Loader2, MapPin, Plus } from "lucide-react";
 import { SectionCard } from "@/components/shared/SectionCard";
+import { BankDetailsSection } from "@/components/facilities/BankDetailsSection";
 import { Button } from "@/components/ui/Button";
 import { LoadingState, ErrorState, EmptyState } from "@/components/ui/states";
 import { useAuth } from "@/lib/auth-context";
@@ -137,6 +138,8 @@ export function FacilityManager() {
           <p className="mt-4 text-xxs text-ink-faint">Your role can view this facility but not edit it.</p>
         )}
       </SectionCard>
+
+      <BankDetailsSection />
     </div>
   );
 }

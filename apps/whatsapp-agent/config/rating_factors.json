@@ -1,0 +1,25 @@
+{
+  "_note": "Canonical rating factor definitions + weighting configuration (spec §6/§7/§8). The BACKEND is the source of truth for the official overall score: it recomputes overall = round(sum(score*weight)/sum(weight), 1) from these factors and ignores any client-submitted overall. Weights are non-negative; equal weights = a simple average. Change weights here (config, not code) to re-weight; existing stored evaluations keep the weighted_score captured at submission time.",
+  "scale": {"min": 1, "max": 5},
+  "rounding_dp": 1,
+  "facility_factors": [
+    {"key": "service_quality", "label": "Service quality", "weight": 1.0},
+    {"key": "order_accuracy", "label": "Order accuracy", "weight": 1.0},
+    {"key": "turnaround_time", "label": "Turnaround time", "weight": 1.0},
+    {"key": "on_time_completion", "label": "On-time completion", "weight": 1.0},
+    {"key": "communication", "label": "Communication", "weight": 1.0},
+    {"key": "packaging_handling", "label": "Packaging & handling", "weight": 1.0},
+    {"key": "complaint_rate", "label": "Complaint rate", "weight": 1.0},
+    {"key": "operational_reliability", "label": "Overall operational reliability", "weight": 1.0}
+  ],
+  "driver_factors": [
+    {"key": "pickup_punctuality", "label": "Pickup punctuality", "weight": 1.0},
+    {"key": "delivery_punctuality", "label": "Delivery punctuality", "weight": 1.0},
+    {"key": "garment_handling", "label": "Garment handling", "weight": 1.0},
+    {"key": "professionalism", "label": "Professionalism", "weight": 1.0},
+    {"key": "communication", "label": "Communication", "weight": 1.0},
+    {"key": "order_verification", "label": "Order verification", "weight": 1.0},
+    {"key": "issue_resolution", "label": "Issue resolution", "weight": 1.0},
+    {"key": "overall_reliability", "label": "Overall reliability", "weight": 1.0}
+  ]
+}

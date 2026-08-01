@@ -15,12 +15,12 @@ from db import database
 # --- operations settings (one row per facility) ----------------------------
 _SETTINGS_COLS = (
     "id, facility_id, accepting_orders, daily_capacity, service_capacity_json, "
-    "quality_check_required, preferred_handoff_window, operations_config_json, "
+    "preferred_handoff_window, operations_config_json, "
     "created_at, updated_at"
 )
 _SETTINGS_FIELDS = frozenset({
     "accepting_orders", "daily_capacity", "service_capacity_json",
-    "quality_check_required", "preferred_handoff_window", "operations_config_json",
+    "preferred_handoff_window", "operations_config_json",
 })
 _SETTINGS_JSONB = frozenset({"service_capacity_json", "operations_config_json"})
 

@@ -22,6 +22,7 @@ from api import (
     internal_facilities,
     internal_facility_issues,
     internal_metrics,
+    internal_ratings,
     orders,
     public_pricing,
     seo_agents,
@@ -132,6 +133,7 @@ app.include_router(internal_facilities.router, dependencies=_OPS)
 # Internal ops view of facility-raised issues (operations + admin).
 app.include_router(internal_facility_issues.router, dependencies=_OPS)
 app.include_router(internal_metrics.router, dependencies=_OPS)
+app.include_router(internal_ratings.router, dependencies=_OPS)
 # Operations Human-Intervention queue + takeover actions (abuse/threat).
 app.include_router(human_intervention.router, dependencies=_OPS)
 app.include_router(health.router)

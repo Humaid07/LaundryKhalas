@@ -421,6 +421,13 @@ class Settings(BaseSettings):
     jwt_secret: str = ""
     jwt_expiry_hours: int = 12
 
+    # Field-level encryption secret for sensitive facility data (bank details).
+    # Any long random string; a Fernet key is derived from it (services/
+    # field_encryption.py). MUST be set to a stable value in staging/production —
+    # rotating it makes existing encrypted values undecryptable. In dev it falls
+    # back to the JWT secret so the feature works without extra config.
+    bank_encryption_key: str = ""
+
     # Meta WhatsApp Cloud API — FUTURE provider. Placeholders; required only when
     # whatsapp_mode=meta. Never required for mock or evolution.
     meta_whatsapp_access_token: str = ""
@@ -478,6 +485,16 @@ class Settings(BaseSettings):
         if self.jwt_secret:
             return self.jwt_secret
         return "" if self.require_auth else "dev-only-insecure-jwt-secret"
+
+    @property
+    def bank_encryption_secret_effective(self) -> str:
+        """The secret used to derive the bank field-encryption key. Falls back to
+        the JWT secret in dev so bank details work without extra config; when
+        require_auth=true an explicit BANK_ENCRYPTION_KEY must be set (an empty
+        secret raises when encryption is attempted — fail-safe, never plaintext)."""
+        if self.bank_encryption_key:
+            return self.bank_encryption_key
+        return "" if self.require_auth else self.jwt_secret_effective
 
     @property
     def agent_operating_mode(self) -> str:

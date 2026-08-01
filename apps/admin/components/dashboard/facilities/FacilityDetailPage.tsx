@@ -15,6 +15,8 @@ import {
   type CatalogueCategory, type OperatingStatus, FacilitiesApiError,
 } from "@/lib/dashboard/facilities-api";
 import { FacilityFormDialog } from "./FacilityFormDialog";
+import { BankDetailsCard } from "./BankDetailsCard";
+import { FacilityRatingsSection, DriverRatingsSection } from "./RatingsSection";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const STATUSES: OperatingStatus[] = ["open", "busy", "paused", "closed"];
@@ -112,6 +114,10 @@ export function FacilityDetailPage({ facilityId }: { facilityId: string }) {
               <OperatingHoursCard facilityId={facilityId} initial={detail.timings} onSaved={load} />
 
               <RatesCard facilityId={facilityId} categories={categories} />
+
+              <FacilityRatingsSection facilityId={facilityId} />
+
+              <DriverRatingsSection facilityId={facilityId} />
             </>
           }
           sidebar={
@@ -125,6 +131,8 @@ export function FacilityDetailPage({ facilityId }: { facilityId: string }) {
                   Quality score and internal rates are internal-only and never shown to partners.
                 </p>
               </DetailSectionCard>
+
+              <BankDetailsCard facilityId={facilityId} />
 
               <DetailSectionCard title="Recent activity" icon={ScrollText}>
                 {detail.audit.length === 0 ? (

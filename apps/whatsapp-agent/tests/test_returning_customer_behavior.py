@@ -286,9 +286,10 @@ def test_booking_prompt_contract():
     # No emojis instruction.
     assert "no emojis" in low
     assert "never use emojis" in low
-    # Short replies instruction.
+    # Short replies instruction. (The prompt states the brevity rule qualitatively
+    # — "short"/"concise" — after commit 6c6a2b0 replaced the numeric "50 words".)
     assert "short repl" in low
-    assert "50 words" in low
+    assert "concise" in low
     # Returning customers must reshare the location pin (pins not stored between orders).
     assert "reshare" in low
     assert "location pin" in low

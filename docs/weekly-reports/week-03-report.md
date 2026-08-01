@@ -166,3 +166,32 @@ model selection, prompt-cache structure, cost report (all pass) plus regression 
 Deferred: live Haiku verification + historical-replay run (consume live tokens) and a
 dashboard surface for the cost report. Build report:
 `build-reports/2026-07-31-whatsapp-haiku-nodash-promptcache.md`.
+
+---
+
+## Update — Bank details, ratings, carpet/curtain, QC removal (2026-08-01)
+
+Five connected changes shipped across both dashboards and the backend, all wired to the
+real Supabase dev/test DB (migrations 000036–000038 applied + verified):
+
+- **Quality Check toggle removed** from partner Operations settings (it was inert — the UI
+  sent `quality_check_enabled` while the backend only stored `quality_check_required`, and
+  nothing read it). Column dropped; order-level QC + internal `quality_score` untouched.
+- **Carpet Cleaning + Curtain Cleaning** promoted from inside `HOME_CARE` to their own
+  top-level catalogue categories (item codes unchanged → no history breakage), so facilities
+  can accept each individually. Existing facilities do not auto-accept them.
+- **Encrypted bank details** — new `field_encryption.py` (Fernet), one row/facility with the
+  IBAN + account number stored as ciphertext only + last-4 for masked display. Partner and
+  internal APIs; reveal is role-gated (partner owner/manager; internal admin) and audited with
+  masked values only. UAE IBAN validation (mod-97 + AE/23-char).
+- **Ratings** — facility + driver evaluations with config-driven factor weights; the official
+  overall score is computed on the backend (weighted mean, 1 dp, clamped 1–5). Read-only
+  partner Ratings page (score, factor bars, trend, performance summary); internal management
+  (rate/edit/history) on the facility detail page. Internal notes never reach partners; the
+  customer agent has no access to ratings or banking (enforced + tested).
+
+Testing: 43 new backend tests + full-stack round-trips against real Supabase for both bank and
+ratings; `tsc`/`lint` clean on both apps; full backend suite green after fixing two stale
+assertions (one from the carpet/curtain restructure, one from a concurrent prompt commit).
+Deferred: bank-document upload, manual rating override, ratings-in-agent-matching (kept out by
+design). Build report: `build-reports/2026-08-01-bank-details-ratings-carpet-curtain-qc-removal.md`.

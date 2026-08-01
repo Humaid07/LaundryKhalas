@@ -23,10 +23,12 @@ from db.repositories import (
 from schemas import (
     AdminFacilityCreate,
     AdminFacilityUpdate,
+    BankDetailsUpsert,
     FacilityRateUpsert,
     FacilityStatusUpdate,
 )
-from services import facility_admin
+from services import facility_admin, facility_bank
+from services.facility_bank import BankValidationError
 
 router = APIRouter(prefix="/api/internal/facilities", tags=["internal-facilities"])
 
@@ -227,3 +229,44 @@ async def delete_rate(
         after={"deleted_service_code": service_code},
     )
     return {"deleted": True}
+
+
+# --- bank details -----------------------------------------------------------
+# View (masked) is available to operations; creating/updating and the explicit
+# full-value reveal are ADMIN-ONLY (banking is as sensitive as internal rates).
+@router.get("/{facility_id}/bank-details")
+async def get_bank_details(facility_id: str, principal: dict = Depends(deps.require_ops)):
+    _require_supabase()
+    return await facility_bank.get_masked(facility_id)
+
+
+@router.put("/{facility_id}/bank-details")
+async def put_bank_details(
+    facility_id: str, body: BankDetailsUpsert,
+    principal: dict = Depends(deps.require_admin),
+):
+    _require_supabase()
+    if await facilities_repo.get_admin(facility_id) is None:
+        raise HTTPException(status_code=404, detail="Facility not found.")
+    try:
+        return await facility_bank.upsert(
+            facility_id, body.model_dump(exclude_unset=True),
+            actor_id=_actor(principal), actor_type="internal",
+            source_app="admin_dashboard",
+        )
+    except BankValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.post("/{facility_id}/bank-details/reveal")
+async def reveal_bank_details(
+    facility_id: str, principal: dict = Depends(deps.require_admin)
+):
+    _require_supabase()
+    revealed = await facility_bank.reveal(
+        facility_id, actor_id=_actor(principal), actor_type="internal",
+        source_app="admin_dashboard",
+    )
+    if revealed is None:
+        raise HTTPException(status_code=404, detail="No bank details on file.")
+    return revealed

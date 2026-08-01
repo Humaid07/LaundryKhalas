@@ -259,3 +259,49 @@ class FacilityRateUpsert(BaseModel):
     service_code: str
     rate: float
     currency: str = "AED"
+
+
+class FactorScoreIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    factor_key: str
+    score: float
+
+
+class EvaluationCreate(BaseModel):
+    """Internal create of a facility/driver evaluation. The overall score is NOT
+    accepted from the client — services/ratings recomputes it from the factors."""
+    model_config = ConfigDict(extra="forbid")
+    factors: list[FactorScoreIn]
+    evaluation_date: str | None = None
+    evaluation_period_start: str | None = None
+    evaluation_period_end: str | None = None
+    partner_visible_summary: str | None = None
+    internal_notes: str | None = None
+    status: str | None = None  # draft | published | archived (default published)
+
+
+class EvaluationUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    factors: list[FactorScoreIn] | None = None
+    evaluation_date: str | None = None
+    evaluation_period_start: str | None = None
+    evaluation_period_end: str | None = None
+    partner_visible_summary: str | None = None
+    internal_notes: str | None = None
+    status: str | None = None
+
+
+class BankDetailsUpsert(BaseModel):
+    """Create/update facility bank details. All fields optional at the schema
+    level; services/facility_bank enforces the real mandatory rules (holder name
+    + a valid IBAN) and does the encryption/masking. ``iban`` / ``account_number``
+    are plaintext IN ONLY — they are never echoed back (reads return masked)."""
+    model_config = ConfigDict(extra="forbid")
+    account_holder_name: str | None = None
+    bank_name: str | None = None
+    iban: str | None = None
+    account_number: str | None = None
+    swift_bic: str | None = None
+    branch_name: str | None = None
+    bank_country: str | None = None
+    currency: str | None = None

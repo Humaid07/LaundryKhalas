@@ -12,7 +12,6 @@ import { LoadingState, ErrorState } from "@/components/ui/states";
 
 interface OpsSettings {
   accepting_orders?: boolean;
-  quality_check_enabled?: boolean;
   daily_capacity?: number | null;
   handoff_window?: string | null;
   [key: string]: unknown;
@@ -52,27 +51,15 @@ export default function OperationsSettingsPage() {
       ) : (
         <>
           <SectionCard>
-            <div className="divide-y divide-border/60">
-              <div className="flex items-center justify-between gap-4 py-3.5 first:pt-0">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink">Accepting orders</p>
-                  <p className="text-xs text-ink-muted">Turn off to pause new pickups to your facility.</p>
-                </div>
-                <Switch
-                  checked={!!form.accepting_orders}
-                  onChange={(on) => setForm((f) => ({ ...f, accepting_orders: on }))}
-                />
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">Accepting orders</p>
+                <p className="text-xs text-ink-muted">Turn off to pause new pickups to your facility.</p>
               </div>
-              <div className="flex items-center justify-between gap-4 py-3.5">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink">Quality check step</p>
-                  <p className="text-xs text-ink-muted">Require a QC stage before orders are marked ready.</p>
-                </div>
-                <Switch
-                  checked={!!form.quality_check_enabled}
-                  onChange={(on) => setForm((f) => ({ ...f, quality_check_enabled: on }))}
-                />
-              </div>
+              <Switch
+                checked={!!form.accepting_orders}
+                onChange={(on) => setForm((f) => ({ ...f, accepting_orders: on }))}
+              />
             </div>
           </SectionCard>
 

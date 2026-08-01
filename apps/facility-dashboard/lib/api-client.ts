@@ -640,6 +640,73 @@ export interface RaiseIssuePayload {
   related_order_id?: string;
 }
 
+// --- bank details ---
+export interface BankDetailsMasked {
+  facility_id?: string | null;
+  account_holder_name?: string | null;
+  bank_name?: string | null;
+  swift_bic?: string | null;
+  branch_name?: string | null;
+  bank_country?: string | null;
+  currency?: string | null;
+  iban_masked?: string | null;
+  iban_last4?: string | null;
+  account_number_masked?: string | null;
+  account_number_last4?: string | null;
+  has_iban?: boolean;
+  has_account_number?: boolean;
+  updated_at?: string | null;
+  created_at?: string | null;
+}
+export interface BankDetailsRevealed extends BankDetailsMasked {
+  iban?: string | null;
+  account_number?: string | null;
+}
+export interface BankDetailsInput {
+  account_holder_name?: string | null;
+  bank_name?: string | null;
+  iban?: string | null;
+  account_number?: string | null;
+  swift_bic?: string | null;
+  branch_name?: string | null;
+  bank_country?: string | null;
+  currency?: string | null;
+}
+
+// --- ratings ---
+export interface RatingFactorAverage {
+  factor_key: string;
+  factor_label: string;
+  average: number;
+  count: number;
+}
+export interface RatingTrendPoint { date?: string | null; overall_score: number }
+export interface RatingSummary {
+  overall_score: number | null;
+  evaluation_count: number;
+  latest_evaluation_date: string | null;
+  factor_averages: RatingFactorAverage[];
+  trend: RatingTrendPoint[];
+}
+export interface PartnerEvaluation {
+  id: string;
+  overall_score: number | null;
+  partner_visible_summary?: string | null;
+  evaluation_date?: string | null;
+  factors: { factor_key: string; factor_label: string; score: number }[];
+}
+export interface RatingView {
+  summary: RatingSummary;
+  latest: PartnerEvaluation | null;
+}
+export interface DriverRatingRow {
+  driver_id: string;
+  name?: string | null;
+  role?: string | null;
+  summary: RatingSummary;
+  latest: PartnerEvaluation | null;
+}
+
 export const facilityApi = {
   baseUrl: BASE_URL,
 
@@ -803,6 +870,24 @@ export const facilityApi = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+
+  // --- bank details (masked by default; reveal is owner/manager + audited) ---
+  getBankDetails: () =>
+    request<BankDetailsMasked | null>("/api/facility/bank-details"),
+  updateBankDetails: (patch: BankDetailsInput) =>
+    request<BankDetailsMasked>("/api/facility/bank-details", {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }),
+  revealBankDetails: () =>
+    request<BankDetailsRevealed>("/api/facility/bank-details/reveal", { method: "POST" }),
+
+  // --- ratings (read-only for partners) ---
+  getFacilityRating: () => request<RatingView>("/api/facility/rating"),
+  getDriverRatings: () =>
+    request<{ drivers: DriverRatingRow[] }>("/api/facility/ratings/drivers"),
+  getDriverRating: (id: string) =>
+    request<RatingView>(`/api/facility/drivers/${encodeURIComponent(id)}/rating`),
   // Backend: { timings:[{day_of_week,opens_at,closes_at,is_closed,...}] }.
   getTimings: async (): Promise<FacilityTiming[]> => {
     const res = await request<{ timings?: Array<AnyRec> } | Array<AnyRec>>(

@@ -1,0 +1,22 @@
+-- =====================================================================
+-- LaundryKhalas — Remove the facility "Quality Check" operations toggle
+-- Migration: 20260801_000036_remove_quality_check_required
+--
+-- Target: the SEPARATE dev/test Supabase project ONLY (NOT production).
+--
+-- The partner-facing Settings → Operations "Quality check step" toggle is being
+-- removed. It was non-functional: the Partner Portal sent `quality_check_enabled`
+-- while the backend only accepted/persisted `quality_check_required`, so the
+-- value never round-tripped. No service reads `facility_settings.quality_check_required`
+-- (the order-level QC workflow — order_events 'quality_check', facility_orders
+-- move_to_qc — and the internal facility `quality_score` rating are SEPARATE
+-- systems and are intentionally left untouched).
+--
+-- Additive/idempotent in spirit: drops one unused column if present.
+--
+-- Rollback:
+--   alter table facility_settings
+--     add column if not exists quality_check_required boolean not null default true;
+-- =====================================================================
+
+alter table facility_settings drop column if exists quality_check_required;

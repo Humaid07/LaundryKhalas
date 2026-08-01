@@ -1,4 +1,4 @@
-import { Home, ClipboardList, Truck, Wallet, Settings, Building2, type LucideIcon } from "lucide-react";
+import { Home, ClipboardList, Truck, Wallet, Settings, Building2, Star, type LucideIcon } from "lucide-react";
 
 export type NavItem = {
   href: string;
@@ -15,6 +15,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/facilities", label: "Facilities", icon: Building2, match: ["/facilities"] },
   { href: "/orders", label: "Orders", icon: ClipboardList, match: ["/orders"] },
   { href: "/drivers", label: "Drivers", icon: Truck, match: ["/drivers"] },
+  { href: "/ratings", label: "Ratings", icon: Star, match: ["/ratings"] },
   { href: "/finance", label: "Finance", icon: Wallet, match: ["/finance"] },
   { href: "/settings", label: "Settings", icon: Settings, match: ["/settings"] },
 ];

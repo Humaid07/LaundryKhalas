@@ -22,6 +22,17 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — Bank details, ratings, carpet/curtain, QC removal (2026-08-01)
+
+Five connected changes across both dashboards + backend: the partner **Quality Check**
+toggle was removed; **Carpet Cleaning** and **Curtain Cleaning** became real top-level,
+facility-selectable accepted services; **encrypted bank details** (Fernet, masked, role-gated
+reveal, audited) were added for partners and internal admins; and a **Ratings** system was
+built — facility + driver evaluations with backend-authoritative factor scoring, a read-only
+partner Ratings page, and internal management on the facility detail page. All connected to the
+real Supabase dev/test DB (migrations 000036–000038 applied + verified). See the
+[[2026-08-01-bank-details-ratings-carpet-curtain-qc-removal|build report]].
+
 ## Latest — LaundryKhalas logo in both dashboards (2026-07-31)
 
 Both dashboards now show the real LaundryKhalas **icon mark** in their brand area
