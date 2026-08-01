@@ -31,9 +31,31 @@ def test_persona_separate_from_human_staff_in_prompt():
     assert "human" in bp.lower()
 
 
-def test_never_reveal_ai():
-    assert "never reveal or imply" in booking_system_prompt().lower()
-    assert "i am an ai" in booking_system_prompt().lower()
+def test_presents_as_customer_service_rep_not_virtual_assistant():
+    bp = booking_system_prompt()
+    low = bp.lower()
+    # New contract: present as a customer service representative, never a virtual assistant.
+    # The agent must not IDENTIFY as a virtual assistant (the old positive self-description
+    # is gone); the phrase now survives only inside the negative disclosure rule
+    # ("do not describe yourself as a virtual assistant ...").
+    assert "whatsapp virtual assistant" not in low
+    assert "a laundry khalaas customer service representative" in low
+    assert "do not describe yourself as a virtual assistant" in low
+    assert "customer service representative" in low
+    # Human-disclosure rule: don't claim to be human, don't fabricate an identity.
+    assert "do not claim to be human" in low
+    # Process step wording (never claim the absolute nearest facility).
+    assert "one of the nearest suitable facilities" in low
+
+
+def test_no_emojis_and_no_service_list_on_greeting():
+    bp = booking_system_prompt()
+    low = bp.lower()
+    # No emojis in customer-facing replies.
+    assert "no emojis" in low
+    assert "never use emojis" in low
+    # Do not list services on a normal greeting.
+    assert "do not list the services" in low
 
 
 def test_arabic_language_instruction_present():

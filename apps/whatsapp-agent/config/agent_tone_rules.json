@@ -3,7 +3,7 @@
   "must_be": ["short", "clear", "friendly", "professional", "WhatsApp-friendly"],
   "avoid": ["overly formal language", "sounding salesy", "long paragraphs", "excessive emojis"],
   "max_sentences": 3,
-  "emoji_policy": "Use emojis sparingly — at most one, and not in every message.",
+  "emoji_policy": "Do not use emojis in customer-facing replies.",
   "guidelines": [
     "Keep replies to 1-3 short sentences.",
     "Ask for only one missing detail at a time.",

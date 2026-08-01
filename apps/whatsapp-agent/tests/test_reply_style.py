@@ -111,3 +111,67 @@ def test_empty_input_is_safe():
         out = normalize(src)
         assert out.text == (src or "")
         assert not out.changed
+
+
+# --- emoji removal (spec 2026-08-01) ---------------------------------------
+_SMILE = "\U0001F60A"   # 😊
+_CHECK = "✅"       # ✅
+_PIN = "\U0001F4CD"     # 📍
+_PARTY = "\U0001F389"   # 🎉
+_THUMB = "\U0001F44D"   # 👍
+_WARN = "⚠"        # ⚠
+_BASKET = "\U0001F9FA"  # 🧺
+_ALL_EMOJI = (_SMILE, _CHECK, _PIN, _PARTY, _THUMB, _WARN, _BASKET)
+
+
+def test_emoji_removed_from_greeting():
+    out = normalize(f"Hi Zoya, how can I help you today? {_SMILE}")
+    assert out.text == "Hi Zoya, how can I help you today?"
+    assert out.emoji_count == 1
+    assert "emoji" in out.rules_applied
+    assert not any(e in out.text for e in _ALL_EMOJI)
+
+
+def test_emoji_removal_preserves_order_id_and_payment_link():
+    url = "https://pay.stripe.com/checkout/LK-AE-1024"
+    out = normalize(f"{_CHECK} Your order LK-AE-1024 is ready. Pay here: {url}")
+    assert "LK-AE-1024" in out.text
+    assert url in out.text
+    assert _CHECK not in out.text
+    assert out.emoji_count == 1
+
+
+def test_emoji_removal_preserves_price_phone_email():
+    out = normalize(f"Total is AED 120 {_PIN}. Call +971 50 123 4567 or email me@x.com {_PARTY}")
+    assert "AED 120" in out.text
+    assert "+971 50 123 4567" in out.text
+    assert "me@x.com" in out.text
+    assert out.emoji_count == 2
+    assert not any(e in out.text for e in _ALL_EMOJI)
+
+
+def test_multiple_and_decorative_emoji_removed():
+    out = normalize(f"Great choice! {_PARTY}{_BASKET}{_THUMB} {_WARN}")
+    assert out.text == "Great choice!"
+    assert out.emoji_count == 4
+
+
+def test_no_emoji_input_reports_zero():
+    out = normalize("Your total is AED 90. Shall I confirm?")
+    assert out.emoji_count == 0
+    assert "emoji" not in out.rules_applied
+
+
+def test_emoji_and_dash_together():
+    out = normalize(f"Pickup 6 PM - 8 PM {_CHECK}, takes 1-2 days {_SMILE}.")
+    assert "6 PM to 8 PM" in out.text
+    assert "1 to 2 days" in out.text
+    assert out.emoji_count == 2
+    assert "emoji" in out.rules_applied
+    assert _CHECK not in out.text and _SMILE not in out.text
+
+
+def test_representative_replies_are_emoji_free():
+    for reply in REPLIES:
+        out = normalize(reply)
+        assert out.emoji_count == 0

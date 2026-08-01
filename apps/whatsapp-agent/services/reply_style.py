@@ -68,8 +68,43 @@ class NormalizationResult:
     text: str
     changed: bool
     dash_count: int          # dashes detected in the ORIGINAL customer prose
+    emoji_count: int = 0     # emoji / pictographic codepoints removed
     rules_applied: list[str] = field(default_factory=list)
     valid: bool = True       # True when no offending dash formatting remains
+
+
+# --- emoji / pictographic-symbol removal (customer prose only) ---------------
+# Covers the standard emoji planes plus the common emoji-adjacent BMP symbol
+# blocks (misc symbols, dingbats incl. check marks, stars, clocks, warning),
+# plus the zero-width joiner, variation selectors and keycap combiner that glue
+# multi-codepoint emoji together. Latin/accented letters, currency symbols,
+# ASCII punctuation and identifiers all live OUTSIDE these ranges, so order ids,
+# URLs, emails, prices, phone numbers, names and payment links are never touched.
+_EMOJI = re.compile(
+    "["
+    "\U0001F000-\U0001FAFF"   # emoticons, pictographs, transport, supplemental, flags, skin tones
+    "\U00002600-\U000027BF"   # misc symbols + dingbats (checks ✅ ✔, warning ⚠, ✂ ✈ ✉ ✨ ❌ ❤)
+    "\U00002B00-\U00002BFF"   # stars / block arrows (⭐ ⬛)
+    "\U00002300-\U000023FF"   # clocks / hourglass / media (⌚ ⌛ ⏰ ⏳ ▶)
+    "\U0000FE00-\U0000FE0F"   # variation selectors (emoji-presentation glue)
+    "\U00002049\U0000203C\U00002139\U000020E3\U0000200D"  # ⁉ ‼ ℹ keycap ZWJ
+    "]"
+)
+
+
+def strip_emojis(text: str) -> tuple[str, int]:
+    """Remove emoji / decorative pictographs from customer prose, tidying the
+    whitespace they leave behind. Returns ``(clean_text, codepoints_removed)``.
+    Deterministic; never touches ASCII/alphanumeric content (order ids, URLs,
+    prices, phone numbers, names, payment links, structured data)."""
+    stripped = _EMOJI.sub("", text)
+    removed = len(text) - len(stripped)
+    if not removed:
+        return text, 0
+    stripped = re.sub(r"[ \t]{2,}", " ", stripped)            # collapse gaps left behind
+    stripped = re.sub(r" +([.,!?;:])", r"\1", stripped)       # kill space before punctuation
+    stripped = re.sub(r"(?m)[ \t]+$", "", stripped)           # trailing spaces per line
+    return stripped.strip(), removed
 
 
 def _mask(text: str) -> tuple[str, list[str]]:
@@ -106,13 +141,18 @@ def normalize_customer_reply(text: str | None) -> NormalizationResult:
     if not text or not str(text).strip():
         return NormalizationResult(text=text or "", changed=False, dash_count=0)
 
-    original = str(text)
+    raw = str(text)
+    # 1) remove emojis / decorative pictographs first — disjoint from identifiers,
+    #    so order ids, URLs, emails, prices, phone numbers, names and payment links
+    #    are never touched.
+    no_emoji, emoji_count = strip_emojis(raw)
+    original = no_emoji
     masked, spans = _mask(original)
     # Count dashes only in the PROSE (masked text), so an identifier's own hyphens
     # are not counted as style violations.
     dash_count = sum(masked.count(c) for c in ("-", "–", "—"))
 
-    rules: list[str] = []
+    rules: list[str] = ["emoji"] if emoji_count else []
     work = masked
 
     new = _BULLET.sub("", work)
@@ -154,8 +194,9 @@ def normalize_customer_reply(text: str | None) -> NormalizationResult:
     final = _unmask(work, spans)
     return NormalizationResult(
         text=final,
-        changed=final != original,
+        changed=final != raw,
         dash_count=dash_count,
+        emoji_count=emoji_count,
         rules_applied=rules,
         valid=valid,
     )

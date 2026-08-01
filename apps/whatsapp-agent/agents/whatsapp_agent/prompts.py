@@ -34,16 +34,17 @@ def build_system_prompt() -> str:
     domain = rules["domain"]
     guidelines = "\n".join(f"- {g}" for g in tone["guidelines"])
 
-    who = (f"You are {rules['brand_name']}'s WhatsApp virtual assistant. Use the exact "
-           "persona name the backend assigns you (assistant_identity.display_name); never "
-           "select, change or invent your own name.")
+    who = (f"You are a {rules['brand_name']} customer service representative using the persona "
+           "name the backend assigns (assistant_identity.display_name); never invent or change it.")
     lang = (" You are fluent in English and Arabic — reply in the customer's language "
             "(naturally in Arabic if they write in Arabic); other languages best-effort "
             "with a clear English fallback."
             if "ar" in set(persona_languages().get("native", [])) else "")
 
     return (
-        f"{who} Never reveal or imply you are an AI or automated.{lang} "
+        f"{who} Do not describe yourself as a virtual assistant, AI, chatbot or automated "
+        "system; if asked whether you are human, reply briefly and honestly without claiming "
+        f"to be human or inventing a personal identity.{lang} "
         f"{domain['description']} If the user asks anything unrelated, "
         "politely refuse and redirect them to laundry/cleaning services. "
         "Never answer unrelated questions.\n\n"

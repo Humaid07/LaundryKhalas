@@ -228,11 +228,11 @@ def _booking_from_row(row: dict, *, profile_name: str | None = None,
 def _final_confirmation_text(row: dict) -> str:
     d = row.get("pickup_date")
     date_str = d.strftime("%A, %d %B") if isinstance(d, _dt.date) else "—"
-    lines = [
-        "✅ Booking confirmed! Thank you.",
-        f"Order {row.get('order_id')}",
-        f"Service: {row.get('service_display_name') or row.get('service') or '—'}",
-    ]
+    name = row.get("customer_name")
+    lines = ["Booking confirmed. Thank you.", f"Order {row.get('order_id')}"]
+    if name:
+        lines.append(f"Name: {name}")
+    lines.append(f"Service: {row.get('service_display_name') or row.get('service') or '—'}")
     total = row.get("estimated_total")
     if total is not None:
         # FINAL customer price — already VAT-inclusive, no 5% added, and net of
@@ -245,10 +245,12 @@ def _final_confirmation_text(row: dict) -> str:
             lines.append(f"Automatic {pct_str}% discount: AED {money.format_money(discount_amount)} off")
         label = "Estimated price" if row.get("pricing_is_estimated") else "Price"
         lines.append(f"{label}: AED {money.format_money(total)}")
+    pin_present = row.get("pickup_latitude") is not None and row.get("pickup_longitude") is not None
     lines += [
         f"Pickup date: {date_str}",
         f"Pickup time: {row.get('pickup_slot') or '—'}",
         f"Address: {row.get('pickup_address') or '—'}",
+        f"Location pin: {'Received' if pin_present else 'Not received'}",
         f"Instructions: {row.get('pickup_instruction_text') or 'No additional instructions'}",
         "Our team will reach out shortly to finalise the details.",
     ]
@@ -269,6 +271,15 @@ def _normalize_text(convo_id: str | None, text: str | None, *, source: str) -> s
             dash_count=result.dash_count,
             rules_applied=result.rules_applied,
             valid=result.valid,
+        )
+    if result.emoji_count:
+        # Emojis are forbidden in customer-facing replies (spec 2026-08-01). Log a
+        # safe event (count only, never the message) when the validator removes any.
+        logger.info(
+            "customer_reply_emoji_removed",
+            conversation=convo_id,
+            source=source,
+            emoji_count=result.emoji_count,
         )
     return result.text
 
@@ -339,7 +350,7 @@ async def _send_reply(channel, phone: str, reply) -> str:
 
 # Brief, deterministic gratitude reply after a confirmed order — no booking
 # content, no order summary, no upsell (spec: post-confirmation THANK_YOU_RESPONSE).
-_THANK_YOU_TEXT = "You're welcome! 😊"
+_THANK_YOU_TEXT = "You're welcome."
 
 
 def _reply_idem_key(turn_id: str | None, reply) -> str | None:
