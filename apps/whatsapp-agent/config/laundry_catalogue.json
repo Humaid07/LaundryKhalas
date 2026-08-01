@@ -203,14 +203,13 @@
         },
         {
           "code": "HOME_CARE_SOFA_CURTAINS",
-          "name": "Sofa, Cushions & Curtains",
+          "name": "Sofa & Cushions",
           "sort_order": 2,
           "items": [
             {"code": "HOME_CARE_SOFA_COVER_REGULAR", "name": "Sofa Cover — Regular", "current_price": 46, "aliases": ["sofa cover", "sofa cover regular"]},
             {"code": "HOME_CARE_SOFA_COVER_LARGE", "name": "Sofa Cover — Large", "current_price": 56, "aliases": ["large sofa cover", "sofa cover large"]},
             {"code": "HOME_CARE_CUSHION_COVER_SMALL", "name": "Cushion Cover — Small", "current_price": 13, "aliases": ["cushion cover small", "small cushion cover"]},
-            {"code": "HOME_CARE_CUSHION_COVER_MEDIUM", "name": "Cushion Cover — Medium", "current_price": 15, "aliases": ["cushion cover medium", "medium cushion cover", "cushion cover"]},
-            {"code": "HOME_CARE_CURTAIN_SQM", "name": "Curtain", "pricing_type": "PER_SQM", "pricing_unit": "SQM", "current_price": 20, "regular_price": 25, "requires_measurement": true, "aliases": ["curtain", "curtains"]}
+            {"code": "HOME_CARE_CUSHION_COVER_MEDIUM", "name": "Cushion Cover — Medium", "current_price": 15, "aliases": ["cushion cover medium", "medium cushion cover", "cushion cover"]}
           ]
         },
         {
@@ -232,15 +231,6 @@
             {"code": "HOME_CARE_BATHROBE", "name": "Bathrobe", "current_price": 18, "aliases": ["bathrobe", "bath robe"]},
             {"code": "HOME_CARE_TOWEL", "name": "Towel", "current_price": 8, "aliases": ["towel"]},
             {"code": "HOME_CARE_FLOOR_MAT", "name": "Floor Mat", "current_price": 10, "aliases": ["floor mat"]}
-          ]
-        },
-        {
-          "code": "HOME_CARE_CARPET_RUG",
-          "name": "Carpet & Rug Care",
-          "sort_order": 5,
-          "items": [
-            {"code": "HOME_CARE_CARPET_REGULAR_SQM", "name": "Carpet — Regular", "pricing_type": "PER_SQM", "pricing_unit": "SQM", "current_price": 20, "regular_price": 36, "requires_measurement": true, "aliases": ["carpet", "regular carpet", "carpet regular", "rug"]},
-            {"code": "HOME_CARE_CARPET_WOOL_SQM", "name": "Carpet — Wool", "pricing_type": "PER_SQM", "pricing_unit": "SQM", "current_price": 20, "regular_price": 36, "requires_measurement": true, "aliases": ["wool carpet", "carpet wool"]}
           ]
         }
       ]
@@ -372,14 +362,53 @@
       "sort_order": 9,
       "default_pricing_type": "STARTING_FROM",
       "default_pricing_unit": "ITEM",
-      "aliases": ["alteration", "alterations", "alter", "tailoring", "tailor", "hemming", "resize", "resizing", "stitching", "shortening", "shorten", "fix my"],
+      "aliases": ["alteration", "alterations", "alter", "tailoring", "tailor", "hemming", "resize", "resizing", "stitching", "shortening", "shorten"],
       "services": [
         {
           "code": "ALTERATIONS_ALL",
           "name": "Alterations",
           "sort_order": 1,
           "items": [
-            {"code": "ALTERATIONS_GENERAL", "name": "Alterations", "is_starting_price": true, "requires_inspection": true, "current_price": 30, "description": "Hemming, resizing, strap & buckle adjustments, elastic replacement", "aliases": ["alteration", "alterations", "hemming", "hem", "shortening", "shorten", "resize", "resizing", "strap adjustment", "buckle adjustment", "elastic replacement", "tailor", "tailoring"]}
+            {"code": "ALTERATIONS_GENERAL", "name": "Alterations", "is_starting_price": true, "requires_inspection": false, "current_price": 30, "description": "Hemming, shortening, lengthening, taking in or letting out the waist, tightening, loosening, fitting, strap & buckle adjustments, elastic replacement, zip and button replacement, simple seam or tear repairs", "aliases": ["alteration", "alterations", "hemming", "hem", "shortening", "shorten", "lengthen", "lengthening", "resize", "resizing", "waist adjustment", "take in", "let out", "tighten", "tightening", "loosen", "loosening", "fitting", "strap adjustment", "buckle adjustment", "elastic replacement", "zip replacement", "button replacement", "seam repair", "tailor", "tailoring"]}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "CARPET_CLEANING",
+      "name": "Carpet Cleaning",
+      "description": "Deep cleaning for carpets and rugs, priced per square metre after measurement",
+      "sort_order": 10,
+      "default_pricing_type": "PER_SQM",
+      "default_pricing_unit": "SQM",
+      "aliases": ["carpet", "carpets", "carpet cleaning", "rug", "rugs", "rug cleaning", "carpet & rug", "carpet and rug"],
+      "services": [
+        {
+          "code": "HOME_CARE_CARPET_RUG",
+          "name": "Carpet & Rug Care",
+          "sort_order": 1,
+          "items": [
+            {"code": "HOME_CARE_CARPET_REGULAR_SQM", "name": "Carpet — Regular", "pricing_type": "PER_SQM", "pricing_unit": "SQM", "current_price": 20, "regular_price": 36, "requires_measurement": true, "aliases": ["carpet", "regular carpet", "carpet regular", "rug"]},
+            {"code": "HOME_CARE_CARPET_WOOL_SQM", "name": "Carpet — Wool", "pricing_type": "PER_SQM", "pricing_unit": "SQM", "current_price": 20, "regular_price": 36, "requires_measurement": true, "aliases": ["wool carpet", "carpet wool"]}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "CURTAIN_CLEANING",
+      "name": "Curtain Cleaning",
+      "description": "Cleaning for curtains and drapes, priced per square metre after measurement",
+      "sort_order": 11,
+      "default_pricing_type": "PER_SQM",
+      "default_pricing_unit": "SQM",
+      "aliases": ["curtain", "curtains", "curtain cleaning", "drapes", "drape", "drape cleaning"],
+      "services": [
+        {
+          "code": "CURTAIN_CARE",
+          "name": "Curtain Care",
+          "sort_order": 1,
+          "items": [
+            {"code": "HOME_CARE_CURTAIN_SQM", "name": "Curtain", "pricing_type": "PER_SQM", "pricing_unit": "SQM", "current_price": 20, "regular_price": 25, "requires_measurement": true, "aliases": ["curtain", "curtains"]}
           ]
         }
       ]

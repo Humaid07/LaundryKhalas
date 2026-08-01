@@ -72,3 +72,50 @@ def test_has_active_service_flag_does_not_change_classification():
     # decides to preserve the booking, not the classifier).
     assert _kind("haircut", has_active_service=True) is K.UNSUPPORTED
     assert _kind("haircut", has_active_service=False) is K.UNSUPPORTED
+
+
+# --- repair / alteration classification (spec 2026-08-01 §2) -----------------
+def test_standard_alteration_words_resolve_to_alterations():
+    # Hemming / shortening / waist adjustment etc. are routine alterations — a
+    # supported catalogue service, never a rejected "repair".
+    for phrase in ("shorten these jeans", "take in the waist", "loosen my kurta",
+                   "tighten my dress", "lengthen my abaya"):
+        res = sr.classify_service_request(phrase)
+        assert res.is_supported, f"{phrase!r} should be a supported alteration, got {res.kind}"
+        assert res.category_code == "ALTERATIONS"
+
+
+def test_garment_repair_routes_to_alterations_not_rejected():
+    # A garment repair phrased with "repair"/"fix"/"mend" + a clothing item is a
+    # real service (routes to Alterations), NOT a decline.
+    for phrase in ("can you repair the zip on my jeans", "fix the button on my shirt",
+                   "mend a tear in my dress", "repair the seam on my jacket"):
+        res = sr.classify_service_request(phrase)
+        assert res.kind is K.ALIAS and res.category_code == "ALTERATIONS", phrase
+        assert res.reason == "garment_repair"
+
+
+def test_leather_shoe_repair_routes_to_restoration_photo_flow():
+    for phrase in ("repair my leather shoes", "fix the sole of my boots",
+                   "mend my handbag strap"):
+        assert _kind(phrase) is K.BESPOKE, phrase
+
+
+def test_non_laundry_repair_is_the_only_repair_declined():
+    for phrase in ("repair my phone screen", "fix my car engine", "repair my laptop",
+                   "can you fix my washing machine", "mend the broken cabinet door"):
+        assert _kind(phrase) is K.UNSUPPORTED, phrase
+
+
+def test_bare_repair_request_asks_one_clarification():
+    res = sr.classify_service_request("can you repair this?")
+    assert res.kind is K.AMBIGUOUS and res.reason == "ambiguous_repair"
+    res2 = sr.classify_service_request("I need something fixed")
+    assert res2.kind is K.AMBIGUOUS and res2.reason == "ambiguous_repair"
+
+
+def test_repair_object_word_boundary_is_garment_safe():
+    # "cardigan"/"scarf" must NOT trip the non-laundry "car" object → they are
+    # garments, so a repair on them routes to Alterations, never declined.
+    assert sr.classify_service_request("repair my cardigan").category_code == "ALTERATIONS"
+    assert _kind("fix the hem of my scarf") is not K.UNSUPPORTED

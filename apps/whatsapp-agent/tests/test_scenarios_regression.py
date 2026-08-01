@@ -111,10 +111,12 @@ def test_s10_route_to_specialist_categories():
     assert res.kind is service_resolution.ServiceKind.ROUTE and res.is_supported is False
 
 
-# 11) Alteration — sample garment or exact measurements; confirm cm vs inch.
-def test_s11_alterations_measurements_in_prompt():
-    assert "sample garment OR exact measurements" in PROMPT
-    assert "cm or inches" in PROMPT
+# 11) Standard alterations — routine, priced from a starting price, NOT photo-gated,
+#     and never refused as a "repair" (spec 2026-08-01 §§2/5).
+def test_s11_standard_alterations_priced_not_photo_gated():
+    assert "alterations start from AED X per item" in PROMPT
+    assert "do NOT ask for a photo" in PROMPT
+    assert "Never say we don't do repairs" in PROMPT
 
 
 # 12) Privacy — the model-facing state block never exposes the full address.

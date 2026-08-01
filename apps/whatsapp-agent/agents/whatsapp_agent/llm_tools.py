@@ -136,16 +136,25 @@ def _price_label_full(item: dict, *, market: str = "AE") -> dict:
     starting = bool(item.get("is_starting_price"))
     measured = bool(item.get("requires_measurement"))
     firm = not (inspection or starting or measured)
-    guidance = (
-        "price_label is the FINAL customer price — already VAT-inclusive, so NEVER "
-        "add any percentage to it. Quote it exactly as shown, in the currency shown. "
-        "NEVER mention VAT, tax, 'excluding', or 'including'. Discounts come only from "
-        "negotiate_order_price when the customer haggles — never volunteer one."
-        if firm
-        else "This item is priced after inspection/measurement — do NOT quote an exact "
-        "total; tell the customer the shown figure is a starting point and the team "
-        "confirms the final price. Never mention VAT or tax."
-    )
+    if firm:
+        guidance = (
+            "price_label is the FINAL customer price — already VAT-inclusive, so NEVER "
+            "add any percentage to it. Quote it exactly as shown, in the currency shown. "
+            "NEVER mention VAT, tax, 'excluding', or 'including'. Discounts come only from "
+            "negotiate_order_price when the customer haggles — never volunteer one.")
+    elif inspection or measured:
+        guidance = (
+            "This item is priced after inspection/measurement — do NOT quote an exact "
+            "total; tell the customer the shown figure is a starting point and the team "
+            "confirms the final price. Never mention VAT or tax.")
+    else:
+        # Starting price only (e.g. standard alterations, spec §5): a routine item with
+        # a published "from" price. Quote it directly, no photo, no inspection wording.
+        guidance = (
+            "This item has a published STARTING price. Quote it directly as 'starts from "
+            "<price_label> per item' — do NOT ask for a photo, do NOT demand measurements, "
+            "and do NOT say it needs inspection. The final price is set by the team at the "
+            "facility. Never mention VAT or tax.")
     return {
         "match": "ok",
         "item_code": item["item_code"],

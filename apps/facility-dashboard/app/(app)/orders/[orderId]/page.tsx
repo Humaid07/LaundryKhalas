@@ -64,6 +64,10 @@ const ISSUE_TYPES = [
   { value: "delay", label: "Report Delay" },
   { value: "damage", label: "Report Damage" },
   { value: "missing", label: "Report Missing Item" },
+  { value: "alteration_price_change", label: "Alteration: Price Change Needed" },
+  { value: "alteration_scope_change", label: "Alteration: Scope Change Needed" },
+  { value: "alteration_measurement_needed", label: "Alteration: Measurement/Fitting Needed" },
+  { value: "alteration_not_possible", label: "Alteration: Cannot Be Done As Requested" },
   { value: "other", label: "Other" },
 ];
 

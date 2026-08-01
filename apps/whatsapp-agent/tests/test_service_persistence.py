@@ -81,13 +81,14 @@ async def _call(execute, tool, **inp):
 
 
 def _carpet_row(**extra):
-    """A draft with Carpet Cleaning (HOME_CARE) already saved + optional fields."""
+    """A draft with Carpet Cleaning already saved + optional fields. Carpet Cleaning
+    is now its own top-level category (CARPET_CLEANING), promoted out of HOME_CARE."""
     row = {
         "id": "order-uuid-x", "order_id": "LK-2026-000777",
         "conversation_id": "conv-x", "status": order_store.DRAFT,
         "conversation_state": bf.WAITING_FOR_PICKUP_SLOT,
-        "service_id": "HOME_CARE", "service": "Home & Care",
-        "service_name_snapshot": "Home & Care", "line_items": [],
+        "service_id": "CARPET_CLEANING", "service": "Carpet Cleaning",
+        "service_name_snapshot": "Carpet Cleaning", "line_items": [],
     }
     row.update(extra)
     return row
@@ -100,12 +101,12 @@ async def test_saved_service_survives_pickup_date_and_time():
 
     d, err = await _call(execute, "save_pickup_date", date_text="tomorrow")
     assert err is False
-    assert repo.row["service_id"] == "HOME_CARE"            # not lost
+    assert repo.row["service_id"] == "CARPET_CLEANING"            # not lost
     assert "service_items" not in d["workflow"]["missing_fields"]
 
     t, err = await _call(execute, "save_pickup_time", slot="1")
     assert err is False
-    assert repo.row["service_id"] == "HOME_CARE"            # still not lost
+    assert repo.row["service_id"] == "CARPET_CLEANING"            # still not lost
     missing = t["workflow"]["missing_fields"]
     assert "service_items" not in missing
     assert "pickup_address" in missing                      # the REAL next field
@@ -116,7 +117,7 @@ async def test_saved_service_survives_an_invalid_date_reply():
     execute = make_booking_executor(_ctx(repo))
     d, err = await _call(execute, "save_pickup_date", date_text="yesterday")
     assert err is True                                      # politely rejected
-    assert repo.row["service_id"] == "HOME_CARE"            # preserved
+    assert repo.row["service_id"] == "CARPET_CLEANING"            # preserved
 
 
 # --- unsupported service (the screenshot bug) ------------------------------
@@ -130,10 +131,10 @@ async def test_haircut_during_active_booking_preserves_service_and_next_field():
     assert err is False                                     # NOT an error → no retry
     assert data["unsupported_request"] is True
     assert data["active_booking"] is True
-    assert data["preserved_service"] == "Home & Care"
+    assert data["preserved_service"] == "Carpet Cleaning"
     assert data["next_missing_field"] == "pickup_address"
     assert "service_items" not in data["workflow"]["missing_fields"]
-    assert repo.row["service_id"] == "HOME_CARE"            # booking intact
+    assert repo.row["service_id"] == "CARPET_CLEANING"            # booking intact
     assert repo.start_calls == 0                            # no restart
 
 
@@ -156,7 +157,7 @@ async def test_empty_service_value_does_not_erase_saved_service():
     execute = make_booking_executor(_ctx(repo))
     data, err = await _call(execute, "save_service_selection", service="")
     assert err is False                                     # handled, not an error
-    assert repo.row["service_id"] == "HOME_CARE"            # untouched
+    assert repo.row["service_id"] == "CARPET_CLEANING"            # untouched
 
 
 # --- never re-ask a saved service ------------------------------------------
@@ -166,7 +167,7 @@ async def test_same_service_is_a_noop_not_a_reask():
     data, err = await _call(execute, "save_service_selection", service="carpet cleaning")
     assert err is False
     assert data.get("already_selected") is True
-    assert repo.row["service_id"] == "HOME_CARE"
+    assert repo.row["service_id"] == "CARPET_CLEANING"
 
 
 # --- explicit service edit keeps the rest of the booking -------------------
@@ -216,13 +217,18 @@ async def test_adding_an_item_preserves_the_saved_service():
     assert repo.row["line_items"]                            # the item was added
 
 
-# --- bespoke request routes to photo/quote, not an invented price ----------
-async def test_bespoke_wedding_dress_enters_bespoke_flow_without_saving_service():
+# --- specialty request routes to a human specialist, not an invented price ---
+async def test_wedding_dress_routes_to_specialist_without_saving_service():
+    # A wedding dress is a route-to-specialist category (spec §2.8) — it wins over
+    # both the bespoke photo-flow and catalogue aliasing, so it is handed to a
+    # specialist rather than quoted. (Previously asserted the bespoke path; the
+    # specialty router now owns this phrase.)
     repo = FakeOrdersRepo(None)
     execute = make_booking_executor(_ctx(repo))
     data, err = await _call(execute, "save_service_selection",
                             service="Can you clean a heavily embroidered wedding dress?")
-    assert err is False and data.get("bespoke") is True
+    assert err is False and data.get("route_to_specialist") is True
+    assert data.get("routing_category") == "WEDDING_DRESS"
     assert repo.row is None and repo.start_calls == 0       # no order, no invented price
 
 
@@ -233,3 +239,25 @@ async def test_ambiguous_ironing_asks_clarification_not_a_guess():
     _data, err = await _call(execute, "save_service_selection", service="ironing")
     assert err is True                                      # a clarify prompt, not a save
     assert repo.row is None                                 # nothing guessed/saved
+
+
+# --- a bare repair asks ONE clarification, never rejects (spec §2) ----------
+async def test_bare_repair_asks_clarification_not_rejected():
+    repo = FakeOrdersRepo(None)
+    execute = make_booking_executor(_ctx(repo))
+    data, err = await _call(execute, "save_service_selection", service="can you repair this?")
+    # Not a tool error and NOT an "unsupported" decline — a soft clarification.
+    assert err is False
+    assert data.get("needs_clarification") is True
+    assert data.get("unsupported_request") is not True
+    assert repo.row is None                                 # nothing saved yet
+
+
+# --- a garment repair is accepted as an alteration, not refused (spec §2) ----
+async def test_garment_repair_saved_as_alteration():
+    repo = FakeOrdersRepo(None)
+    execute = make_booking_executor(_ctx(repo))
+    data, err = await _call(execute, "save_service_selection",
+                            service="can you repair the zip on my jeans")
+    assert err is False and data.get("saved") is True
+    assert data.get("category_code") == "ALTERATIONS"

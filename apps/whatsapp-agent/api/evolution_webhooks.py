@@ -281,6 +281,15 @@ def _normalize_text(convo_id: str | None, text: str | None, *, source: str) -> s
             source=source,
             emoji_count=result.emoji_count,
         )
+    if result.exclaim_count:
+        # Routine replies should not use exclamation marks (spec 2026-08-01) — the
+        # validator replaces them with full stops. Safe event (count only).
+        logger.info(
+            "customer_reply_exclamation_normalized",
+            conversation=convo_id,
+            source=source,
+            exclaim_count=result.exclaim_count,
+        )
     return result.text
 
 

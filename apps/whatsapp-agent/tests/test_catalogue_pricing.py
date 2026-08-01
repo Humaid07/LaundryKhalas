@@ -35,12 +35,36 @@ def test_catalogue_metadata_matches_fixture():
     assert m["verified_at"] == CATALOGUE_FIXTURE["verified_at"]
 
 
-def test_nine_categories_imported():
+def test_categories_imported():
+    # Carpet Cleaning + Curtain Cleaning were promoted out of HOME_CARE into their
+    # own top-level categories so facilities can accept them individually (spec §3).
     codes = [c["code"] for c in catalogue.categories()]
     assert codes == [
         "CLEAN_PRESS", "PRESS_ONLY", "HOME_CARE", "WASH_FOLD", "SHOE_CARE",
         "BAG_CARE", "SOFT_TOY", "RESTORATION", "ALTERATIONS",
+        "CARPET_CLEANING", "CURTAIN_CLEANING",
     ]
+
+
+def test_carpet_and_curtain_are_selectable_top_level_categories():
+    """Carpet/Curtain must be top-level categories (the granularity facilities
+    select accepted services at) — not buried inside HOME_CARE."""
+    by_code = {c["code"]: c for c in catalogue.categories()}
+    assert by_code["CARPET_CLEANING"]["name"] == "Carpet Cleaning"
+    assert by_code["CURTAIN_CLEANING"]["name"] == "Curtain Cleaning"
+    # Item codes are preserved (order/pricing history stays intact); only their
+    # parent category moved, so the same priced items now resolve under the new
+    # categories and no longer appear under HOME_CARE.
+    carpet = catalogue.item_by_code("HOME_CARE_CARPET_REGULAR_SQM")
+    curtain = catalogue.item_by_code("HOME_CARE_CURTAIN_SQM")
+    assert carpet["category_code"] == "CARPET_CLEANING"
+    assert curtain["category_code"] == "CURTAIN_CLEANING"
+    home_care_items = {
+        it["item_code"]
+        for s in catalogue.services_for_category("HOME_CARE")
+        for it in catalogue.items_for_service(s["code"])
+    }
+    assert not any("CARPET" in c or "CURTAIN" in c for c in home_care_items)
 
 
 # --- Required tests 1-13: item prices resolve to the image values ------------
@@ -130,7 +154,9 @@ def test_13_alterations_from_30():
     item = _price("ALTERATIONS_GENERAL")
     assert item["current_price"] == 30
     assert item["is_starting_price"] is True
-    assert item["requires_inspection"] is True
+    # Standard alterations are a routine "starts from" price — no photo/inspection
+    # gate (spec 2026-08-01 §5). is_starting_price still keeps it a non-firm total.
+    assert item["requires_inspection"] is False
 
 
 # --- Required test 14: starting prices never become guaranteed totals --------
@@ -146,6 +172,20 @@ def test_14_starting_price_is_never_a_guaranteed_total():
     assert "from aed 50" in text.lower()
     assert "52.50" not in text
     assert "inspection" in text.lower()
+
+
+# --- Standard alterations: "starts from" price, no inspection wording (§5) ----
+def test_standard_alteration_quote_reads_from_price_without_inspection():
+    q = pricing.calculate_estimate([{"item_code": "ALTERATIONS_GENERAL", "quantity": 1}])
+    line = q.lines[0]
+    # Still a non-firm starting price (never a guaranteed total)...
+    assert line.line_kind == "pending" and line.line_total is None
+    assert line.requires_inspection is False
+    # ...but the customer LINE wording is a clean "from AED 30 per item" with NO
+    # "after inspection" tail (that tail is reserved for genuine inspection lines).
+    text = " ".join(pricing.format_quote_lines(q))
+    assert "from AED 30" in text
+    assert "after inspection" not in text
 
 
 # --- Required tests 15-18: VAT + quantity + multi-line math -------------------

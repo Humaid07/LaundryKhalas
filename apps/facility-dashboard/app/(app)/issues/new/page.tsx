@@ -15,6 +15,10 @@ const ISSUE_TYPES = [
   { value: "damage", label: "Damage" },
   { value: "missing", label: "Missing item" },
   { value: "quality", label: "Quality concern" },
+  { value: "alteration_price_change", label: "Alteration: price change needed" },
+  { value: "alteration_scope_change", label: "Alteration: scope change needed" },
+  { value: "alteration_measurement_needed", label: "Alteration: measurement/fitting needed" },
+  { value: "alteration_not_possible", label: "Alteration: cannot be done as requested" },
   { value: "other", label: "Other" },
 ];
 

@@ -96,6 +96,49 @@ _UNSUPPORTED_WORDS: tuple[str, ...] = (
 )
 
 
+# --- repair / alteration classification (spec 2026-08-01 §2) -----------------
+# "Repair" must NEVER be blanket-rejected. A garment alteration or garment repair
+# is a real Laundry Khalas service; ONLY a genuinely non-laundry repair (phone,
+# car, laptop) is declined. Order of checks in _classify_repair: non-laundry
+# object -> decline; leather/shoe/bag -> specialist restoration (photo); garment/
+# textile -> routine alterations; a bare "can you repair this?" -> ONE clarification.
+_REPAIR_INTENT = re.compile(
+    r"\b(repair|repairs|repairing|repaired|fix|fixes|fixing|fixed|mend|mends|mending|"
+    r"re-?stitch(?:ing)?|sew\s+back|sew\s+up|stitch\s+back|broken|torn|ripped)\b"
+)
+
+# Matched with WORD BOUNDARIES (so "car" never fires inside "cardigan"/"scarf").
+_NON_LAUNDRY_REPAIR: tuple[str, ...] = (
+    "phone", "mobile", "iphone", "smartphone", "screen", "laptop", "computer",
+    "tablet", "ipad", "tv", "television", "car", "vehicle", "engine", "tyre",
+    "tire", "bike", "bicycle", "motorbike", "scooter", "fridge", "refrigerator",
+    "washing machine", "dishwasher", "microwave", "appliance", "aircon",
+    "air conditioner", "furniture", "sofa", "couch", "cabinet", "door", "wall",
+    "watch", "clock", "jewellery", "jewelry", "ring", "necklace", "bracelet",
+    "spectacles", "glasses", "spaceship", "boat", "roof", "pipe", "plumbing",
+    "electrical", "wiring", "socket",
+)
+
+# Leather / shoe / bag repair -> specialist restoration (photo + quote).
+_REPAIR_RESTORATION: tuple[str, ...] = (
+    "leather", "shoe", "shoes", "boot", "boots", "sneaker", "trainer", "heel",
+    "sole", "handbag", "purse", "wallet", "suede",
+)
+
+# Garment / textile object -> routine alterations & tailoring.
+_GARMENT_REPAIR_OBJECTS: tuple[str, ...] = (
+    "dress", "shirt", "t-shirt", "tshirt", "trouser", "trousers", "pant",
+    "pants", "jean", "jeans", "jacket", "coat", "blazer", "suit", "skirt",
+    "kurta", "abaya", "kandura", "kaftan", "gown", "saree", "sari", "blouse",
+    "cardigan", "sweater", "jumper", "hoodie", "scarf", "shawl", "tie", "shorts",
+    "leggings", "sock", "socks", "waistcoat", "tunic", "top",
+    "hem", "hemline", "zip", "zipper", "button", "seam", "stitch", "stitching",
+    "tear", "rip", "hole", "pocket", "lining", "sleeve", "collar", "cuff",
+    "waist", "strap", "buckle", "elastic", "garment", "clothes", "clothing",
+    "uniform",
+)
+
+
 def _contains_term(low: str, terms: tuple[str, ...]) -> str | None:
     for term in terms:
         if term in low:
@@ -112,6 +155,31 @@ def _contains_word(low: str, words: tuple[str, ...]) -> str | None:
 
 def _is_unsupported(low: str) -> str | None:
     return _contains_term(low, _UNSUPPORTED_TERMS) or _contains_word(low, _UNSUPPORTED_WORDS)
+
+
+def _classify_repair(low: str) -> "ServiceResolution | None":
+    """Classify a repair/fix/mend request (spec §2). Returns None when the text
+    carries no repair intent, so the normal catalogue/unsupported path continues.
+
+    Only a genuinely non-laundry object (phone, car, laptop) is declined; garment
+    and textile repairs are accepted as alterations, leather/shoe/bag repairs route
+    to specialist restoration, and a bare "can you repair this?" asks ONE question.
+    """
+    if not _REPAIR_INTENT.search(low):
+        return None
+    obj = _contains_word(low, _NON_LAUNDRY_REPAIR)
+    if obj:
+        return ServiceResolution(ServiceKind.UNSUPPORTED, reason=f"non_laundry_repair:{obj}")
+    if _contains_word(low, _REPAIR_RESTORATION):
+        return ServiceResolution(ServiceKind.BESPOKE, reason="repair_restoration")
+    if _contains_word(low, _GARMENT_REPAIR_OBJECTS):
+        cat = catalogue.category_by_code("ALTERATIONS")
+        return ServiceResolution(
+            ServiceKind.ALIAS,
+            category_code="ALTERATIONS",
+            category_name=cat["name"] if cat else "Alterations",
+            reason="garment_repair")
+    return ServiceResolution(ServiceKind.AMBIGUOUS, reason="ambiguous_repair")
 
 
 def supported_categories() -> list[str]:
@@ -153,7 +221,18 @@ def classify_service_request(
     if sig:
         return ServiceResolution(ServiceKind.BESPOKE, reason=f"bespoke_signal:{sig}")
 
-    # 2) Authoritative catalogue resolution (same resolver as the FSM).
+    # 2b) Explicit repair / fix / mend intent is classified HERE, before the
+    #     catalogue's noun matching (spec §2). This is deliberate: the catalogue
+    #     resolves by garment noun, so "fix my car engine" would wrongly hit the
+    #     Alterations 'fix' alias and "repair the zip on my jeans" would collide on
+    #     the garment word and read ambiguous. Repair intent + object decides first:
+    #     non-laundry object -> decline; leather/shoe/bag -> restoration; garment ->
+    #     alterations; a bare "can you repair this?" -> one clarification.
+    repair = _classify_repair(low)
+    if repair is not None:
+        return repair
+
+    # 2c) Authoritative catalogue resolution (same resolver as the FSM).
     code, reason = bf.resolve_service(bf.Inbound(text=raw, selection_id=selection_id))
     if reason == "ok" and code:
         cat = catalogue.category_by_code(code)

@@ -69,6 +69,7 @@ class NormalizationResult:
     changed: bool
     dash_count: int          # dashes detected in the ORIGINAL customer prose
     emoji_count: int = 0     # emoji / pictographic codepoints removed
+    exclaim_count: int = 0   # exclamation marks removed from routine prose
     rules_applied: list[str] = field(default_factory=list)
     valid: bool = True       # True when no offending dash formatting remains
 
@@ -134,6 +135,15 @@ def _unmask(text: str, spans: list[str]) -> str:
     return text
 
 
+# --- exclamation-mark normalisation (routine customer prose only) ------------
+# Routine replies should end with a full stop, not "!". A run mixing ! and ?
+# (e.g. "?!" / "!?") collapses to a single "?". Applied to MASKED prose, so URLs,
+# order ids, emails and payment links (already masked) are never touched.
+_EXCLAIM_Q = re.compile(r"[!?]*\?[!?]*")
+_EXCLAIM = re.compile(r"!+")
+_MULTIDOT = re.compile(r"\.{2,}")
+
+
 def normalize_customer_reply(text: str | None) -> NormalizationResult:
     """Rewrite ``text`` into natural, dash-free customer prose. Deterministic and
     side-effect free — the same input always yields the same output. Machine values
@@ -151,6 +161,7 @@ def normalize_customer_reply(text: str | None) -> NormalizationResult:
     # Count dashes only in the PROSE (masked text), so an identifier's own hyphens
     # are not counted as style violations.
     dash_count = sum(masked.count(c) for c in ("-", "–", "—"))
+    exclaim_count = masked.count("!")
 
     rules: list[str] = ["emoji"] if emoji_count else []
     work = masked
@@ -190,6 +201,14 @@ def normalize_customer_reply(text: str | None) -> NormalizationResult:
         rules.append("spaced_hyphen")
         work = new
 
+    # Exclamation marks → full stops (a run containing "?" collapses to "?").
+    excl = _EXCLAIM_Q.sub("?", work)
+    excl = _EXCLAIM.sub(".", excl)
+    excl = _MULTIDOT.sub(".", excl)
+    if excl != work:
+        rules.append("exclamation")
+        work = excl
+
     valid = not any(p.search(work) for p in _RESIDUAL)
     final = _unmask(work, spans)
     return NormalizationResult(
@@ -197,6 +216,7 @@ def normalize_customer_reply(text: str | None) -> NormalizationResult:
         changed=final != raw,
         dash_count=dash_count,
         emoji_count=emoji_count,
+        exclaim_count=exclaim_count,
         rules_applied=rules,
         valid=valid,
     )

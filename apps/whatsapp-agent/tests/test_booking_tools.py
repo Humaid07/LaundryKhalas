@@ -369,9 +369,11 @@ async def test_unknown_and_invalid_service_rejected():
     data, err = await _call(execute, "delete_all_orders")
     assert err is True and "Unknown tool" in data["error"]
 
+    # A genuinely non-laundry repair (engine) is politely declined, NOT errored
+    # (spec §2): unsupported_request, nothing persisted, no re-ask loop.
     data, err = await _call(execute, "save_service_selection", service="spaceship engine repair")
-    assert err is True
-    assert repo.row.get("service_id") is None  # nothing persisted for an invalid service
+    assert err is False and data.get("unsupported_request") is True
+    assert repo.row.get("service_id") is None  # nothing persisted for an unsupported service
 
 
 async def test_item_rejected_before_service_selected():

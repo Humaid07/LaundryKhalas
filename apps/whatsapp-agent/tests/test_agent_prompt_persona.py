@@ -78,7 +78,7 @@ def test_currency_overlay_present():
 # --------------------------------------------------------------------------
 @pytest.mark.parametrize("needle", [
     "photo",                # specialty photo-gate
-    "cm or inches",         # alterations measurement units
+    "alterations start from AED",   # standard alterations = starting price, no photo (§5)
     "room number",          # hotels
     "15–30 minutes",   # driver contact window
     "reception",            # leave-with fallbacks

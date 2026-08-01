@@ -370,12 +370,15 @@ def format_quote_lines(quote: Quote) -> list[str]:
                 f"{ln.name}: {_fmt_qty(ln.measure)} {ln.unit.lower()} "
                 f"— {cur} {money.format_money(ln.line_total)} (confirmed after measuring)"
             )
-        else:  # pending
+        else:  # pending (a 'from'/starting or inspection line)
             unit = ln.unit.lower()
             if ln.unit_price is not None:
+                # Only a genuine inspection line carries the "after inspection" tail;
+                # a routine starting price (e.g. standard alterations, spec §5) reads
+                # cleanly as "from AED X per item".
+                tail = " (final price after inspection)" if ln.requires_inspection else ""
                 out.append(
-                    f"{qty} × {ln.name}: from {cur} {money.format_money(ln.unit_price)} per {unit} "
-                    "(final price after inspection)"
+                    f"{qty} × {ln.name}: from {cur} {money.format_money(ln.unit_price)} per {unit}{tail}"
                 )
             else:
                 out.append(f"{qty} × {ln.name}: price confirmed after inspection")

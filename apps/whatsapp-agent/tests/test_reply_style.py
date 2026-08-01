@@ -152,7 +152,8 @@ def test_emoji_removal_preserves_price_phone_email():
 
 def test_multiple_and_decorative_emoji_removed():
     out = normalize(f"Great choice! {_PARTY}{_BASKET}{_THUMB} {_WARN}")
-    assert out.text == "Great choice!"
+    # emoji removed; the exclamation is also normalised to a full stop (§4).
+    assert out.text == "Great choice."
     assert out.emoji_count == 4
 
 
@@ -175,3 +176,38 @@ def test_representative_replies_are_emoji_free():
     for reply in REPLIES:
         out = normalize(reply)
         assert out.emoji_count == 0
+
+
+# --- exclamation-mark removal (spec 2026-08-01 §4) -------------------------
+def test_exclamations_become_full_stops():
+    out = normalize("Great! Your order is confirmed!")
+    assert out.text == "Great. Your order is confirmed."
+    assert out.exclaim_count == 2
+    assert "exclamation" in out.rules_applied
+
+
+def test_mixed_exclaim_question_becomes_question():
+    assert normalize("Really?!").text == "Really?"
+    assert normalize("Sure!! done").text == "Sure. done"
+    assert normalize("Wow!!!").text == "Wow."
+
+
+def test_exclamation_preserves_order_id_and_url():
+    out = normalize("Order LK-AE-1024 is ready!")
+    assert "LK-AE-1024" in out.text and out.text.endswith("ready.")
+    url = "https://pay.laundrykhalaas.com/checkout?ref=LK-1!"  # ! is part of the url
+    out2 = normalize(f"Pay here: {url}")
+    assert url in out2.text
+
+
+def test_no_exclamation_reports_zero():
+    out = normalize("Your total is AED 90. Shall I confirm?")
+    assert out.exclaim_count == 0
+    assert "exclamation" not in out.rules_applied
+
+
+def test_representative_replies_output_has_no_exclamations():
+    # Some representative inputs contain "!" (e.g. "Hi! ..."); the validator must
+    # strip them so no exclamation reaches the customer.
+    for reply in REPLIES:
+        assert "!" not in normalize(reply).text
