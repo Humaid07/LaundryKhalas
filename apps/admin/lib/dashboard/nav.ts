@@ -101,7 +101,10 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/facilities",
     icon: Factory,
     description: "Partner cleaning facilities — capacity, coverage, rates & compliance",
-    children: childrenWithOverview("facilities", "/facilities"),
+    // Facilities has an explicit "overview" subsection (a real metrics page), so
+    // it uses childrenOf directly — no synthetic base "Overview" child (which
+    // would duplicate the Overview subsection link).
+    children: childrenOf("facilities", "/facilities"),
   },
   {
     label: "Sales",

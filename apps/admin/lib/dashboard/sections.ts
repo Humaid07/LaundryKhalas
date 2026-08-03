@@ -84,6 +84,7 @@ export const SECTIONS: Record<string, SectionDef> = {
       "Onboard and manage partner cleaning facilities — capacity, coverage, accepted services, operating hours, internal rates and compliance.",
     cols: 2,
     subsections: [
+      { slug: "overview", label: "Overview", icon: BarChart3, description: "Facility performance, activity, standout facilities and service-coverage insights across the network.", kpis: [{ label: "Active", value: "—", tone: "success" }, { label: "Completed", value: "—" }] },
       { slug: "directory", label: "Facilities Directory", icon: Factory, description: "All partner facilities — status, area, capacity, accepted services and quality score. Add, edit and manage rates.", kpis: [{ label: "Facilities", value: "—" }, { label: "Open", value: "—", tone: "success" }] },
       { slug: "compliance", label: "Compliance Queue", icon: ShieldCheck, description: "Trade license, documents, agreement and onboarding checklist.", kpis: [{ label: "Open", value: "6", tone: "warning" }, { label: "Passed", value: "82%", tone: "success" }] },
     ],

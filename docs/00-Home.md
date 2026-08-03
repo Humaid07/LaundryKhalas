@@ -22,6 +22,22 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — Facilities Overview + Add-Facility modal redesign (2026-08-03)
+
+Two connected internal-dashboard improvements. (1) The **Add Facility** modal was
+redesigned: strong dark overlay + blur (background no longer readable), larger centred
+surface (~960px, internal scroll, pinned footer), fields grouped into four labelled
+sections, taller premium inputs with an orange focus ring, an orange primary button,
+a **Saving…** state and **field-level validation**. Bank details/hours stay out of the
+create form (separate post-create admin flows). (2) **Facilities → Overview** is now a
+real metrics page (it previously duplicated the Directory): KPI band (active facilities,
+orders completed, avg completion, utilisation, issues, pending actions), most-active,
+most-completed, standout-by-city, attention list and service-coverage — all from a new
+**real** `GET /api/internal/facilities/overview` aggregation (live orders/issues/coverage;
+honest `null`/“—” where there's no data yet). Directory unchanged. Gates: backend
+`test_facility_overview` **10 passed**; admin `typecheck` 0 / `lint` 0. Build report:
+`build-reports/2026-08-03-facilities-overview-and-modal.md`.
+
 ## Latest — Bank details, ratings, carpet/curtain, QC removal (2026-08-01)
 
 Five connected changes across both dashboards + backend: the partner **Quality Check**

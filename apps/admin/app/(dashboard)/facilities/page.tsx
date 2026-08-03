@@ -1,10 +1,7 @@
-import { SubsectionShell } from "@/components/dashboard/section/SubsectionShell";
-import { FacilitiesDirectory } from "@/components/dashboard/facilities/FacilitiesDirectory";
+import { redirect } from "next/navigation";
 
+// Facilities landing → the Overview metrics page (the canonical first view).
+// The Directory lives at /facilities/directory.
 export default function Page() {
-  return (
-    <SubsectionShell sectionKey="facilities" slug="directory" showFilters={false}>
-      <FacilitiesDirectory />
-    </SubsectionShell>
-  );
+  redirect("/facilities/overview");
 }

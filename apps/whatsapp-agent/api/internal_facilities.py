@@ -27,7 +27,7 @@ from schemas import (
     FacilityRateUpsert,
     FacilityStatusUpdate,
 )
-from services import facility_admin, facility_bank
+from services import facility_admin, facility_bank, facility_overview
 from services.facility_bank import BankValidationError
 
 router = APIRouter(prefix="/api/internal/facilities", tags=["internal-facilities"])
@@ -59,6 +59,43 @@ async def list_facilities(
         search=search, status=status, emirate=emirate, service_code=service
     )
     return {"facilities": facilities, "summary": await facilities_repo.status_counts()}
+
+
+@router.get("/overview")
+async def facilities_overview(
+    city: str | None = None,
+    emirate: str | None = None,
+    status: str | None = None,
+    service: str | None = None,
+    days: int | None = 30,
+    principal: dict = Depends(deps.require_ops),
+):
+    """Fleet-level facility performance + insights for the internal Overview page.
+
+    Declared BEFORE ``/{facility_id}`` so the literal "overview" is not captured
+    as a facility id. Returns an empty-but-shaped payload when not in Supabase
+    mode (mirrors ``list_facilities``). ``days`` bounds the time-boxed metrics
+    (completed orders, issues raised); pass ``days=0``/absent handling: 0 or
+    negative → all-time.
+    """
+    empty = {
+        "kpis": {
+            "active_facilities": 0, "total_facilities": 0, "orders_completed": 0,
+            "avg_completion_seconds": None, "avg_utilisation": None,
+            "issues_raised": 0, "pending_actions": 0,
+        },
+        "most_active_facilities": [], "most_completed_facilities": [],
+        "standout_by_city": [], "attention_facilities": [], "service_coverage": [],
+        "filters_applied": {"city": city, "emirate": emirate, "status": status,
+                            "service": service, "days": days},
+    }
+    if not database.is_supabase_mode():
+        return empty
+    filters = {
+        "city": city, "emirate": emirate, "status": status, "service": service,
+        "days": (days if (days and days > 0) else None),
+    }
+    return await facility_overview.build_overview(filters)
 
 
 @router.get("/{facility_id}")

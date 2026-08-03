@@ -70,6 +70,60 @@ export interface FacilitySummary {
   closed: number;
 }
 
+// --- Facilities Overview (fleet metrics + insights) -------------------------
+export interface FacilityOverviewKpis {
+  active_facilities: number;
+  total_facilities: number;
+  orders_completed: number;
+  avg_completion_seconds: number | null;
+  avg_utilisation: number | null;
+  issues_raised: number;
+  pending_actions: number;
+}
+
+export interface FacilityOverviewCard {
+  id: string;
+  name: string;
+  code?: string | null;
+  city?: string | null;
+  area?: string | null;
+  operating_status: OperatingStatus;
+  in_progress: number;
+  completed_period: number;
+  completed_all: number;
+  delayed: number;
+  open_issues: number;
+  attention_orders: number;
+  completion_rate: number | null;
+  utilisation: number | null;
+  quality_score: number | null;
+  reasons?: string[]; // present on attention_facilities only
+}
+
+export interface ServiceCoverageItem {
+  service_code: string;
+  name: string;
+  facility_count: number;
+}
+
+export interface FacilitiesOverview {
+  kpis: FacilityOverviewKpis;
+  most_active_facilities: FacilityOverviewCard[];
+  most_completed_facilities: FacilityOverviewCard[];
+  standout_by_city: FacilityOverviewCard[];
+  attention_facilities: FacilityOverviewCard[];
+  service_coverage: ServiceCoverageItem[];
+  filters_applied: Record<string, string | number | null>;
+}
+
+export interface OverviewFilters {
+  city?: string;
+  emirate?: string;
+  status?: string;
+  service?: string;
+  days?: number;
+}
+
 export interface FacilityTiming {
   day_of_week: number;
   opens_at?: string | null;
@@ -196,6 +250,17 @@ export const listFacilities = (f: FacilityFilters = {}) => {
   return req<{ facilities: Facility[]; summary: FacilitySummary }>(
     `/api/internal/facilities${q ? `?${q}` : ""}`,
   );
+};
+
+export const getFacilitiesOverview = (f: OverviewFilters = {}) => {
+  const qs = new URLSearchParams();
+  if (f.city) qs.set("city", f.city);
+  if (f.emirate) qs.set("emirate", f.emirate);
+  if (f.status) qs.set("status", f.status);
+  if (f.service) qs.set("service", f.service);
+  if (f.days != null) qs.set("days", String(f.days));
+  const q = qs.toString();
+  return req<FacilitiesOverview>(`/api/internal/facilities/overview${q ? `?${q}` : ""}`);
 };
 
 export const getFacility = (id: string) =>
