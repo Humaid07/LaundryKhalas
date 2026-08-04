@@ -317,7 +317,9 @@ async def run_replay(
                 results.append(res)
                 progress.mark(conv.source_chat_id)
                 if on_result is not None:
-                    on_result(res)
+                    # Pass a snapshot of all results so far so the caller can
+                    # checkpoint reports periodically (crash-resilience).
+                    on_result(res, list(results))
 
         # Bounded concurrency via the semaphore inside each worker; gather all.
         await asyncio.gather(*(worker(c) for c in todo))

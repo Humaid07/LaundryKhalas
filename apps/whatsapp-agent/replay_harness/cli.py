@@ -243,12 +243,24 @@ async def _execute(cfg: ReplayConfig, load_result: LoadResult, convs: list[Conve
     print(f"Run id: {run_id}\nOutput: {run_dir}\n")
 
     done = {"n": 0}
+    checkpoint_every = 25
 
-    def _progress(res):
+    def _progress(res, all_results):
         done["n"] += 1
         flag = res.overall_result
         print(f"  [{done['n']}/{len(ordered)}] {res.source_chat_id} -> {flag} "
               f"({len(res.turns)} turns, ${res.usage_total.estimated_cost_usd:.4f})")
+        # Periodic report checkpoint so a mid-run interruption still leaves a
+        # complete, openable report set for everything completed so far.
+        if done["n"] % checkpoint_every == 0:
+            try:
+                by_id = {r.source_chat_id: r for r in all_results}
+                ordered_so_far = [by_id[c.source_chat_id] for c in ordered
+                                  if c.source_chat_id in by_id]
+                generate_all(ordered_so_far, load_result, run_dir, cfg)
+                print(f"    · checkpoint: reports written for {len(ordered_so_far)} conversations")
+            except Exception as exc:  # noqa: BLE001 - checkpoint must never kill the run
+                print(f"    · checkpoint skipped ({exc})")
 
     outcome = await run_replay(ordered, identities, cfg, run_id, run_dir,
                                resume=resume, on_result=_progress)
