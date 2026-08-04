@@ -123,7 +123,18 @@ run against the real TEST Supabase database.
   replayable, 3 duplicates excluded, 0 parse errors**, 10,933 inbound messages.
 - Live single conversation: PASS, 4 turns, $0.0242, real Sonnet-5 usage, capture
   verified (synthetic `+9990…` sender, no real send).
-- 25-sample: see run output under `replay-results/SAMPLE_25/`.
+- **Full-archive run BLOCKED by Anthropic credits.** The `run --all` launched and
+  replayed correctly, but the Anthropic account exhausted its API credit balance
+  after only **~$1.55** of spend (the account balance was far below the ~$87
+  estimate). At that point every turn returned HTTP 400 *"Your credit balance is
+  too low"* and the pipeline fell back to mock (its normal safety behaviour), so
+  the later conversations are mock output, not real agent replies. **14
+  conversations (124 turns) got genuine Sonnet-5 replies before exhaustion**
+  (11 PASS, 3 WARN, 0 critical). A clean, real-only report was salvaged to
+  `replay-results/REAL_ONLY/replay_report.html` (+ `real_conversations.jsonl`).
+  The 240 synthetic customers were removed from the test DB. **To finish: top up
+  Anthropic credits, then re-run fresh** (below). Optionally use Haiku 4.5 (the
+  production default) for ~5–10× lower cost.
 
 ## 17. Bugs/issues found (during build, fixed)
 - Date-separator regex missed the two-class `___3_7SH __Zq3Mc` node → 0 timestamps.
