@@ -274,33 +274,47 @@ def _tool_mutates(name: str) -> bool:
 
 
 async def cleanup_replay_state() -> int:
-    """Delete synthetic replay_* customers (phones under +999000...) and their
-    conversations/orders/messages from the TEST db, for a clean run. Returns the
-    number of customers removed. Best-effort; never raises."""
+    """Delete synthetic replay customers (non-routable +999... phones) and their
+    conversations/orders/messages from the TEST db. Returns the number of
+    customers removed. Best-effort; never raises.
+
+    NOTE: correctness no longer depends on this — each run uses a per-run phone
+    namespace (see isolation.assign_identities) so prior-run state can't leak.
+    This just keeps the TEST db tidy between runs.
+    """
     from db import database
 
     if not database.is_supabase_mode():
         return 0
+    # The customers table stores the number in `phone_e164`. Synthetic numbers
+    # start with the unassigned country code 999 (stored without the +).
+    like = "999%"
     try:
-        # Cascade-safe order: messages -> orders -> conversations -> customers.
+        cust = await database.fetch(
+            "select id from customers where phone_e164 like $1", like
+        )
+        ids = [r["id"] for r in cust]
+        if not ids:
+            return 0
+        convs = await database.fetch(
+            "select id from conversations where customer_id = any($1::uuid[])", ids
+        )
+        conv_ids = [r["id"] for r in convs]
+        if conv_ids:
+            for table in ("messages", "orders"):
+                try:
+                    await database.execute(
+                        f"delete from {table} where conversation_id = any($1::uuid[])",
+                        conv_ids,
+                    )
+                except Exception:  # noqa: BLE001 - table/col variance is non-fatal
+                    pass
+            await database.execute(
+                "delete from conversations where id = any($1::uuid[])", conv_ids
+            )
         await database.execute(
-            "delete from messages where conversation_id in "
-            "(select c.id from conversations c join customers cu on cu.id=c.customer_id "
-            "where cu.phone like '999000%' or cu.phone like '+999000%')"
+            "delete from customers where id = any($1::uuid[])", ids
         )
-        await database.execute(
-            "delete from orders where conversation_id in "
-            "(select c.id from conversations c join customers cu on cu.id=c.customer_id "
-            "where cu.phone like '999000%' or cu.phone like '+999000%')"
-        )
-        await database.execute(
-            "delete from conversations where customer_id in "
-            "(select id from customers where phone like '999000%' or phone like '+999000%')"
-        )
-        removed = await database.fetchval(
-            "with d as (delete from customers where phone like '999000%' "
-            "or phone like '+999000%' returning 1) select count(*) from d"
-        )
-        return int(removed or 0)
+        return len(ids)
     except Exception:  # noqa: BLE001
         return 0

@@ -204,7 +204,9 @@ async def _execute(cfg: ReplayConfig, load_result: LoadResult, convs: list[Conve
 
     # Order for replay + assign synthetic identities.
     ordered = isolation.order_for_replay(convs, memory_mode=cfg.customer_memory_mode)
-    identities = isolation.assign_identities(ordered, memory_mode=cfg.customer_memory_mode)
+    identities = isolation.assign_identities(
+        ordered, memory_mode=cfg.customer_memory_mode, run_id=run_id
+    )
     synthetic_numbers = isolation.all_synthetic_numbers(identities.values())
 
     # Pre-run estimate + ceiling awareness.

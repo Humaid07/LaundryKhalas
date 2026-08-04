@@ -76,7 +76,10 @@ class ReplayConfig:
     time_scale: float = 0.02
     max_delay_seconds: float = 3.0
     date_mode: str = "HISTORICAL_DATE_CONTEXT"
-    customer_memory_mode: str = "CUSTOMER_HISTORY"
+    # ISOLATED_CHAT (default): replay each chat independently so a takeover in one
+    # chat never holds another. CUSTOMER_HISTORY shares one identity per customer
+    # to test returning-customer memory (see isolation.assign_identities caveat).
+    customer_memory_mode: str = "ISOLATED_CHAT"
 
     # ---- concurrency / rate / cost ----------------------------------------
     max_concurrency: int = 5
@@ -132,7 +135,7 @@ class ReplayConfig:
                 "WHATSAPP_REPLAY_DATE_MODE", "HISTORICAL_DATE_CONTEXT"
             ),
             customer_memory_mode=os.getenv(
-                "WHATSAPP_REPLAY_CUSTOMER_MEMORY_MODE", "CUSTOMER_HISTORY"
+                "WHATSAPP_REPLAY_CUSTOMER_MEMORY_MODE", "ISOLATED_CHAT"
             ),
             max_concurrency=_int("WHATSAPP_REPLAY_MAX_CONCURRENCY", 5),
             requests_per_minute=_int("WHATSAPP_REPLAY_REQUESTS_PER_MINUTE", 40),
