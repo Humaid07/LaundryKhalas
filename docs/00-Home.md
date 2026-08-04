@@ -22,7 +22,29 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
-## Latest — Facilities Overview + Add-Facility modal redesign (2026-08-03)
+## Latest — Historical WhatsApp Replay Harness (2026-08-04)
+
+A new testing tool, `apps/whatsapp-agent/replay_harness/`, replays every original
+**inbound customer** message from the uploaded WhatsApp archive
+(`WhatsApp_All_Chats.zip`) through the **current** agent to answer "how would the
+agent respond today?" — without typing anything or messaging any real customer.
+It drives the real `POST /webhooks/evolution` pipeline in-process (same model,
+prompts, pricing, discount/pickup/facility engines, memory, workflow, safety),
+swapping ONLY the outbound transport for a capture-only adapter behind a
+fail-closed safety guard. It parses the HTML export (533 chats → 470 replayable,
+0 parse errors), preserves exact wording/typos/mixed-language, dedupes against the
+fallback archive, isolates each chat under a non-routable `+999000…` synthetic
+identity, replays via `claude-sonnet-5`, and captures every reply + tool call +
+workflow state + cost. Outputs: interactive `replay_report.html` (customer vs
+current-agent vs historical-staff side-by-side), summary/turn CSVs, JSONL, failed
+exports, critical-failure CSV, cost + archive reports. Live validated (single chat
+PASS + 25-sample). **Full-archive run gated at $70** (est. ~$87) pending founder
+approval. Gates: replay unit tests **46 passed**; no regressions in existing suite.
+Design: [[2026-08-04-whatsapp-historical-replay-harness-design|spec]] ·
+Build report: `build-reports/2026-08-04-whatsapp-historical-replay-harness.md` ·
+Demo: `presentation-notes/week-04-replay-harness-demo.md`.
+
+## Facilities Overview + Add-Facility modal redesign (2026-08-03)
 
 Two connected internal-dashboard improvements. (1) The **Add Facility** modal was
 redesigned: strong dark overlay + blur (background no longer readable), larger centred
