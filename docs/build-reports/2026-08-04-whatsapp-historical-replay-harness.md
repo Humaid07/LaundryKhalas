@@ -117,7 +117,7 @@ run against the real TEST Supabase database.
 - Live single-conversation, then a 25-conversation representative sample.
 
 ## 16. Test results
-- Replay unit tests: **46 passed**.
+- Replay unit tests: **52 passed** (incl. 6 isolation regression tests).
 - Existing spot-check: **30 passed** (no regressions).
 - Parser validation on real archive: **533 conversations parsed, 530 kept, 470
   replayable, 3 duplicates excluded, 0 parse errors**, 10,933 inbound messages.
@@ -130,6 +130,16 @@ run against the real TEST Supabase database.
   Fixed → 100% inbound timestamp coverage.
 - Inline emoji `<img src="../imgs/emoji/…">` was misdetected as a media
   attachment. Fixed with a same-folder real-attachment check.
+- **Cross-run state leak (found during the live run).** `cleanup_replay_state`
+  referenced a nonexistent `customers.phone` column (actual: `phone_e164`), so it
+  silently deleted nothing. A prior run had left a synthetic customer in
+  `human_takeover` (from a complaint), and because every run reused the same
+  `+999000…` numbers, a later run's turns were all *held* → no reply, `$0` cost.
+  Fixed by (1) a **per-run synthetic phone namespace** (`+999<run-tag><index>`) so
+  runs can never collide, (2) defaulting to **ISOLATED_CHAT** so a takeover in one
+  chat can't hold another, and (3) correcting the cleanup column. Verified live:
+  the stuck `+974` conversation then returned real on-policy replies. Added 6
+  isolation regression tests (commit `b3c86b4`).
 
 ## 18. Known limitations
 - Image messages with no caption produce no agent reply (mirrors current
