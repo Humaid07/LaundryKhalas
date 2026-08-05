@@ -559,6 +559,25 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
     settings = get_settings()
     text = combined.text
 
+    # Customer engaged this turn → cancel any still-pending follow-ups for the
+    # conversation (spec §§14/24/25: a reply suppresses payment / quote / abandonment
+    # nudges). Supabase-only, best-effort — never breaks the turn. The sweeper also
+    # re-checks "customer_replied" at send time, so this is a proactive cleanup.
+    if database.is_supabase_mode():
+        try:
+            from db.repositories import scheduled_followups_repo
+            await scheduled_followups_repo.cancel_for_conversation(
+                convo["id"], reason="customer_replied")
+        except Exception as exc:  # noqa: BLE001 - cleanup must never break the reply
+            logger.debug("followup_cancel_on_reply_failed", error=str(exc))
+        # A website Order-Now visitor who now messages on WhatsApp has CONVERTED —
+        # mark their intent so the §24 abandonment follow-ups are suppressed.
+        try:
+            from db.repositories import web_order_intents_repo
+            await web_order_intents_repo.mark_converted_by_number(normalize_e164(phone) or phone)
+        except Exception as exc:  # noqa: BLE001 - cleanup must never break the reply
+            logger.debug("web_intent_convert_failed", error=str(exc))
+
     # --- Abuse / threat safety gate (BEFORE any AI or booking work) ----------
     # Classify the COMBINED turn deterministically (fast, no LLM). On a genuine
     # abuse/threat: persist the human-intervention state + PAUSE the conversation
@@ -637,6 +656,21 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
 
     def _booking(row):
         return _booking_from_row(row, profile_name=profile_name, verified_name=verified_name)
+
+    # --- Internal intent classifier (Stage 1: SHADOW) ------------------------
+    # Runs AFTER aggregation + state-load and BEFORE the main agent. It records a
+    # structured classification (intent/service/route/sentiment/human signal) for
+    # analytics + dashboard, but in shadow mode does NOT change routing — the main
+    # Sonnet agent below stays authoritative. Fully self-contained and never
+    # raises, so it can never break the customer's turn.
+    if settings.whatsapp_classifier_enabled:
+        from classifier import integration as classifier_integration
+
+        await classifier_integration.run_shadow_classification(
+            convo, customer, combined,
+            active_draft=active_draft, draft_state=draft_state,
+            verified_name=verified_name, last_inbound_msg=last_inbound_msg,
+            turn_id=turn_id)
 
     # --- Claude-orchestrated conversation (natural language, default path) ---
     if settings.anthropic_booking_orchestration and settings.live_llm_ready:
@@ -845,8 +879,12 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
                     "intent": decision.intent,
                     "provider": agent_reply.provider,
                     "model": agent_reply.model,
+                    "effort": agent_reply.effort,
                     "tokens_in": agent_reply.tokens_in,
                     "tokens_out": agent_reply.tokens_out,
+                    "cache_read_tokens": agent_reply.cache_read_tokens,
+                    "cache_write_tokens": agent_reply.cache_write_tokens,
+                    "cache_hit": agent_reply.cache_hit,
                     "cost_usd": agent_reply.cost_usd,
                     "tool_calls": agent_reply.tool_calls,
                 })

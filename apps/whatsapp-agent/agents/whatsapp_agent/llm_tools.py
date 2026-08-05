@@ -106,6 +106,31 @@ TOOL_SCHEMAS: list[dict] = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "lookup_alteration_price",
+        "description": (
+            "Look up the exact price for an ALTERATION or garment repair the customer "
+            "described (e.g. 'shorten my trousers', 'take in the waist', 'replace a zip', "
+            "'sew a button'). Returns the specific per-item price with any pushback / "
+            "quantity tier applied, OR flags it as priced-after-inspection when it needs a "
+            "facility quotation. Pass quantity for multiple items, and pushback=true only "
+            "when the customer is haggling. Use this before quoting ANY alteration price — "
+            "never invent one."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string",
+                                "description": "The alteration as the customer described it."},
+                "quantity": {"type": "integer", "minimum": 1,
+                             "description": "Number of items (or buttons). Default 1."},
+                "pushback": {"type": "boolean",
+                             "description": "True only if the customer is pushing back on the price."},
+            },
+            "required": ["description"],
+            "additionalProperties": False,
+        },
+    },
     # Grounded, read-only facility directory tools (DB is the source of truth).
     *facility_tools.READ_TOOL_SCHEMAS,
 ]
@@ -257,6 +282,24 @@ def _check_service_area(area: str) -> dict:
 
 
 # --- Dispatch --------------------------------------------------------------
+def _lookup_alteration_price(description: str, *, quantity: int = 1, pushback: bool = False) -> dict:
+    """Resolve an alteration to its exact tiered price via services/alterations (spec §18)."""
+    from services import alterations
+    q = alterations.resolve_alteration(description, quantity=quantity, pushback=pushback)
+    if not q.matched:
+        return {"match": "none",
+                "guidance": ("Not a recognised alteration. Ask the customer what item needs "
+                             "altering and what should be done; do NOT invent a price.")}
+    if q.facility_quote:
+        return {"match": "facility_quote", "reply": alterations.FACILITY_QUOTE_REPLY,
+                "guidance": "Priced by the facility after inspection; send the reply verbatim.",
+                "rule_version": q.rule_version}
+    return {"match": "ok", "type": q.type_code, "name": q.name,
+            "unit_price": q.unit_price, "quantity": q.quantity, "total": q.total,
+            "currency": q.currency, "price_label": f"{q.currency} {q.unit_price:g}",
+            "rule_version": q.rule_version}
+
+
 async def execute_tool(name: str, tool_input: dict, *, market: str = "AE") -> tuple[str, bool]:
     """Validate + run one tool call. Returns (result_json, is_error).
 
@@ -286,6 +329,13 @@ async def execute_tool(name: str, tool_input: dict, *, market: str = "AE") -> tu
             if not area:
                 return json.dumps({"error": "area is required."}), True
             result = _check_service_area(area)
+        elif name == "lookup_alteration_price":
+            desc = str(tool_input.get("description", "")).strip()
+            if not desc:
+                return json.dumps({"error": "description is required."}), True
+            result = _lookup_alteration_price(
+                desc, quantity=int(tool_input.get("quantity", 1) or 1),
+                pushback=bool(tool_input.get("pushback", False)))
         elif name in facility_tools.READ_TOOL_NAMES:
             # Facility directory tools require the Supabase-backed facility tables.
             if not database.is_supabase_mode():

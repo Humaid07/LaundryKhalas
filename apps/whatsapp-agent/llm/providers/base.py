@@ -74,6 +74,10 @@ class LLMResult:
     request_id: str | None = None
     # Total tool rounds the loop ran (0 for a plain text reply).
     tool_rounds: int = 0
+    # Reasoning effort actually configured for this turn (Sonnet 5 / adaptive-
+    # thinking family via output_config.effort). None for models that don't take
+    # it (Haiku / mock) so analytics can tell "not applicable" from "high".
+    effort: str | None = None
 
     @property
     def cache_hit(self) -> bool:

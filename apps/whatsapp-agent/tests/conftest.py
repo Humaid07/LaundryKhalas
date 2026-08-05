@@ -14,6 +14,19 @@ os.environ.setdefault("META_WHATSAPP_VERIFY_TOKEN", "test-verify-token")
 # Pin tests to local SQLite mode regardless of what a developer's .env sets
 # (e.g. DATABASE_MODE=supabase for live work) so the suite stays hermetic.
 os.environ.setdefault("DATABASE_MODE", "sqlite")
+# The internal intent classifier persists to `whatsapp_message_classifications`,
+# a Supabase/migration-owned table (000039) that is NOT part of the SQLite ORM
+# schema created by init_db(). Left enabled, its fail-open shadow hook fires on
+# every webhook-driven test, its raw-SQL insert hits a missing table, and the
+# poisoned connection cascades demo-seed collisions into unrelated tests. Default
+# it OFF for the hermetic suite (exactly like the mock/sqlite pins above); the
+# classifier's own test modules opt back in and provide the table they need.
+os.environ.setdefault("WHATSAPP_CLASSIFIER_ENABLED", "false")
+# Pin payments to the deterministic offline mock gateway regardless of a
+# developer's .env (which may set STRIPE_MODE=test + a real key for live sandbox
+# work). Env vars override .env, so this keeps the suite hermetic: the Stripe SDK
+# is never imported and the webhook route uses the mock (JSON) verifier.
+os.environ.setdefault("STRIPE_MODE", "mock")
 
 
 @pytest.fixture(autouse=True, scope="session")

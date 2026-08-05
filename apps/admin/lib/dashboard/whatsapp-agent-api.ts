@@ -86,6 +86,58 @@ export interface InboxMessageDTO {
   created_at: string;
 }
 
+export interface ClassificationDTO {
+  id: string;
+  conversation_id: string | null;
+  message_id: string | null;
+  classification_version: string;
+  classifier_model: string | null;
+  classifier_status: string;
+  primary_intent: string;
+  secondary_intents: string[];
+  intent_confidence: number;
+  service_domain: string;
+  service_subtype: string | null;
+  service_confidence: number;
+  customer_goal: string;
+  conversation_route: string;
+  recommended_route: string | null;
+  fixed_template_id: string | null;
+  pricing_intent: string;
+  payment_intent: string;
+  repair_intent: string;
+  complaint_type: string;
+  sentiment: string;
+  frustration_level: number;
+  urgency: string;
+  requires_human: boolean;
+  human_reason: string | null;
+  needs_clarification: boolean;
+  clarification_topic: string | null;
+  should_cancel_followups: boolean;
+  reason_codes: string[];
+  shadow_mode: boolean;
+  latency_ms: number | null;
+  estimated_cost: number;
+  corrected_primary_intent: string | null;
+  corrected_service_domain: string | null;
+  corrected_complaint_type: string | null;
+  corrected_human_label: string | null;
+  corrected_by: string | null;
+  corrected_at: string | null;
+  correction_reason: string | null;
+  created_at: string;
+}
+
+export interface ClassificationCorrectionPayload {
+  corrected_by: string;
+  primary_intent?: string | null;
+  service_domain?: string | null;
+  complaint_type?: string | null;
+  human_label?: string | null;
+  reason?: string | null;
+}
+
 export interface AgentFlagDTO {
   id: string;
   conversation_id: string | null;
@@ -211,10 +263,29 @@ export interface OrderDTO {
   catalogue_category?: string | null;   // e.g. "Clean & Press"
   pricing?: OrderPricingDTO;
   payment: string | null;
+  // Order-discount snapshot (spec §§15, 29). Backend-authoritative.
+  eligible_subtotal?: number | null;
+  discount_percentage?: number | null;
+  discount_amount?: number | null;
+  discount_reason?: string | null;
+  rule_version?: string | null;         // service rule-set version (spec §§17, 29)
+  saved_address_reuse?: boolean | null; // reused a saved pickup address (spec §29)
+  // Stripe-first payment surfacing (spec §§13, 29). Backend-authoritative.
+  payment_preference?: "UNDECIDED" | "STRIPE" | "CASH_ON_DELIVERY";
+  cash_on_delivery?: boolean;
+  payment_status?: string;              // unpaid | pending | paid | failed | refunded | void
+  payment_followup_stage?: number;
+  stripe_hosted_invoice_url?: string | null;
   is_demo: boolean;
   // Order↔conversation link + dashboard-only fields (from /api/orders/search).
   conversation_id: string | null;
   customer_phone: string | null;
+  assigned_persona?: string | null;     // customer's persistent AI persona (spec §29)
+  customer_lifecycle?: string | null;   // §29 lifecycle stage
+  facility_quote_status?: string | null;      // §29 cross-entity status
+  facility_issue_status?: string | null;
+  web_intent_status?: string | null;
+  abandoned_followup_status?: string | null;
   needs_attention: boolean;
   human_takeover: boolean;
   conversation_status: string | null;
@@ -526,4 +597,17 @@ export const agentApi = {
       method: "PATCH",
       body: JSON.stringify({ status, actor_name }),
     }),
+
+  // --- Intent classifier (read + Operations correction) ---
+  listClassifications: (conversationId: string) =>
+    request<ClassificationDTO[]>(`/api/conversations/${conversationId}/classifications`),
+  correctClassification: (
+    conversationId: string,
+    classificationId: string,
+    payload: ClassificationCorrectionPayload,
+  ) =>
+    request<ClassificationDTO>(
+      `/api/conversations/${conversationId}/classifications/${classificationId}/correction`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
 };

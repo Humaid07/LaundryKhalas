@@ -1,0 +1,21 @@
+{
+  "_note": "Alteration price matrix (spec §18, ruleset 2026_08_05). Each listed type has a base price, an optional pushback (haggle) price, and an optional quantity-tier price with its threshold. Prices are final/VAT-inclusive AED per item (button is per button). GENERIC / unlisted alterations (basic hemming with no garment, a minor tear, generic tightening, lining repair) have NO price and route to a facility quotation — never invent a price. The agent resolves the specific type + price; the backend is authoritative.",
+  "version": "2026-08-05.1",
+  "currency": "AED",
+  "types": {
+    "TROUSER_SHORTEN": {"name": "Trouser shortening", "base": 40, "pushback": 35, "quantity_price": 30, "quantity_threshold": 6, "aliases": ["trouser shortening", "shorten trousers", "shorten trouser", "shorten pants", "hem trousers", "hem pants", "trouser hem", "shorten my trousers"]},
+    "DRESS_SHORTEN": {"name": "Dress shortening", "base": 45, "pushback": 40, "quantity_price": 35, "quantity_threshold": 2, "aliases": ["dress shortening", "shorten dress", "shorten my dress", "hem dress", "dress hem"]},
+    "SLEEVE_SHORTEN_SHIRT": {"name": "Sleeve shortening (shirt or t-shirt)", "base": 35, "aliases": ["sleeve shortening", "shorten sleeves", "shorten shirt sleeves", "shirt sleeve", "t-shirt sleeve", "shorten my sleeves"]},
+    "SLEEVE_SHORTEN_JACKET": {"name": "Jacket sleeve shortening", "base": 65, "aliases": ["jacket sleeve", "shorten jacket sleeves", "blazer sleeve", "jacket sleeve shortening"]},
+    "WAIST_REDUCE": {"name": "Waist reduction", "base": 40, "pushback": 35, "quantity_price": 30, "quantity_threshold": 2, "aliases": ["waist reduction", "reduce waist", "take in waist", "take in the waist", "tighten waist", "waist in"]},
+    "WAIST_EXPAND": {"name": "Waist expansion", "base": 45, "pushback": 40, "quantity_price": 35, "quantity_threshold": 2, "aliases": ["waist expansion", "expand waist", "let out waist", "let out the waist", "loosen waist", "waist out"]},
+    "LOOSEN_TROUSERS": {"name": "Loosening trousers", "base": 35, "aliases": ["loosen trousers", "loosen pants", "loosening trousers", "trousers loosen"]},
+    "LOOSEN_SHIRT": {"name": "Loosening shirts", "base": 35, "aliases": ["loosen shirt", "loosen shirts", "loosening shirts", "shirt loosen"]},
+    "ZIP_SMALL_CUSTOMER": {"name": "Small zip replacement (zip supplied by you)", "base": 30, "aliases": ["small zip my own", "small zip customer", "replace small zip own zip", "small zip i provide"]},
+    "ZIP_SMALL_LK": {"name": "Small zip replacement", "base": 40, "aliases": ["small zip", "replace small zip", "small zip replacement"]},
+    "ZIP_LONG_CUSTOMER": {"name": "Long zip replacement (zip supplied by you)", "base": 50, "aliases": ["long zip my own", "long zip customer", "replace long zip own zip", "long zip i provide"]},
+    "ZIP_LONG_LK": {"name": "Long zip replacement", "base": 60, "aliases": ["long zip", "replace long zip", "long zip replacement"]},
+    "BUTTON_REPLACE": {"name": "Button replacement", "base": 10, "per_unit": "button", "aliases": ["replace button", "button replacement", "sew button", "sew on button", "replace buttons", "fix button"]}
+  },
+  "facility_quote_keywords": ["basic hemming", "hemming", "minor tear", "tear", "tear sewing", "sew tear", "generic tightening", "lining", "lining repair", "repair lining", "replace lining"]
+}

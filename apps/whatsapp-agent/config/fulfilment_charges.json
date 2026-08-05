@@ -1,16 +1,16 @@
 {
-  "_note": "Minimum-order and pickup/delivery-charge rules (founder-approved spec §2.3). Config is the single source of truth — thresholds/fees are NEVER hardcoded across components. Rule: an order whose eligible total is at or above `free_delivery_min` gets FREE pickup & delivery; below it a single flat `delivery_fee` applies (stated up front). Amounts are per-currency and already final/VAT-inclusive (services.money). Keyed by market so AED (UAE) and QAR (Qatar) can diverge later without code changes. Comparison for free delivery is >= (an order exactly at the minimum ships free).",
-  "version": "2026-07-29.1",
+  "_note": "Minimum-order and pickup/delivery-charge rules (ruleset 2026_08_05, spec §12). Config is the single source of truth — thresholds/fees are NEVER hardcoded across components. Rule: an order whose SERVICE SUBTOTAL BEFORE DISCOUNT is at or above `free_delivery_min` gets FREE pickup & delivery; below it we ask the customer to add an item, and if they decline a single flat `delivery_fee` applies (stated up front, never disguised as a service price). Amounts are per-currency and already final/VAT-inclusive (services.money). Keyed by market so AED (UAE) and QAR (Qatar) diverge without code changes. Comparison for free delivery is >= (an order exactly at the minimum ships free). Decision 2026-08-05: AED/QAR 30 minimum, AED/QAR 10 fee (was 50/8).",
+  "version": "2026-08-05.1",
   "markets": {
     "AE": {
       "currency": "AED",
-      "free_delivery_min": 50.0,
-      "delivery_fee": 8.0
+      "free_delivery_min": 30.0,
+      "delivery_fee": 10.0
     },
     "QA": {
       "currency": "QAR",
-      "free_delivery_min": 50.0,
-      "delivery_fee": 8.0
+      "free_delivery_min": 30.0,
+      "delivery_fee": 10.0
     }
   }
 }

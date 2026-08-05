@@ -171,6 +171,12 @@ def _line_for(item: dict, quantity: float, measure: float | None,
             base_total = float(money.round_money(money.to_decimal(base_price) * money.to_decimal(measure)))
             final_total = float(money.final_line_total(
                 base_price, measure, vat_rate=vat_rate, prices_include_vat=prices_include_vat))
+            # Per-item minimum charge (e.g. curtains AED 50, ruleset 2026_08_05): a measured
+            # line never falls below it. The minimum is a final, VAT-inclusive figure.
+            minimum = item.get("minimum_charge")
+            if minimum is not None and final_total < float(minimum):
+                final_total = float(money.round_money(money.to_decimal(minimum)))
+                base_total = final_total
         else:
             kind, base_total, final_total = "pending", None, None
     else:

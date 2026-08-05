@@ -209,7 +209,8 @@
             {"code": "HOME_CARE_SOFA_COVER_REGULAR", "name": "Sofa Cover — Regular", "current_price": 46, "aliases": ["sofa cover", "sofa cover regular"]},
             {"code": "HOME_CARE_SOFA_COVER_LARGE", "name": "Sofa Cover — Large", "current_price": 56, "aliases": ["large sofa cover", "sofa cover large"]},
             {"code": "HOME_CARE_CUSHION_COVER_SMALL", "name": "Cushion Cover — Small", "current_price": 13, "aliases": ["cushion cover small", "small cushion cover"]},
-            {"code": "HOME_CARE_CUSHION_COVER_MEDIUM", "name": "Cushion Cover — Medium", "current_price": 15, "aliases": ["cushion cover medium", "medium cushion cover", "cushion cover"]}
+            {"code": "HOME_CARE_CUSHION_COVER_MEDIUM", "name": "Cushion Cover — Medium", "current_price": 15, "aliases": ["cushion cover medium", "medium cushion cover", "cushion cover"]},
+            {"code": "HOME_CARE_CUSHION_COVER_LARGE", "name": "Cushion Cover — Large", "current_price": 20, "aliases": ["cushion cover large", "large cushion cover"]}
           ]
         },
         {
@@ -250,8 +251,8 @@
           "sort_order": 1,
           "items": [
             {"code": "WASH_FOLD_6KG", "name": "6 kg Bag", "pricing_type": "PER_BAG", "pricing_unit": "BAG", "current_price": 60, "bag_limit_kg": 6, "aliases": ["6 kg bag", "6kg bag", "6 kg", "small bag"]},
-            {"code": "WASH_FOLD_12KG", "name": "Up to 12 kg Bag", "pricing_type": "PER_BAG", "pricing_unit": "BAG", "current_price": 80, "bag_limit_kg": 12, "aliases": ["12 kg bag", "12kg bag", "up to 12 kg", "large bag", "big bag"]},
-            {"code": "WASH_FOLD_ADDITIONAL_KG", "name": "Additional Weight", "pricing_type": "PER_KG", "pricing_unit": "KG", "current_price": 7, "aliases": ["additional weight", "extra weight", "excess weight", "per kg"], "note": "Charged after the selected bag weight limit is reached, weighed at pickup."}
+            {"code": "WASH_FOLD_12KG", "name": "Up to 12 kg Bag", "pricing_type": "PER_BAG", "pricing_unit": "BAG", "current_price": 90, "bag_limit_kg": 12, "aliases": ["12 kg bag", "12kg bag", "up to 12 kg", "large bag", "big bag"]},
+            {"code": "WASH_FOLD_ADDITIONAL_KG", "name": "Additional Weight", "pricing_type": "PER_KG", "pricing_unit": "KG", "current_price": 12, "aliases": ["additional weight", "extra weight", "excess weight", "per kg"], "note": "Charged per kg above a 12 kg bag limit, weighed at pickup (ruleset 2026_08_05)."}
           ]
         }
       ]
@@ -350,7 +351,7 @@
             {"code": "RESTORATION_HEAVY", "name": "Heavy Restoration", "is_starting_price": true, "requires_inspection": true, "current_price": 170, "description": "Full color rework, leather edging, glue/stitching & sole icing + stain protection", "aliases": ["heavy restoration"]},
             {"code": "RESTORATION_ICING_SOLES", "name": "Icing Soles", "is_starting_price": true, "requires_inspection": true, "current_price": 35, "description": "De-yellow sole treatment using hydrogen peroxide + UV light", "aliases": ["icing soles", "icing sole", "de-yellow soles"]},
             {"code": "RESTORATION_STAIN_PROTECTION", "name": "Stain Protection", "is_starting_price": true, "requires_inspection": true, "current_price": 20, "description": "Water-repellent coating", "aliases": ["stain protection", "stain proofing"]},
-            {"code": "RESTORATION_SOLE_REPLACEMENT", "name": "Sole Replacement", "is_starting_price": true, "requires_inspection": true, "current_price": 550, "description": "Complete replacement of worn-out soles to restore grip, structure & longevity", "aliases": ["sole replacement", "replace soles"]}
+            {"code": "RESTORATION_SOLE_REPLACEMENT", "name": "Sole Replacement", "pricing_type": "INSPECTION_REQUIRED", "requires_inspection": true, "description": "Complete replacement of worn-out soles — priced by the facility after inspection (ruleset 2026_08_05: the previous AED 550 fixed price was removed, sole replacement is now a facility quotation).", "aliases": ["sole replacement", "replace soles"]}
           ]
         }
       ]
@@ -408,7 +409,7 @@
           "name": "Curtain Care",
           "sort_order": 1,
           "items": [
-            {"code": "HOME_CARE_CURTAIN_SQM", "name": "Curtain", "pricing_type": "PER_SQM", "pricing_unit": "SQM", "current_price": 20, "regular_price": 25, "requires_measurement": true, "aliases": ["curtain", "curtains"]}
+            {"code": "HOME_CARE_CURTAIN_SQM", "name": "Curtain", "pricing_type": "PER_SQM", "pricing_unit": "SQM", "current_price": 20, "regular_price": 25, "minimum_charge": 50, "requires_measurement": true, "note": "Minimum curtain charge AED 50 (ruleset 2026_08_05).", "aliases": ["curtain", "curtains"]}
           ]
         }
       ]

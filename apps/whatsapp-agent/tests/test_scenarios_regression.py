@@ -87,10 +87,10 @@ def test_s7_slot_honesty_in_prompt():
     assert "Never invent availability" in PROMPT
 
 
-# 8) Payment — push card, allow cash, never a driver side-deal.
+# 8) Payment — Stripe-first, allow cash fallback, never a driver side-deal (spec §13).
 def test_s8_payment_rules_in_prompt():
-    assert "prefer secure online card payment" in PROMPT
-    assert "cash on" in PROMPT
+    assert "Stripe is the regular method" in PROMPT
+    assert "cash on delivery" in PROMPT
     assert "NEVER arrange cash off-system directly with the driver" in PROMPT
 
 
@@ -114,7 +114,7 @@ def test_s10_route_to_specialist_categories():
 # 11) Standard alterations — routine, priced from a starting price, NOT photo-gated,
 #     and never refused as a "repair" (spec 2026-08-01 §§2/5).
 def test_s11_standard_alterations_priced_not_photo_gated():
-    assert "alterations start from AED X per item" in PROMPT
+    assert "lookup_alteration_price for the EXACT price" in PROMPT
     assert "do NOT ask for a photo" in PROMPT
     assert "Never say we don't do repairs" in PROMPT
 

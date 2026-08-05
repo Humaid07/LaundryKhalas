@@ -6,8 +6,8 @@
   "verified_at": "2026-07-29",
   "prices": {
     "WASH_FOLD_6KG": {"current_price": 60},
-    "WASH_FOLD_12KG": {"current_price": 80, "regular_price": 120},
-    "WASH_FOLD_ADDITIONAL_KG": {"current_price": 10.95},
+    "WASH_FOLD_12KG": {"current_price": 90, "regular_price": 120},
+    "WASH_FOLD_ADDITIONAL_KG": {"current_price": 12},
 
     "CLEAN_PRESS_SHIRT": {"current_price": 9, "regular_price": 12},
     "CLEAN_PRESS_POLO_SHIRT": {"current_price": 9, "regular_price": 12},

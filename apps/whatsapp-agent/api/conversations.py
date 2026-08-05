@@ -10,10 +10,12 @@ human-operator replies during a takeover.
 """
 import structlog
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from channels.evolution_whatsapp import EvolutionWhatsAppChannel
+from classifier import taxonomy as clf_tax
 from db import database
-from db.repositories import conversations_repo, messages_repo
+from db.repositories import classifications_repo, conversations_repo, messages_repo
 from schemas import HumanMessageRequest, HumanTakeoverRequest
 from settings import get_settings
 
@@ -112,3 +114,62 @@ async def resolve_conversation(conversation_id: str):
     if convo is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
     return convo
+
+
+# --- Intent classifier (read + Operations correction) ----------------------
+class ClassificationCorrection(BaseModel):
+    """An Operations correction. Only the provided fields are updated; the
+    ORIGINAL model output is never overwritten (stored in corrected_* columns)."""
+    corrected_by: str
+    primary_intent: str | None = None
+    service_domain: str | None = None
+    complaint_type: str | None = None
+    human_label: str | None = None
+    reason: str | None = None
+
+
+@router.get("/{conversation_id}/classifications")
+async def list_classifications(conversation_id: str, limit: int = 50):
+    """Per-turn classifier results for this conversation (newest first). Empty
+    (not an error) in local SQLite mode so the dashboard renders cleanly."""
+    if not database.is_supabase_mode():
+        return []
+    return await classifications_repo.get_for_conversation(conversation_id, limit=limit)
+
+
+@router.post("/{conversation_id}/classifications/{classification_id}/correction")
+async def correct_classification(
+    conversation_id: str, classification_id: str, payload: ClassificationCorrection
+):
+    """Record an Operations correction (analytics/eval feedback). Validates each
+    corrected value against the taxonomy; does not reverse any completed side
+    effect (corrections are for routing-where-safe, analytics + evaluation)."""
+    _require_supabase()
+    if not get_settings().whatsapp_classifier_log_corrections:
+        raise HTTPException(status_code=403, detail="Classifier corrections are disabled.")
+    if not (payload.corrected_by or "").strip():
+        raise HTTPException(status_code=422, detail="corrected_by is required.")
+
+    for value, vocab, name in (
+        (payload.primary_intent, clf_tax.PRIMARY_INTENTS, "primary_intent"),
+        (payload.service_domain, clf_tax.SERVICE_DOMAINS, "service_domain"),
+        (payload.complaint_type, clf_tax.COMPLAINT_TYPES, "complaint_type"),
+        (payload.human_label, clf_tax.HUMAN_REASONS, "human_label"),
+    ):
+        if value is not None and value not in vocab:
+            raise HTTPException(status_code=422, detail=f"Invalid {name}: {value!r}")
+
+    updated = await classifications_repo.add_correction(
+        classification_id,
+        corrected_by=payload.corrected_by.strip(),
+        primary_intent=payload.primary_intent,
+        service_domain=payload.service_domain,
+        complaint_type=payload.complaint_type,
+        human_label=payload.human_label,
+        reason=payload.reason,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Classification not found.")
+    logger.info("classification_corrected", conversation=conversation_id,
+                classification=classification_id, by=payload.corrected_by)
+    return updated

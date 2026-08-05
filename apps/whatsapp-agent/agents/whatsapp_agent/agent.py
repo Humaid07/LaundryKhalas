@@ -66,6 +66,12 @@ class AgentReply:
     tokens_out: int = 0
     cost_usd: float = 0.0
     tool_calls: list[str] = field(default_factory=list)
+    # Prompt-cache accounting + reasoning effort (Sonnet 5). Recorded so caching
+    # can be verified in production and spend traced to the effort actually used.
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    cache_hit: bool = False
+    effort: str | None = None
 
 
 def _windowed_history(
@@ -338,4 +344,8 @@ async def handle_message(
         tokens_out=result.tokens_out,
         cost_usd=result.cost_usd,
         tool_calls=[tc.name for tc in result.tool_calls],
+        cache_read_tokens=result.cache_read_tokens,
+        cache_write_tokens=result.cache_write_tokens,
+        cache_hit=result.cache_hit,
+        effort=result.effort,
     )

@@ -35,9 +35,11 @@ def test_qa_market_is_configured_with_qar():
     assert catalogue.market_currency("AE") == "AED"
 
 
-def test_qa_additional_kg_price_differs_from_ae():
+def test_qa_wash_fold_prices_match_ruleset_2026_08_05():
     prices = catalogue.market_prices("QA")
-    assert prices["WASH_FOLD_ADDITIONAL_KG"] == 10.95   # QAR (AE is 7)
+    # Ruleset 2026_08_05: QAR 12 additional-kg (was 10.95), QAR 90 for the 12 kg bag.
+    assert prices["WASH_FOLD_ADDITIONAL_KG"] == 12
+    assert prices["WASH_FOLD_12KG"] == 90
     assert prices["CLEAN_PRESS_SHIRT"] == 9
 
 
@@ -50,7 +52,7 @@ def test_qa_quote_uses_qar_prices_and_currency():
          {"item_code": "WASH_FOLD_ADDITIONAL_KG", "quantity": 1, "measure": 4}],
         market="QA")
     assert q.currency == "QAR"
-    assert q.customer_total == 103.80          # 60 + 4×10.95
+    assert q.customer_total == 108.0           # 60 + 4×12 (ruleset 2026_08_05)
     assert all("QAR" in ln for ln in pricing.format_quote_lines(q))
 
 
@@ -58,7 +60,7 @@ def test_ae_baseline_unchanged():
     q = pricing.calculate_estimate([{"item_code": "WASH_FOLD_6KG", "quantity": 1},
                                     {"item_code": "WASH_FOLD_ADDITIONAL_KG", "quantity": 1, "measure": 4}])
     assert q.currency == "AED"
-    assert q.customer_total == 88.0            # 60 + 4×7
+    assert q.customer_total == 108.0           # 60 + 4×12 (ruleset 2026_08_05)
 
 
 def test_qa_unpriced_item_is_inspection_not_aed():
@@ -121,5 +123,5 @@ async def test_order_summary_in_qar_for_qatar_customer():
     data = json.loads(text)
     assert data["final_price_aed"] == 45.0     # 5 × QAR 9 (field name is legacy)
     assert all("QAR" in ln for ln in data["summary_lines"])
-    # QA delivery: 45 < 50 → flat QAR 8 fee
-    assert data["delivery_free"] is False and data["delivery_fee_aed"] == 8.0
+    # QA delivery: 45 >= 30 → free (ruleset 2026_08_05 minimum QAR 30)
+    assert data["delivery_free"] is True and data["delivery_fee_aed"] == 0.0

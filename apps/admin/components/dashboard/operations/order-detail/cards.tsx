@@ -71,6 +71,12 @@ export function PickupDeliveryCard({ order }: { order: Order }) {
 
 /* ------------------------------ Customer snapshot --------------------------- */
 
+const lifecycleLabel: Record<string, string> = {
+  NEW_PROSPECT: "New prospect", RETURNING_PROSPECT: "Returning prospect",
+  EXISTING_CUSTOMER: "Existing customer", ACTIVE_CUSTOMER: "Active customer",
+  B2B_LEAD: "B2B lead",
+};
+
 export function CustomerSnapshotCard({ order }: { order: Order }) {
   const [reveal, setReveal] = useState(false);
   const { totalOrders, lastOrderDate } = customerStats(order);
@@ -91,6 +97,25 @@ export function CustomerSnapshotCard({ order }: { order: Order }) {
         <Field label="City / Area" value={`${order.city}, ${order.market}`} />
         <Field label="Total orders" value={totalOrders} />
         <Field label="Last order" value={formatRelativeTime(lastOrderDate)} />
+        {/* §29 surfacing — rendered only for live agent orders that carry the data. */}
+        {order.assigned_persona && <Field label="AI persona" value={order.assigned_persona} />}
+        {order.customer_lifecycle && (
+          <Field label="Lifecycle" value={lifecycleLabel[order.customer_lifecycle] ?? order.customer_lifecycle} />
+        )}
+        {order.saved_address_reuse != null && (
+          <Field label="Saved address" value={order.saved_address_reuse ? "Reused" : "New"} />
+        )}
+        {order.human_takeover && <Field label="Human intervention" value="Active" />}
+        {order.facility_quote_status && order.facility_quote_status !== "none" && (
+          <Field label="Facility quote" value={order.facility_quote_status} />
+        )}
+        {order.facility_issue_status && order.facility_issue_status !== "none" && (
+          <Field label="Facility issue" value={order.facility_issue_status} />
+        )}
+        {order.web_intent_status && <Field label="Web intent" value={order.web_intent_status} />}
+        {order.abandoned_followup_status && order.abandoned_followup_status !== "none" && (
+          <Field label="Abandoned follow-up" value={order.abandoned_followup_status} />
+        )}
       </FieldGrid>
       {reveal && <p className="mt-3 text-xxs text-warning">Full number revealed — role-gated. This access is logged.</p>}
     </SectionCard>
@@ -110,13 +135,53 @@ export function PaymentSnapshotCard({ order }: { order: OrderWithPricing }) {
     pricing?.final_price != null
       ? formatMoney(pricing.final_price, pricing.currency)
       : formatMoney(order.amount);
+  // Real payment method from the Stripe-first state (spec §§13, 29); falls back to the
+  // generic label on legacy/mock orders that don't carry the preference.
+  const paymentMethod =
+    order.channel === "B2B"
+      ? "Invoice"
+      : order.cash_on_delivery
+        ? "Cash on delivery"
+        : order.payment_preference === "STRIPE"
+          ? "Stripe link"
+          : "Card / Pay on delivery";
+  const followupStage = order.payment_followup_stage ?? 0;
+  const discountPct = order.discount_percentage ?? 0;
+  const discountLabel: Record<string, string> = {
+    STANDARD_OVER_100: "Standard", EXPLICIT_REQUEST_OVER_200: "Requested",
+    PRICE_PUSHBACK: "Price pushback", QUOTE_INACTIVITY: "Quote follow-up",
+    ABANDONED_WEB_ORDER: "Web offer", HUMAN_APPROVED: "Manager approved", NEGOTIATED: "Negotiated",
+  };
   return (
     <SectionCard title="Payment" icon={CreditCard}>
       <FieldGrid>
         <Field label="Status" value={<StatusBadge tone={paymentTone[order.payment]}>{order.payment}</StatusBadge>} />
-        <Field label="Method" value={order.channel === "B2B" ? "Invoice" : "Card / Pay on delivery"} />
+        <Field label="Method" value={paymentMethod} />
         <Field label={totalLabel} value={<span className="text-base font-semibold">{totalValue}</span>} />
+        {pricing && (
+          <Field
+            label="Price type"
+            value={
+              pricing.has_pending_inspection
+                ? "Pending inspection"
+                : pricing.is_estimated
+                  ? "Estimate — confirmed at pickup"
+                  : "Firm"
+            }
+          />
+        )}
+        {discountPct > 0 && (
+          <Field
+            label="Discount"
+            value={`${discountPct}%${order.discount_reason ? ` (${discountLabel[order.discount_reason] ?? order.discount_reason})` : ""}`}
+          />
+        )}
+        {order.rule_version && <Field label="Rule set" value={order.rule_version} />}
         <Field label="Pending" value={pending > 0 ? formatMoney(pending) : "None"} />
+        {order.payment_preference === "STRIPE" && (
+          <Field label="Stripe link" value={order.stripe_hosted_invoice_url ? "Sent" : "Pending"} />
+        )}
+        {followupStage > 0 && <Field label="Payment follow-up" value={`Stage ${followupStage}`} />}
         {order.channel === "B2B" && <Field label="Invoice" value={order.payment === "Paid" ? "Settled" : "Sent — awaiting payment"} />}
         {refundRelevant && <Field label="Refund" value={order.payment === "Refunded" ? "Refund issued" : "Under review"} />}
       </FieldGrid>

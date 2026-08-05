@@ -80,13 +80,33 @@ class OrderRead(BaseModel):
     change_request: str | None = None
     amount: float | None = None
     currency: str = "AED"
+    # Order-discount snapshot (spec §§15, 29). Backend-authoritative.
+    eligible_subtotal: float | None = None
+    discount_percentage: float | None = None
+    discount_amount: float | None = None
+    discount_reason: str | None = None
+    rule_version: str | None = None
+    saved_address_reuse: bool = False   # returning customer reused a saved address (spec §29)
     facility: str | None = None
     driver: str | None = None
     payment: str | None = None
+    # Stripe-first payment surfacing (spec §§13, 29). Backend-authoritative.
+    payment_preference: str = "UNDECIDED"
+    cash_on_delivery: bool = False
+    payment_status: str = "unpaid"
+    payment_followup_stage: int = 0
+    stripe_hosted_invoice_url: str | None = None
     source_channel: str
     is_demo: bool
     # Dashboard-only fields (populated by the /search list; None elsewhere).
     customer_phone: str | None = None
+    assigned_persona: str | None = None       # customer's persistent AI persona (spec §29)
+    customer_lifecycle: str | None = None     # NEW_PROSPECT|RETURNING_PROSPECT|EXISTING_CUSTOMER|ACTIVE_CUSTOMER|B2B_LEAD (spec §29)
+    # §29 cross-entity status (populated on the Supabase order detail; None in SQLite).
+    facility_quote_status: str | None = None   # pending | received | none
+    facility_issue_status: str | None = None   # open | resolved | none
+    web_intent_status: str | None = None       # captured | consented | converted
+    abandoned_followup_status: str | None = None  # scheduled | sent | cancelled | suppressed
     needs_attention: bool = False
     conversation_status: str | None = None
     human_takeover: bool = False

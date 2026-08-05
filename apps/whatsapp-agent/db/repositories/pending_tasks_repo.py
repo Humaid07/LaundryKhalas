@@ -71,6 +71,22 @@ async def create(
     return _serialize(row)
 
 
+async def facility_quote_status(order_uuid: str) -> str:
+    """The §29 facility-quote status for one order, from its AWAITING_FACILITY_QUOTE task:
+    pending | received | none. Best-effort read."""
+    if not order_uuid:
+        return "none"
+    rows = await database.fetch(
+        "select status from pending_tasks "
+        "where order_id = $1::uuid and task_type = 'AWAITING_FACILITY_QUOTE'",
+        order_uuid)
+    if not rows:
+        return "none"
+    if any(r["status"] in ("open", "in_progress", "escalated") for r in rows):
+        return "pending"
+    return "received"
+
+
 async def list_open(limit: int = 100) -> list[dict]:
     rows = await database.fetch(
         f"select {_COLS} from pending_tasks where status in ('open','in_progress') "

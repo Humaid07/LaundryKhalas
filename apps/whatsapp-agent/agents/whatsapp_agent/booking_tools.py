@@ -306,13 +306,25 @@ BOOKING_TOOL_SCHEMAS: list[dict] = [
      "input_schema": {"type": "object", "properties": {"slot": {"type": "string"}},
                       "required": ["slot"], "additionalProperties": False}},
     {"name": "save_pickup_address",
-     "description": "Save the pickup address text. The backend extracts the area; coverage is confirmed by the team.",
-     "input_schema": {"type": "object", "properties": {"address": {"type": "string"}},
+     "description": "Save the pickup address text. The backend extracts the area; coverage is confirmed by the team. "
+                    "Set reused_from_saved=true ONLY when the customer confirmed reusing a saved address you offered.",
+     "input_schema": {"type": "object",
+                      "properties": {"address": {"type": "string"},
+                                     "reused_from_saved": {"type": "boolean",
+                                                           "description": "True only when reusing the customer's saved address."}},
                       "required": ["address"], "additionalProperties": False}},
     {"name": "save_special_instructions",
      "description": "Save optional pickup/handling instructions the customer gave.",
      "input_schema": {"type": "object", "properties": {"instructions": {"type": "string"}},
                       "required": ["instructions"], "additionalProperties": False}},
+    {"name": "set_payment_preference",
+     "description": "Call when the customer discusses HOW they will pay: asks about cash, says they "
+                    "have no Stripe or cannot use the link, insists on cash, or accepts the card link. "
+                    "Pass their exact message; the BACKEND runs the Stripe-first escalation (spec §13), "
+                    "persists the payment state, and returns the approved 'reply' to send verbatim. "
+                    "Never decide the payment method, create a link, or invent wording yourself.",
+     "input_schema": {"type": "object", "properties": {"customer_message": {"type": "string"}},
+                      "required": ["customer_message"], "additionalProperties": False}},
     {"name": "get_order_summary",
      "description": "Return the itemised order summary with the final customer price (5% already included).",
      "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
@@ -444,7 +456,8 @@ BOOKING_TOOL_SCHEMAS: list[dict] = [
 # booking — reused from the grounded llm_tools layer. list_service_categories is
 # intentionally NOT re-added (booking already has its own), to avoid a duplicate
 # tool name.
-_GROUNDING_TOOL_NAMES = frozenset({"lookup_item_price", "estimate_turnaround", "check_service_area"})
+_GROUNDING_TOOL_NAMES = frozenset({"lookup_item_price", "estimate_turnaround", "check_service_area",
+                                   "lookup_alteration_price"})
 
 
 def _grounding_schemas() -> list[dict]:
@@ -539,10 +552,10 @@ def booking_system_prompt() -> str:
         "category and details. Tell the customer a specialist will follow up, and don't keep making "
         "commitments or improvising a price.\n\n"
         "Grounding (never guess business facts):\n"
-        "- Use lookup_item_price for any price, estimate_turnaround for any delivery/"
-        "turnaround time, check_service_area for coverage, and the list_* tools for what's "
-        "offered. NEVER state a price, turnaround, service, slot or availability you did "
-        "not get from a tool.\n"
+        "- Use lookup_item_price for any per-item price, lookup_alteration_price for any "
+        "alteration/garment-repair price, estimate_turnaround for any delivery/turnaround time, "
+        "check_service_area for coverage, and the list_* tools for what's offered. NEVER state a "
+        "price, turnaround, service, slot or availability you did not get from a tool.\n"
         "- Prices returned by the tools are the FINAL customer price (already VAT-inclusive). "
         "Quote them exactly as given — NEVER add any percentage, and NEVER mention VAT, tax, "
         "'excluding' or 'including'. Just say e.g. 'AED 60'.\n"
@@ -590,10 +603,10 @@ def booking_system_prompt() -> str:
         "- Standard alterations & garment repairs (hemming, shortening, lengthening, taking in or "
         "letting out the waist, tightening, loosening, fitting, a zip or button replacement, a "
         "simple seam or tear repair) are ROUTINE — do NOT ask for a photo, do NOT demand "
-        "measurements up front, and do NOT treat them as inspection-only. Quote the published "
-        "starting price straight from the catalogue (use lookup_item_price / list_service_items), "
-        "phrased as 'alterations start from AED X per item', and never mention VAT. The tailor sets "
-        "the exact price at the facility. Never say we don't do repairs — only a genuinely "
+        "measurements up front, and do NOT treat them as inspection-only. Call "
+        "lookup_alteration_price for the EXACT price (it applies the base / pushback / quantity "
+        "tiers, e.g. trouser shortening AED 40 per pair); if it returns priced-after-inspection, "
+        "send that reply. Never mention VAT. Never say we don't do repairs — only a genuinely "
         "non-laundry repair (phone, car, laptop) is outside what we do. If a facility later raises "
         "an issue with the alteration, Operations brings any price or scope change back to the "
         "customer for approval before it proceeds.\n"
@@ -608,16 +621,23 @@ def booking_system_prompt() -> str:
         "- Capture special-care notes (fold vs hang, separate darks/lights, no strong scent, "
         "steam-only, 'don't ring the bell', etc.) with save_special_instructions so they reach "
         "the facility/driver.\n"
-        "- Pickup & delivery are free for qualifying orders; if a small-order delivery fee "
-        "applies it will appear in the order summary — never invent or state a fee the summary "
-        "didn't show.\n"
+        "- Minimum order (spec §12): pickup & delivery are free once the service subtotal "
+        "reaches the market minimum (AED/QAR 30). If it is below that, first ask the customer "
+        "to add another item; only if they decline, continue and state the flat delivery "
+        "charge (AED/QAR 10) up front. Never reject a small order, and never invent or state a "
+        "fee the order summary did not show.\n"
         "- Steer customers to free pickup & delivery rather than walking in; only discuss a "
         "walk-in (usually for alterations) if the customer really insists.\n"
-        "- Payment: prefer secure online card payment; if the customer would rather pay cash on "
-        "collection, that's fine — never lose an order over the payment method. Payment is taken "
-        "through the proper flow after the order is processed and before dispatch; do NOT create "
-        "or promise a payment link yourself, and NEVER arrange cash off-system directly with the "
-        "driver.\n\n"
+        "- Payment (Stripe-first, spec §13): Stripe is the regular method; cash on delivery is a "
+        "fallback offered only after the customer clearly declines the link. Do NOT immediately "
+        "agree to cash. Escalate at most in these fixed steps, never nagging: (1) first cash or "
+        "payment question, say exactly: \"Our regular payment method is a Stripe link sent on "
+        "WhatsApp.\" (2) if they say they have no Stripe or cannot use the link, say exactly: "
+        "\"You do not need a Stripe account. You can pay by card through the link.\" (3) if they "
+        "still clearly prefer cash or insist, accept it: \"No problem. We can arrange cash on "
+        "delivery.\" and stop discussing payment. Never push after a clear second refusal. Do NOT "
+        "create or promise a payment link yourself (the backend sends it after processing), and "
+        "NEVER arrange cash off-system directly with the driver.\n\n"
         "Scheduling (dates & pickup windows) — the BACKEND owns the clock:\n"
         "- The state block gives you current_local_datetime, timezone and "
         "minimum_lead_time_minutes. Resolve 'now', 'today', 'tonight', 'this evening', "
@@ -678,9 +698,11 @@ def booking_system_prompt() -> str:
         "Returning customers & follow-ups:\n"
         "- When the backend supplies a returning_customer_memory block in the state, the "
         "customer is a returning customer: greet them naturally by their confirmed name and "
-        "OFFER to reuse the saved typed address, asking them to confirm before reusing it. Do "
-        "NOT re-ask for their name or number. get_customer_record / get_saved_addresses give "
-        "the same data on demand. Use get_available_pickup_slots to show bookable windows.\n"
+        "OFFER to reuse the saved typed address, asking them to confirm before reusing it. Once "
+        "they confirm, save it with save_pickup_address AND set reused_from_saved=true so it is "
+        "recorded as a saved-address reuse. Do NOT re-ask for their name or number. "
+        "get_customer_record / get_saved_addresses give the same data on demand. Use "
+        "get_available_pickup_slots to show bookable windows.\n"
         "- Location pins are NOT stored between orders. Even for a returning customer reusing a "
         "saved address, always ask them to reshare their WhatsApp location pin for this order so "
         "we can route it to one of the nearest suitable facilities.\n"
@@ -911,7 +933,7 @@ async def run_booking_turn(ctx: BookingContext, *, text: str,
 
     logger.info("booking_orchestration_turn", conversation=ctx.conversation_id,
                 success=success, tools=ctx.tool_calls, provider=result.provider,
-                model=result.model, stop_reason=result.stop_reason,
+                model=result.model, effort=result.effort, stop_reason=result.stop_reason,
                 tool_rounds=result.tool_rounds,
                 tokens_in=result.tokens_in, tokens_out=result.tokens_out,
                 cache_read_tokens=result.cache_read_tokens,
@@ -931,6 +953,71 @@ def _ok(payload: dict) -> tuple[str, bool]:
 
 def _err(message: str) -> tuple[str, bool]:
     return json.dumps({"error": message}, ensure_ascii=False), True
+
+
+async def _schedule_payment_followups(ctx, row) -> None:
+    """Queue the §14 payment-silence follow-ups for this order. Supabase-only (the
+    queue lives there) and never raises — scheduling must not break the turn. The two
+    rows are idempotent via their dedupe_key, so re-arming on a later undecided turn
+    never duplicates them."""
+    try:
+        from db import database
+        if not database.is_supabase_mode():
+            return
+        from db.repositories import scheduled_followups_repo
+        from services import followup_scheduler
+        rows = followup_scheduler.payment_silence_rows(
+            ctx.conversation_id, ctx.local_now(), market=ctx.market,
+            order_id=(row or {}).get("order_id"),
+            customer_phone=(row or {}).get("customer_phone"))
+        await scheduled_followups_repo.schedule(rows)
+    except Exception as exc:  # noqa: BLE001 - a follow-up must never break the reply
+        logger.warning("payment_followup_schedule_failed", error=str(exc))
+
+
+async def _schedule_quote_inactivity(ctx, row) -> None:
+    """Queue the §25 quote-inactivity follow-up after an exact eligible quote. Supabase-only,
+    idempotent (dedupe_key), never raises. A reply/confirm/cancel suppresses it at send time."""
+    try:
+        from db import database
+        if not database.is_supabase_mode():
+            return
+        from db.repositories import scheduled_followups_repo
+        from services import followup_scheduler
+        r = followup_scheduler.quote_inactivity_row(
+            ctx.conversation_id, ctx.local_now(), market=ctx.market,
+            order_id=(row or {}).get("order_id"),
+            customer_phone=(row or {}).get("customer_phone"))
+        await scheduled_followups_repo.schedule([r])
+    except Exception as exc:  # noqa: BLE001 - a follow-up must never break the reply
+        logger.warning("quote_followup_schedule_failed", error=str(exc))
+
+
+async def _schedule_pickup_reminder(ctx, row) -> None:
+    """Queue a pickup reminder ~2h before the confirmed pickup window (operational).
+    Supabase-only, only for a FUTURE pickup, idempotent, never raises."""
+    try:
+        import datetime as _dt2
+
+        from db import database
+        if not database.is_supabase_mode():
+            return
+        start = (row or {}).get("pickup_start_time")
+        if not isinstance(start, _dt2.datetime):
+            return
+        from services.clock import now as _clock_now
+        hours = 2
+        if start - _dt2.timedelta(hours=hours) <= _clock_now(ctx.market):
+            return  # too soon for a reminder
+        from db.repositories import scheduled_followups_repo
+        from services import followup_scheduler
+        r = followup_scheduler.pickup_reminder_row(
+            ctx.conversation_id, start, hours_before=hours, market=ctx.market,
+            order_id=(row or {}).get("order_id"),
+            customer_phone=(row or {}).get("customer_phone"))
+        await scheduled_followups_repo.schedule([r])
+    except Exception as exc:  # noqa: BLE001 - a follow-up must never break the reply
+        logger.warning("pickup_reminder_schedule_failed", error=str(exc))
 
 
 def _fmt_pct(pct) -> str:
@@ -954,7 +1041,7 @@ def make_booking_executor(ctx: BookingContext):
     _WRITE_TOOLS = frozenset({
         "save_customer_name", "save_order_item",
         "save_pickup_date", "save_pickup_time", "save_pickup_address",
-        "save_special_instructions",
+        "save_special_instructions", "set_payment_preference",
     })
     _NEW_STATE = {"workflow_state": "new", "missing_fields": ["service_items"],
                   "ready_to_confirm": False}
@@ -1266,7 +1353,9 @@ def make_booking_executor(ctx: BookingContext):
             if len(address) < 5:
                 return _err("Address looks too short — ask the customer for a full pickup address.")
             area = slot_tools.extract_area(address)
-            await _apply({"pickup_address": address, "pickup_area": area, "address_source": "customer"},
+            # Mark a reused saved address so the dashboard can surface it (spec §29).
+            source = "saved_reuse" if ti.get("reused_from_saved") else "customer"
+            await _apply({"pickup_address": address, "pickup_area": area, "address_source": source},
                          state=bf.WAITING_FOR_CONFIRMATION)
             return _ok({"saved": True, "area_recognised": area,
                         "workflow": workflow_state_block(await _current_row())})
@@ -1275,6 +1364,28 @@ def make_booking_executor(ctx: BookingContext):
             text = str(ti.get("instructions", "")).strip()
             await _apply({"pickup_instruction_text": text, "pickup_instruction_code": "custom"})
             return _ok({"saved": True, "workflow": workflow_state_block(await _current_row())})
+
+        if name == "set_payment_preference":
+            # Backend-authoritative Stripe-first escalation (spec §13). The engine
+            # decides the next step + reply from the PERSISTED state; we persist the
+            # returned fields. The model sends `reply` verbatim and never invents a
+            # payment method or a link.
+            from services import payment_preference as pp
+            msg = str(ti.get("customer_message", "")).strip()
+            decision = pp.resolve_payment_turn(pp.state_from_row(row), msg)
+            if not decision.handled:
+                return _ok({"handled": False,
+                            "note": "No payment-method signal; continue the booking normally."})
+            await _apply(pp.updates_for_state(row, decision.state, ctx.local_now()))
+            # Arm the payment-silence follow-ups (§14) while the method stays undecided.
+            # Idempotent (dedupe_key) and Supabase-only; a reply/pay/cash choice suppresses
+            # them at send time. Never let scheduling break the customer's turn.
+            if pp.wants_payment_followups(decision):
+                await _schedule_payment_followups(ctx, row)
+            return _ok({"handled": True, "reply": decision.text,
+                        "template_id": decision.template_id,
+                        "payment_preference": decision.state.preference,
+                        "stop_pushing": decision.stop_pushing})
 
         if name == "propose_order_note":
             from db.repositories import order_notes_repo
@@ -1318,9 +1429,17 @@ def make_booking_executor(ctx: BookingContext):
             mkt = market_svc.get_market(ctx.market).code
             quote = pricing.calculate_estimate(
                 bf._raw_lines(booking), negotiated_final_total=_negotiated_total(row), market=mkt)
-            # Min-order / delivery charge (spec §2.3): free at/above the market
-            # minimum, else a flat fee — stated up front, never invented.
-            charge = fulfilment.delivery_charge(quote.customer_total, market=mkt)
+            # Min-order / delivery charge (spec §12): free when the SERVICE SUBTOTAL
+            # BEFORE DISCOUNT is at/above the market minimum, else a flat fee — stated
+            # up front, never invented. The fee is added to the payable (post-discount)
+            # customer_total; the free/fee decision is judged on the pre-discount
+            # eligible_subtotal so a discount never drops an order under the threshold.
+            charge = fulfilment.delivery_charge(
+                quote.customer_total, market=mkt, threshold_total=quote.eligible_subtotal)
+            # Arm the quote-inactivity follow-up (§25) once an EXACT eligible quote is
+            # shown (never for inspection/pending totals). Idempotent + Supabase-only.
+            if not quote.is_estimated and quote.customer_total > 0:
+                await _schedule_quote_inactivity(ctx, row)
             from db.repositories import order_notes_repo
             from services import location_capture, order_notes as _notes_mod
             try:  # notes are optional to the summary; never break it if unavailable
@@ -1526,6 +1645,7 @@ def make_booking_executor(ctx: BookingContext):
                 cust = ctx.customer or {}
                 await order_confirmation.apply_post_confirmation_effects(
                     dict(confirmed), cust.get("id"))
+                await _schedule_pickup_reminder(ctx, dict(confirmed))
             return _ok({"confirmed": True, "created_now": created_now,
                         "order_number": confirmed.get("order_id"),
                         "status": confirmed.get("status")})

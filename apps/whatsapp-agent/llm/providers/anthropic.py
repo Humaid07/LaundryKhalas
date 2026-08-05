@@ -43,11 +43,17 @@ from llm.providers.base import (
 from settings import DEFAULT_ANTHROPIC_MODEL
 
 # Model families that REJECT sampling params (temperature/top_p/top_k) — sending
-# temperature to these returns a 400. Current default models are all here, so we
-# omit temperature unless a legacy model that supports it is configured.
+# temperature to these returns a 400. This is ALSO exactly the family that takes
+# adaptive thinking (thinking={"type":"adaptive"}) and output_config.effort, so we
+# reuse it as the single gate: for these models we send effort + adaptive thinking
+# instead of temperature; for older models (e.g. Haiku 4.5) we send temperature and
+# NEVER send effort/thinking (both would 400 there).
 _NO_SAMPLING_PARAMS = (
     "opus-4-6", "opus-4-7", "opus-4-8", "sonnet-5", "sonnet-4-6", "fable-5", "mythos-5",
 )
+
+# Reasoning-effort values accepted by output_config.effort on the adaptive family.
+_VALID_EFFORT = frozenset({"low", "medium", "high", "xhigh", "max"})
 
 # Backoff bounds for application-controlled retries.
 _BACKOFF_BASE_SECONDS = 1.0
@@ -81,6 +87,9 @@ class AnthropicProvider(LLMProvider):
         system_cache_ttl: str = "1h",
         history_cache_ttl: str = "5m",
         extended_thinking: bool = False,
+        effort: str | None = "high",
+        thinking_mode: str = "adaptive",
+        thinking_display: str = "omitted",
     ) -> None:
         # `client` is injectable so the tool loop / retry logic can be
         # unit-tested offline against a scripted fake — no network, no key.
@@ -103,6 +112,12 @@ class AnthropicProvider(LLMProvider):
         # Extended thinking stays OFF for normal WhatsApp turns (spec) — we simply
         # never send the `thinking` param. Kept as an explicit flag for visibility.
         self._extended_thinking = extended_thinking
+        # Sonnet 5 (adaptive-thinking family) config. `effort` drives depth/spend via
+        # output_config.effort; adaptive thinking is the only on-mode (no token budget).
+        # Both are sent ONLY for the adaptive family — never to Haiku, where they 400.
+        self._effort = (effort or "").strip().lower() or None
+        self._thinking_mode = (thinking_mode or "adaptive").strip().lower()
+        self._thinking_display = (thinking_display or "omitted").strip().lower()
 
     # ---- prompt-cache helpers ----------------------------------------------
     def _cc(self, ttl: str | None) -> dict | None:
@@ -194,6 +209,18 @@ class AnthropicProvider(LLMProvider):
     def _supports_temperature(self) -> bool:
         return not any(tag in self._model for tag in _NO_SAMPLING_PARAMS)
 
+    def _is_adaptive_family(self) -> bool:
+        """True for models that take adaptive thinking + output_config.effort and
+        reject sampling params (Sonnet 5 / Opus 4.6+ / Fable 5). The exact inverse
+        of _supports_temperature — one gate, no drift."""
+        return not self._supports_temperature()
+
+    def _effort_for_result(self) -> str | None:
+        """The effort value actually sent this turn (None when not applicable)."""
+        if self._is_adaptive_family() and self._effort in _VALID_EFFORT:
+            return self._effort
+        return None
+
     async def _create(self, **kwargs):
         """One Messages API call with application-controlled retry (bounded
         exponential backoff + jitter). Non-retryable errors (auth/validation)
@@ -242,6 +269,7 @@ class AnthropicProvider(LLMProvider):
             tool_calls=tool_calls or [],
             request_id=request_id,
             tool_rounds=tool_rounds,
+            effort=self._effort_for_result(),
             cost_usd=estimate_cost_usd(
                 self._model,
                 tokens_in=running["tokens_in"],
@@ -258,10 +286,25 @@ class AnthropicProvider(LLMProvider):
 
     def _base_kwargs(self, max_tokens: int | None) -> dict:
         kwargs: dict = {"model": self._model, "max_tokens": max_tokens or self._max_tokens}
-        # Exactly ONE sampling parameter (temperature); never combined with top_p/
-        # top_k (spec). Extended thinking stays off — we never send the param.
         if self._supports_temperature():
+            # Legacy family (e.g. Haiku 4.5): exactly ONE sampling parameter
+            # (temperature); never combined with top_p/top_k (spec). No effort /
+            # thinking params — they 400 on these models.
             kwargs["temperature"] = self._temperature
+            return kwargs
+        # Adaptive family (Sonnet 5 / Opus 4.6+ / Fable 5): NO sampling params at all
+        # (temperature/top_p/top_k all 400). Configure reasoning via output_config.effort
+        # (GA, no beta header) and adaptive thinking (the only on-mode; no token budget).
+        # display defaults to "omitted" so internal reasoning is never surfaced to the
+        # customer. All three are omitted entirely for the legacy branch above.
+        effort = self._effort_for_result()
+        if effort:
+            kwargs["output_config"] = {"effort": effort}
+        if self._thinking_mode == "adaptive":
+            thinking: dict = {"type": "adaptive"}
+            if self._thinking_display:
+                thinking["display"] = self._thinking_display
+            kwargs["thinking"] = thinking
         return kwargs
 
     # ---- entry points ------------------------------------------------------
@@ -367,3 +410,66 @@ class AnthropicProvider(LLMProvider):
         raise RuntimeError(
             f"Anthropic tool loop did not converge in {rounds} rounds"
         )
+
+    async def complete_structured(
+        self,
+        messages: list[LLMMessage],
+        *,
+        tool: dict,
+        tool_name: str,
+        max_tokens: int | None = None,
+    ) -> tuple[LLMResult, dict]:
+        """Single FORCED-tool call for structured output (the classifier path).
+
+        Unlike ``complete_with_tools`` there is NO agentic loop and NO executor:
+        the model is forced (via ``tool_choice``) to return exactly one call to
+        ``tool_name`` whose validated input dict IS the structured result, so we
+        never regex JSON out of prose. Returns (usage_result, parsed_input).
+
+        The stable system prompt + the tool schema are cached as the reusable
+        prefix (same machinery as the other paths); only the per-turn user
+        payload is uncached. Raises on refusal / missing tool block so the caller
+        can fall back to a safe UNKNOWN classification.
+        """
+        system, turns = self._split(messages)
+        system_blocks = self._system_blocks(system)
+        cached_tools = self._cacheable_tools([tool])
+        headers = self._extra_headers(system, [tool])
+        running = self._new_running()
+
+        kwargs = self._base_kwargs(max_tokens)
+        kwargs["messages"] = [self._turn_dict(m) for m in turns]
+        kwargs["tools"] = cached_tools
+        # Force exactly this one tool; no parallel calls, no free-text answer.
+        kwargs["tool_choice"] = {
+            "type": "tool",
+            "name": tool_name,
+            "disable_parallel_tool_use": True,
+        }
+        if system_blocks:
+            kwargs["system"] = system_blocks
+        if headers:
+            kwargs["extra_headers"] = headers
+
+        response = await self._create(**kwargs)
+        self._tally(response.usage, running)
+        stop = getattr(response, "stop_reason", None)
+        if stop == "refusal":
+            raise RuntimeError("classifier structured call refused")
+
+        parsed: dict = {}
+        for block in response.content:
+            if getattr(block, "type", "") == "tool_use" and getattr(block, "name", "") == tool_name:
+                parsed = dict(block.input) if isinstance(block.input, dict) else {}
+                break
+        if not parsed:
+            raise RuntimeError("classifier structured call returned no tool_use block")
+
+        result = self._result(
+            "", running,
+            stop_reason=stop,
+            tool_calls=[ToolCall(name=tool_name, input=parsed, result="", is_error=False)],
+            request_id=getattr(response, "_request_id", None),
+            tool_rounds=1,
+        )
+        return result, parsed

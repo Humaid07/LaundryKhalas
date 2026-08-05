@@ -18,6 +18,18 @@ export type OrderWithPricing = Order & {
   line_items?: LineItemDTO[];
   catalogue_category?: string | null;
   pricing?: OrderPricingDTO;
+  // Order-discount snapshot (spec §§15, 29) — populated on live agent orders.
+  eligible_subtotal?: number | null;
+  discount_percentage?: number | null;
+  discount_amount?: number | null;
+  discount_reason?: string | null;
+  rule_version?: string | null;
+  // Stripe-first payment surfacing (spec §§13, 29) — populated on live agent orders.
+  payment_preference?: "UNDECIDED" | "STRIPE" | "CASH_ON_DELIVERY";
+  cash_on_delivery?: boolean;
+  payment_status?: string;
+  payment_followup_stage?: number;
+  stripe_hosted_invoice_url?: string | null;
 };
 import { MOCK_NOW } from "@/lib/dashboard/formatters";
 import {

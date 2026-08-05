@@ -80,6 +80,9 @@ class Order(Base):
     items: Mapped[list | None] = mapped_column(JSON, default=list)
     pickup_area: Mapped[str | None] = mapped_column(String(120), nullable=True)
     pickup_address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # How the pickup address was captured (spec §29): customer | typed | whatsapp_location |
+    # saved_reuse (a returning customer reused their saved address).
+    address_source: Mapped[str | None] = mapped_column(String(24), nullable=True)
     pickup_date: Mapped[str | None] = mapped_column(String(60), nullable=True)
     pickup_time: Mapped[str | None] = mapped_column(String(60), nullable=True)
     city: Mapped[str | None] = mapped_column(String(60), nullable=True)
@@ -91,9 +94,50 @@ class Order(Base):
 
     amount: Mapped[float | None] = mapped_column(nullable=True)
     currency: Mapped[str] = mapped_column(String(8), default="AED")
+
+    # Order-discount snapshot (spec §§15, 29). Backend-authoritative; mirrors the
+    # Supabase orders columns. eligible_subtotal is the pre-discount total; reason is
+    # the discount rule that applied (e.g. STANDARD_OVER_100, NEGOTIATED, PRICE_PUSHBACK).
+    eligible_subtotal: Mapped[float | None] = mapped_column(nullable=True)
+    discount_percentage: Mapped[float | None] = mapped_column(nullable=True)
+    discount_amount: Mapped[float | None] = mapped_column(nullable=True)
+    discount_rule_code: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    # The WhatsApp service rule-set version the order's pricing was produced under
+    # (spec §§17, 29). Stamped at confirmation so a price traces to its exact rules.
+    rule_version: Mapped[str | None] = mapped_column(String(24), nullable=True)
     facility: Mapped[str | None] = mapped_column(String(120), nullable=True)
     driver: Mapped[str | None] = mapped_column(String(120), nullable=True)
     payment: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
+    # Stripe-first payment state (spec §13). Backend-authoritative; the model never
+    # sets these directly. Timestamps double as the "explained/requested/accepted"
+    # flags (non-null = it happened). Migration 000040 mirrors these on Supabase.
+    payment_preference: Mapped[str] = mapped_column(String(20), default="UNDECIDED")
+    stripe_preference_explained_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    stripe_no_account_explained_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    cash_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    cash_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    payment_followup_stage: Mapped[int] = mapped_column(default=0)
+
+    # Stripe Invoicing linkage (spec §13, Phase 2b live-payments). Set by the
+    # payments gateway when a hosted VAT invoice is created for a STRIPE order, and
+    # by the /webhooks/stripe handler when Stripe reports payment. payment_status
+    # follows the vocabulary in services/payments/base.py (unpaid|pending|paid|
+    # failed|refunded|void). amount_paid_minor is in minor units (fils/cents).
+    # Migration 000041 mirrors these on Supabase.
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    stripe_invoice_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    stripe_hosted_invoice_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stripe_invoice_pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payment_status: Mapped[str] = mapped_column(String(20), default="unpaid")
+    amount_paid_minor: Mapped[int | None] = mapped_column(nullable=True)
+    payment_currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
 
     source_channel: Mapped[str] = mapped_column(String(20), default="whatsapp")
     is_demo: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -104,6 +148,70 @@ class Order(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class ScheduledFollowup(Base):
+    """A pending customer follow-up (spec §§14, 24, 25). The scheduler POLICY lives in
+    services/followups.py (pure); this is the durable queue a sweeper reads. One row per
+    (conversation, follow-up type) — `dedupe_key` is unique so a follow-up is scheduled at
+    most once. `status`: PENDING | SENT | CANCELLED | SUPPRESSED. Migration 000042 mirrors
+    these on Supabase. `is_demo` never applies here — these drive real outreach only when a
+    live provider + window allow it.
+    """
+
+    __tablename__ = "scheduled_followups"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    order_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    customer_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    followup_type: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16), default="PENDING")
+    template_id: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    dedupe_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    anchor_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    market: Mapped[str] = mapped_column(String(8), default="AE")
+    persona: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    suppressed_reason: Mapped[str | None] = mapped_column(String(48), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WebOrderIntent(Base):
+    """A website "Order Now" click (spec §24). Always recorded for analytics; abandonment
+    outreach is scheduled ONLY when the visitor is identified + consented + has a verified
+    WhatsApp number (see services/web_order_intent). Never fingerprint a number. Migration
+    000043 mirrors these on Supabase.
+    """
+
+    __tablename__ = "web_order_intents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    session_id: Mapped[str] = mapped_column(String(64), index=True)
+    source_page: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    service_code: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    market: Mapped[str] = mapped_column(String(8), default="AE")
+    campaign: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    customer_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    whatsapp_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    consent: Mapped[bool] = mapped_column(Boolean, default=False)
+    outreach_scheduled: Mapped[bool] = mapped_column(Boolean, default=False)
+    outreach_reason: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    converted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
     )
 
 

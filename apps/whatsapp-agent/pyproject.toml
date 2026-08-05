@@ -25,6 +25,10 @@ dependencies = [
     # details. Used by services/field_encryption.py — the IBAN/account number are
     # stored ciphertext-only. Python's stdlib has no symmetric cipher.
     "cryptography>=42.0.0",
+    # Stripe SDK (Invoicing + Tax). Used ONLY by services/payments/stripe_provider.py,
+    # reached solely through services.payments.get_gateway() when STRIPE_MODE is
+    # test/live with a key — mock mode (default) never imports it.
+    "stripe>=15.4.0",
     # IANA timezone database (ZoneInfo) — required for market-timezone-aware
     # pickup scheduling on platforms without a system tz database (e.g. Windows).
     "tzdata>=2024.1",

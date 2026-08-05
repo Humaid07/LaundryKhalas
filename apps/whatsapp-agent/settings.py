@@ -11,10 +11,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # it talks to FastAPI only; FastAPI decides based on WHATSAPP_MODE.
 WHATSAPP_MODES = ("mock", "evolution", "meta")
 
+# Stripe payment modes. "mock" (default) = deterministic offline gateway, no key,
+# no network. "test" / "live" = real Stripe API with a test / live key. Exactly
+# like WHATSAPP_MODES, this is the ONE switch that decides mock-vs-real payments.
+STRIPE_MODES = ("mock", "test", "live")
+
 # Default Anthropic model when neither ANTHROPIC_MODEL nor LLM_MODEL is set. Kept
 # in ONE place (not hardcoded across the codebase) and always overridable via
 # env — do not scatter model ids through the code.
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-8"
+
+# Default model for the INTERNAL intent classifier — separate from the
+# customer-facing agent so it can be upgraded/rolled back independently
+# (ANTHROPIC_CLASSIFIER_MODEL). Kept in ONE place; never hardcoded at a call
+# site. Decision 2026-08-05: claude-sonnet-5 (approved); downgrade to
+# claude-haiku-4-5 via env any time to cut classifier cost.
+DEFAULT_CLASSIFIER_MODEL = "claude-sonnet-5"
 
 # Required env vars per mode. mock needs nothing; each live provider requires
 # ONLY its own vars — a blank var for the other provider never causes a failure.
@@ -78,11 +90,13 @@ class Settings(BaseSettings):
     # ANTHROPIC_API_KEY and is never echoed in any status/validation output.
     ai_provider: str = ""            # falls back to llm_provider when blank
     anthropic_model: str = ""        # falls back to llm_model when blank
-    # THE single spec-facing model knob for the customer-facing WhatsApp runtime
-    # (founder decision 2026-07-31: Claude Haiku 4.5 to cut cost). Highest priority
-    # in anthropic_model_effective below, so the WhatsApp agent's model is centralised
-    # in exactly ONE setting — never hardcoded at a call site. Blank → falls back to
-    # ANTHROPIC_MODEL → LLM_MODEL → default. Use an exact id, no date suffix.
+    # THE single spec-facing model knob for the customer-facing WhatsApp runtime.
+    # Decision 2026-08-05: claude-sonnet-5 (was Haiku 4.5) — consistency across service
+    # rules, pricing paths and tools is worth more than the Haiku cost saving. Highest
+    # priority in anthropic_model_effective below, so the WhatsApp agent's model is
+    # centralised in exactly ONE setting — never hardcoded at a call site. Blank → falls
+    # back to ANTHROPIC_MODEL → LLM_MODEL → default. Use an exact id, no date suffix. The
+    # runtime never silently swaps to Haiku or another Sonnet version (see fallback rules).
     anthropic_whatsapp_model: str = ""
     anthropic_enabled: bool = True   # master kill-switch; false → never call Claude
     anthropic_tool_use_enabled: bool = True
@@ -98,10 +112,65 @@ class Settings(BaseSettings):
     # Extended thinking is DELIBERATELY OFF for normal WhatsApp turns (spec): concise
     # customer replies don't need it and it adds latency+cost. Kept as an explicit,
     # documented flag so the "off" decision is visible, not implicit.
+    #
+    # NOTE (2026-08-05, Sonnet 5 migration): this legacy budget-style "extended
+    # thinking" flag applies only to older models. The primary WhatsApp model is now
+    # claude-sonnet-5, which uses ADAPTIVE thinking configured via the fields below
+    # (a manual thinking token budget is rejected with a 400 on Sonnet 5) — so this
+    # flag is left False and never sent for the adaptive family.
     anthropic_extended_thinking: bool = False
+    # --- Sonnet 5 reasoning config (2026-08-05) ------------------------------
+    # High effort for the primary WhatsApp agent: consistency across service rules,
+    # pricing paths and tools matters more than squeezing tokens. GA output_config.effort
+    # (low|medium|high|xhigh|max) — sent ONLY for the adaptive-thinking family (Sonnet 5 /
+    # Opus 4.6+ / Fable 5); NEVER to Haiku, where it 400s. THINKING_MODE=adaptive is the
+    # only on-mode for Sonnet 5; THINKING_DISPLAY=omitted keeps internal reasoning out of
+    # customer replies. No manual thinking budget, no non-default temperature/top_p/top_k.
+    anthropic_whatsapp_effort: str = "high"
+    anthropic_whatsapp_thinking_mode: str = "adaptive"     # adaptive | off
+    anthropic_whatsapp_thinking_display: str = "omitted"   # omitted | summarized
+    # Optional secondary model. DISABLED by default and requires an explicit id: the
+    # WhatsApp runtime must NEVER silently fall back to Haiku or a different Sonnet
+    # version. When disabled, a failed/refused model turn falls back to the safe
+    # deterministic reply (mock), not to another live model.
+    anthropic_fallback_enabled: bool = False
+    anthropic_fallback_model: str = ""
     anthropic_timeout_seconds: int = 30
     anthropic_max_retries: int = 3       # APPLICATION-controlled retries (SDK retries are off)
     anthropic_max_tool_rounds: int = 5
+
+    # --- Internal intent classifier (Stage 1: shadow) -----------------------
+    # An INTERNAL routing component. It never messages the customer, never prices,
+    # never performs a route — it recommends and the backend validates. Runs on
+    # its OWN model, independent of the customer-facing agent, so it can be tuned
+    # or rolled back without touching the main runtime. Live Anthropic call
+    # approved by the founder 2026-08-05 (overrides the mock-first default for
+    # THIS component only). Feature-flagged for staged rollout + instant rollback
+    # without any DB change.
+    whatsapp_classifier_enabled: bool = True
+    # Stage 1 default: classify + persist + log, but DO NOT control routing.
+    whatsapp_classifier_shadow_mode: bool = True
+    # Stage 2+: allow the validated classification to influence routing.
+    whatsapp_classifier_allow_routing: bool = False
+    # Gated separately, and only after the mandatory-escalation tests pass.
+    whatsapp_classifier_allow_human_escalation: bool = False
+    # Persist Operations corrections (never destroys the original classification).
+    whatsapp_classifier_log_corrections: bool = True
+    # Classifier model — blank falls back to DEFAULT_CLASSIFIER_MODEL. Independent
+    # of ANTHROPIC_WHATSAPP_MODEL by design (see classifier_model_effective).
+    anthropic_classifier_model: str = ""
+    whatsapp_classifier_max_tokens: int = 700
+    whatsapp_classifier_timeout_ms: int = 2000
+    whatsapp_classifier_high_confidence: float = 0.80
+    whatsapp_classifier_low_confidence: float = 0.55
+    whatsapp_classifier_ruleset_version: str = "2026_08_05"
+    whatsapp_classifier_prompt_cache_enabled: bool = True
+    # The classifier is a single structured call and does NOT use extended/adaptive
+    # reasoning by default (thinking off, low effort) — one fast, cheap round-trip.
+    # On the adaptive family (Sonnet 5) these keep spend/latency down; ignored on
+    # legacy models. Raise effort only if a future classifier model needs it.
+    anthropic_classifier_effort: str = "low"
+    anthropic_classifier_thinking_mode: str = "off"   # off | adaptive
     # --- Prompt caching (mixed 1h stable + 5m conversation, spec 2026-07-31) ---
     # The large stable system prompt + tool definitions are identical across every
     # customer and turn → 1h ephemeral cache. The growing conversation history is
@@ -145,6 +214,12 @@ class Settings(BaseSettings):
     agent_persona_names: str = "Sara,Maya,Zoya,Hanna,Sofia,Max,Ben"
     agent_persona_assignment_mode: str = "PERSISTENT_PER_CUSTOMER"
     agent_persona_assignment_version: int = 1
+
+    # --- WhatsApp service-rule set version (2026-08-05) ----------------------
+    # Single stamped version for the pricing + service-rule set the runtime enforces.
+    # Every generated quote records this so a price can always be traced back to the
+    # exact rule set that produced it. Bump when the answered service rules change.
+    whatsapp_service_ruleset_version: str = "2026_08_05"
 
     # --- Pickup scheduling (timezone-aware, backend-authoritative) -----------
     # The business timezone used for ALL customer-facing scheduling (current
@@ -352,6 +427,27 @@ class Settings(BaseSettings):
     def media_allowed_video_types_set(self) -> set[str]:
         return {t.strip().lower() for t in self.media_allowed_video_types.split(",") if t.strip()}
 
+    # --- Stripe payments (founder decision 2026-08-05: Invoicing + Tax) ------
+    # STRIPE_MODE is the single mock-vs-live switch (mirrors WHATSAPP_MODE):
+    #   mock (default) -> deterministic offline gateway; NO key, NO network.
+    #   test           -> real Stripe API with a TEST key (rk_test_/sk_test_).
+    #   live            -> real Stripe API with a LIVE key. Requires founder sign-off.
+    # The customer-facing surface is Stripe Invoicing (a hosted, VAT-compliant
+    # invoice whose pay link is sent over WhatsApp); Checkout Sessions are deferred.
+    # SECURITY: the key lives ONLY in STRIPE_SECRET_KEY and is NEVER echoed in any
+    # status/validation output. Prefer a RESTRICTED key (rk_) over a secret key (sk_).
+    stripe_mode: str = "mock"
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    # Pinned Stripe API version — never let the account default drift the payload
+    # shape underneath us. Bump deliberately after testing.
+    stripe_api_version: str = "2026-07-29.dahlia"
+    stripe_default_currency: str = "aed"
+    # Stripe Tax master switch. DEFAULT OFF: enabling automatic_tax WITHOUT an
+    # active tax registration silently collects nothing (the #1 Stripe Tax trap),
+    # so tax stays off until a registration exists and this is deliberately set on.
+    stripe_automatic_tax_enabled: bool = False
+
     # --- Inbound message aggregation (task spec §§14-23) --------------------
     # Customers often send one thought as several quick fragments ("Hi" / "need
     # wash" / "tomorrow"). When enabled, inbound fragments are buffered per
@@ -476,6 +572,81 @@ class Settings(BaseSettings):
                 "config (WHATSAPP_MODE=evolution + all EVOLUTION_* set)."
             )
 
+    # --- Stripe payment gating (mock-first; mirrors the LLM/WhatsApp gates) ---
+    @property
+    def stripe_mode_normalized(self) -> str:
+        """Active Stripe mode (mock|test|live); anything unrecognized resolves to
+        the safe 'mock' (never accidentally hits a real account)."""
+        m = (self.stripe_mode or "").strip().lower()
+        return m if m in STRIPE_MODES else "mock"
+
+    @property
+    def stripe_is_live_mode(self) -> bool:
+        """True only for real *live-money* mode. 'test' is a real API call but
+        against test data, so it is NOT 'live'."""
+        return self.stripe_mode_normalized == "live"
+
+    @property
+    def stripe_live_ready(self) -> bool:
+        """True only when a real Stripe provider should be selected: mode is
+        test/live AND a secret key is present. 'mock' is never ready."""
+        return self.stripe_mode_normalized in ("test", "live") and bool(self.stripe_secret_key.strip())
+
+    @property
+    def stripe_automatic_tax_effective(self) -> bool:
+        """Whether invoices enable Stripe Tax. Only ever true when explicitly
+        switched on AND a real provider is selected — mock never 'collects' tax."""
+        return bool(self.stripe_automatic_tax_enabled) and self.stripe_live_ready
+
+    @property
+    def stripe_status(self) -> dict:
+        """Safe (secret-free) snapshot for health/status endpoints. NEVER includes
+        the key — only whether one is configured."""
+        return {
+            "mode": self.stripe_mode_normalized,
+            "configured": bool(self.stripe_secret_key.strip()),
+            "webhook_configured": bool(self.stripe_webhook_secret.strip()),
+            "live_ready": self.stripe_live_ready,
+            "live": self.stripe_is_live_mode,
+            "api_version": self.stripe_api_version,
+            "default_currency": self.stripe_default_currency,
+            "automatic_tax": self.stripe_automatic_tax_effective,
+            "surface": "invoicing",
+        }
+
+    def validate_stripe_config(self) -> None:
+        """Fail fast on a misconfigured Stripe integration WITHOUT revealing the
+        key. 'mock' requires nothing (never raises). test/live require a key whose
+        prefix matches the mode — a live key in test mode (or vice versa) is a
+        dangerous mismatch and is rejected."""
+        mode = self.stripe_mode_normalized
+        if mode == "mock":
+            return
+        key = self.stripe_secret_key.strip()
+        if not key:
+            raise ValueError(
+                f"STRIPE_MODE={mode} requires STRIPE_SECRET_KEY to be set "
+                "(prefer a restricted rk_ key). Do not commit real keys."
+            )
+        # Stripe keys embed their mode: *_test_* vs *_live_*. Guard the mismatch.
+        is_test_key = "_test_" in key
+        is_live_key = "_live_" in key
+        if mode == "test" and is_live_key:
+            raise ValueError(
+                "STRIPE_MODE=test but STRIPE_SECRET_KEY looks like a LIVE key "
+                "(_live_). Use a test-mode key (rk_test_/sk_test_) in test mode."
+            )
+        if mode == "live" and is_test_key:
+            raise ValueError(
+                "STRIPE_MODE=live but STRIPE_SECRET_KEY looks like a TEST key "
+                "(_test_). A live-mode integration must use a live key."
+            )
+        cur = (self.stripe_default_currency or "").strip()
+        if not (isinstance(cur, str) and len(cur) == 3):
+            raise ValueError(
+                f"STRIPE_DEFAULT_CURRENCY must be a 3-letter ISO code (got {cur!r})."
+            )
+
     @property
     def jwt_secret_effective(self) -> str:
         """The JWT signing secret. Falls back to a fixed dev-only secret when
@@ -545,6 +716,32 @@ class Settings(BaseSettings):
         ).strip()
 
     @property
+    def classifier_model_effective(self) -> str:
+        """Resolved classifier model id — the ONE place the classifier model is
+        decided. ANTHROPIC_CLASSIFIER_MODEL → DEFAULT_CLASSIFIER_MODEL. Fully
+        independent of the customer-facing anthropic_model_effective so the
+        classifier can be upgraded/rolled back on its own."""
+        return (self.anthropic_classifier_model or DEFAULT_CLASSIFIER_MODEL).strip()
+
+    @property
+    def anthropic_whatsapp_effort_effective(self) -> str:
+        """Resolved reasoning effort for the WhatsApp runtime. Defaults to 'high'
+        (spec) and is only sent to models that accept output_config.effort — the
+        provider gates on model family, so this is never sent to Haiku."""
+        effort = (self.anthropic_whatsapp_effort or "high").strip().lower()
+        return effort if effort in {"low", "medium", "high", "xhigh", "max"} else "high"
+
+    @property
+    def anthropic_fallback_model_effective(self) -> str:
+        """The secondary model to use ONLY when a live fallback is explicitly enabled
+        AND an id is configured. Empty string otherwise — i.e. no live fallback, so a
+        failed/refused turn drops to the safe deterministic reply, never to Haiku or a
+        different Sonnet version behind the operator's back."""
+        if self.anthropic_fallback_enabled and self.anthropic_fallback_model.strip():
+            return self.anthropic_fallback_model.strip()
+        return ""
+
+    @property
     def anthropic_temperature_effective(self) -> float:
         """Resolved sampling temperature: ANTHROPIC_WHATSAPP_TEMPERATURE when set
         (>= 0), else ANTHROPIC_TEMPERATURE. Only ONE sampling parameter is ever sent
@@ -577,13 +774,36 @@ class Settings(BaseSettings):
             "model": self.anthropic_model_effective if provider == "anthropic" else None,
             "tool_use_enabled": self.anthropic_tool_use_enabled,
             "extended_thinking": self.anthropic_extended_thinking,
+            # Sonnet 5 reasoning config (adaptive family only; None for Haiku/mock).
+            "effort": self.anthropic_whatsapp_effort_effective if provider == "anthropic" else None,
+            "thinking_mode": self.anthropic_whatsapp_thinking_mode if provider == "anthropic" else None,
+            "thinking_display": self.anthropic_whatsapp_thinking_display if provider == "anthropic" else None,
+            "fallback_model": self.anthropic_fallback_model_effective if provider == "anthropic" else None,
             "temperature": self.anthropic_temperature_effective if provider == "anthropic" else None,
             "prompt_cache_enabled": self.anthropic_prompt_cache_enabled,
             "prompt_cache_ttls": {
                 "system": self.anthropic_system_cache_ttl,
                 "history": self.anthropic_history_cache_ttl,
             },
+            "ruleset_version": self.whatsapp_service_ruleset_version,
             "live_ready": self.live_llm_ready,
+            "classifier": {
+                "enabled": self.whatsapp_classifier_enabled,
+                "shadow_mode": self.whatsapp_classifier_shadow_mode,
+                "allow_routing": self.whatsapp_classifier_allow_routing,
+                "allow_human_escalation": self.whatsapp_classifier_allow_human_escalation,
+                "model": self.classifier_model_effective,
+                "max_tokens": self.whatsapp_classifier_max_tokens,
+                "timeout_ms": self.whatsapp_classifier_timeout_ms,
+                "high_confidence": self.whatsapp_classifier_high_confidence,
+                "low_confidence": self.whatsapp_classifier_low_confidence,
+                "ruleset_version": self.whatsapp_classifier_ruleset_version,
+                "prompt_cache_enabled": self.whatsapp_classifier_prompt_cache_enabled,
+                # live only when Anthropic is the active, ready provider AND the
+                # classifier flag is on — otherwise it runs the deterministic engine.
+                "live_ready": self.whatsapp_classifier_enabled and self.live_llm_ready
+                and provider == "anthropic",
+            },
         }
 
     def validate_ai_config(self) -> None:
@@ -623,6 +843,57 @@ class Settings(BaseSettings):
         ):
             if ttl not in _valid_ttls:
                 raise ValueError(f"{name} must be one of {sorted(_valid_ttls)} (got {ttl!r}).")
+        # Sonnet 5 reasoning config.
+        _valid_effort = {"low", "medium", "high", "xhigh", "max"}
+        if (self.anthropic_whatsapp_effort or "").strip().lower() not in _valid_effort:
+            raise ValueError(
+                f"ANTHROPIC_WHATSAPP_EFFORT must be one of {sorted(_valid_effort)} "
+                f"(got {self.anthropic_whatsapp_effort!r})."
+            )
+        if (self.anthropic_whatsapp_thinking_mode or "").strip().lower() not in {"adaptive", "off"}:
+            raise ValueError(
+                "ANTHROPIC_WHATSAPP_THINKING_MODE must be 'adaptive' or 'off' "
+                f"(got {self.anthropic_whatsapp_thinking_mode!r})."
+            )
+        if (self.anthropic_whatsapp_thinking_display or "").strip().lower() not in {"omitted", "summarized"}:
+            raise ValueError(
+                "ANTHROPIC_WHATSAPP_THINKING_DISPLAY must be 'omitted' or 'summarized' "
+                f"(got {self.anthropic_whatsapp_thinking_display!r})."
+            )
+        # A live fallback model must be explicit (never a silent Haiku/other-Sonnet swap).
+        if self.anthropic_fallback_enabled and not self.anthropic_fallback_model.strip():
+            raise ValueError(
+                "ANTHROPIC_FALLBACK_ENABLED=true requires an explicit ANTHROPIC_FALLBACK_MODEL "
+                "(the WhatsApp runtime must never silently fall back to another model)."
+            )
+        # Classifier config (validated only when the classifier is enabled).
+        if self.whatsapp_classifier_enabled:
+            if not self.classifier_model_effective:
+                raise ValueError("ANTHROPIC_CLASSIFIER_MODEL resolves to empty — set a valid model id.")
+            _clf_int = {
+                "WHATSAPP_CLASSIFIER_MAX_TOKENS": (self.whatsapp_classifier_max_tokens, 1, 4096),
+                "WHATSAPP_CLASSIFIER_TIMEOUT_MS": (self.whatsapp_classifier_timeout_ms, 200, 60_000),
+            }
+            for name, (value, lo, hi) in _clf_int.items():
+                if not (isinstance(value, int) and lo <= value <= hi):
+                    raise ValueError(f"{name} must be an integer in [{lo}, {hi}] (got {value!r}).")
+            hi_c = float(self.whatsapp_classifier_high_confidence)
+            lo_c = float(self.whatsapp_classifier_low_confidence)
+            if not (0.0 <= lo_c <= hi_c <= 1.0):
+                raise ValueError(
+                    "WHATSAPP_CLASSIFIER_LOW_CONFIDENCE/HIGH_CONFIDENCE must satisfy "
+                    f"0.0 <= low <= high <= 1.0 (got low={lo_c!r}, high={hi_c!r})."
+                )
+            if (self.anthropic_classifier_effort or "").strip().lower() not in _valid_effort:
+                raise ValueError(
+                    f"ANTHROPIC_CLASSIFIER_EFFORT must be one of {sorted(_valid_effort)} "
+                    f"(got {self.anthropic_classifier_effort!r})."
+                )
+            if (self.anthropic_classifier_thinking_mode or "").strip().lower() not in {"adaptive", "off"}:
+                raise ValueError(
+                    "ANTHROPIC_CLASSIFIER_THINKING_MODE must be 'adaptive' or 'off' "
+                    f"(got {self.anthropic_classifier_thinking_mode!r})."
+                )
 
     @property
     def _whatsapp_required_fields(self) -> list[str]:

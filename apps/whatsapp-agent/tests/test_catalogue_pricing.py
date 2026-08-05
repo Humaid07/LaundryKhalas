@@ -126,17 +126,49 @@ def test_8_wash_fold_6kg_is_60():
     assert item["bag_limit_kg"] == 6
 
 
-def test_9_wash_fold_12kg_is_80():
+def test_9_wash_fold_12kg_is_90():
     item = _price("WASH_FOLD_12KG")
-    assert item["current_price"] == 80
+    assert item["current_price"] == 90   # ruleset 2026_08_05 (was 80)
     assert item["bag_limit_kg"] == 12
 
 
-def test_10_additional_weight_is_7_per_kg():
+def test_10_additional_weight_is_12_per_kg():
     item = _price("WASH_FOLD_ADDITIONAL_KG")
-    assert item["current_price"] == 7
+    assert item["current_price"] == 12   # ruleset 2026_08_05 (old AED 7 rule removed)
     assert item["pricing_type"] == "PER_KG"
     assert item["pricing_unit"] == "KG"
+
+
+# --- Section 18 catalogue corrections (ruleset 2026_08_05) --------------------
+def test_sole_replacement_is_facility_quote_not_550():
+    item = _price("RESTORATION_SOLE_REPLACEMENT")
+    assert item["current_price"] is None            # the AED 550 fixed price is gone
+    assert item["pricing_type"] == "INSPECTION_REQUIRED"
+    assert item["requires_inspection"] is True
+    from services import catalogue as _cat
+    assert _cat.item_price_label(item) == "Priced after inspection"
+
+
+def test_cushion_cover_large_is_20():
+    item = _price("HOME_CARE_CUSHION_COVER_LARGE")
+    assert item["current_price"] == 20
+
+
+def test_curtain_has_50_minimum_charge():
+    item = _price("HOME_CARE_CURTAIN_SQM")
+    assert item["current_price"] == 20
+    assert item["minimum_charge"] == 50
+
+
+def test_small_curtain_billed_at_minimum_50():
+    # 2 sqm x AED 20 = 40 → floored to the AED 50 minimum.
+    small = pricing.calculate_estimate(
+        [{"item_code": "HOME_CARE_CURTAIN_SQM", "quantity": 1, "measure": 2}])
+    assert small.customer_total == 50.0
+    # 4 sqm x AED 20 = 80 → above the minimum, unchanged.
+    big = pricing.calculate_estimate(
+        [{"item_code": "HOME_CARE_CURTAIN_SQM", "quantity": 1, "measure": 4}])
+    assert big.customer_total == 80.0
 
 
 def test_11_soft_toy_small_is_49():

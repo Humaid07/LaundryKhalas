@@ -13,6 +13,7 @@ import {
   agentApi, type InboxConversationDTO, type InboxMessageDTO, type OrderDTO,
 } from "@/lib/dashboard/whatsapp-agent-api";
 import { statusMeta } from "@/lib/dashboard/order-status";
+import { ClassifierPanel } from "./ClassifierPanel";
 
 const POLL_MS = 15000;
 
@@ -169,6 +170,11 @@ export function OperationsDeepLink() {
               </Button>
             </div>
           </aside>
+
+          {/* Intent-classifier panel (full width, below the thread + context) */}
+          <div className="lg:col-span-2">
+            <ClassifierPanel conversationId={conversationId} />
+          </div>
         </div>
       )}
     </Panel>

@@ -27,6 +27,31 @@ async def test_get_single_order_and_unknown_404(client):
     assert missing.status_code == 404
 
 
+async def test_order_detail_surfaces_payment_fields(client):
+    # Dashboard surfacing (spec §29): the order-detail API exposes the Stripe-first
+    # payment state so the Operations dashboard can render it.
+    data = (await client.get("/api/orders/LK-AE-1024")).json()
+    assert data["payment_preference"] == "UNDECIDED"
+    assert data["cash_on_delivery"] is False
+    assert data["payment_status"] == "unpaid"
+    assert data["payment_followup_stage"] == 0
+    assert "stripe_hosted_invoice_url" in data
+    # Order-discount snapshot (spec §§15, 29) — present, null on an undiscounted order.
+    for k in ("eligible_subtotal", "discount_percentage", "discount_amount", "discount_reason"):
+        assert k in data and data[k] is None
+    # Rule-set version (spec §§17, 29) — stamped on the order.
+    assert data["rule_version"] == "2026_08_05"
+    # Saved-address reuse (spec §29) — false for a non-reuse demo order.
+    assert data["saved_address_reuse"] is False
+    # Assigned persona (spec §29) — surfaced (null in SQLite where there's no customer join).
+    assert "assigned_persona" in data
+    assert "customer_lifecycle" in data  # §29 (null in SQLite; CRM-computed in Supabase)
+    # §29 cross-entity status fields — surfaced (null in SQLite; per-order queries in Supabase).
+    for k in ("facility_quote_status", "facility_issue_status", "web_intent_status",
+              "abandoned_followup_status"):
+        assert k in data
+
+
 async def test_mark_completed_moves_order_from_active_to_completed(client):
     before = {o["order_id"] for o in (await client.get("/api/orders/active")).json()}
     assert "LK-AE-1024" in before

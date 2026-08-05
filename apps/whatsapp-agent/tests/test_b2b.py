@@ -13,10 +13,36 @@ from services import b2b
     ("Interested in a facility partnership to supply you", "facility_partnership"),
     ("We want to outsource bulk laundry, large volume", "bulk_outsourcing"),
     ("Looking for commercial laundry for our company", "commercial_laundry"),
+    ("I run an Airbnb and need the linen turned around", "airbnb"),
     ("just some shirts please", "other"),
 ])
 def test_classify_business_type(text, expected):
     assert b2b.classify_business_type(text) == expected
+
+
+def test_airbnb_may_use_consumer_pricing_others_do_not():
+    assert b2b.may_use_consumer_pricing("airbnb") is True
+    for bt in ("hotel", "restaurant", "uniform", "commercial_laundry",
+               "bulk_outsourcing", "facility_partnership", "other"):
+        assert b2b.may_use_consumer_pricing(bt) is False
+
+
+def test_qualifying_fields_cover_spec_18():
+    for field in ("business name", "email", "estimated weekly volume", "frequency",
+                  "location", "preferred contact method"):
+        assert field in b2b.QUALIFYING_FIELDS
+
+
+def test_trial_note_never_promises_free_large_trial():
+    note = b2b.trial_note().lower()
+    assert "small trial" in note and "no charge" in note   # small trial may be free
+    assert "larger trial may be chargeable" in note        # large trial is NOT free
+    assert "aed" not in note and "%" not in note
+
+
+def test_acknowledgement_asks_for_email_and_airbnb_note():
+    assert "email" in b2b.acknowledgement("hotel")
+    assert "small Airbnb" in b2b.acknowledgement("airbnb")
 
 
 def test_acknowledgement_routes_and_never_quotes_price():

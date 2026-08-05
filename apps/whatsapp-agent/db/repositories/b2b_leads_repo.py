@@ -13,14 +13,15 @@ from services import b2b as b2b_svc
 _COLS = (
     "id, lead_ref, customer_id, conversation_id, company_name, contact_person, "
     "business_type, location, market, estimated_volume, required_services, "
-    "frequency, current_provider, preferred_meeting_time, notes, assigned_team, "
+    "frequency, current_provider, preferred_meeting_time, email, "
+    "preferred_contact_method, notes, assigned_team, "
     "status, source, created_at, updated_at"
 )
 
 _UPDATABLE = frozenset({
     "company_name", "contact_person", "business_type", "location", "market",
     "estimated_volume", "required_services", "frequency", "current_provider",
-    "preferred_meeting_time", "notes", "status",
+    "preferred_meeting_time", "email", "preferred_contact_method", "notes", "status",
 })
 
 

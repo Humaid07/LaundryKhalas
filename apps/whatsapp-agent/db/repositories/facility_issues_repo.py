@@ -63,6 +63,17 @@ async def create(
     )
 
 
+async def status_for_order(order_uuid: str) -> str:
+    """The §29 facility-issue status for one order: open | resolved | none. Best-effort."""
+    if not order_uuid:
+        return "none"
+    rows = await database.fetch(
+        "select status from facility_issues where order_id = $1::uuid", order_uuid)
+    if not rows:
+        return "none"
+    return "open" if any(r["status"] != "resolved" for r in rows) else "resolved"
+
+
 async def list_issues(facility_id: str | None = None, status: str | None = None) -> list[dict]:
     conds: list[str] = []
     params: list = []

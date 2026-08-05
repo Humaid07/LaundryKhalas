@@ -194,6 +194,7 @@ def _normalise_item(item: dict, service: dict, category: dict) -> dict:
         "pricing_unit": _effective_unit(item, service, category),
         "current_price": _num(item.get("current_price")),
         "regular_price": _num(item.get("regular_price")),
+        "minimum_charge": _num(item.get("minimum_charge")),
         "currency": currency(),
         "is_starting_price": is_starting,
         "requires_inspection": requires_inspection,

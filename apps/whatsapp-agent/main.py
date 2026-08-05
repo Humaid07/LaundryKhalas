@@ -28,8 +28,10 @@ from api import (
     seo_agents,
     service_taxonomy,
     settings_route,
+    stripe_webhooks,
     tickets,
     users,
+    web_intents,
     webhooks,
 )
 from db import AsyncSessionLocal, database, init_db
@@ -49,6 +51,9 @@ async def lifespan(app: FastAPI):
     get_settings().validate_ai_config()
     # Fail fast on an unusable LIVE facility-notification config (mock never raises).
     get_settings().validate_facility_notifications_config()
+    # Fail fast on a misconfigured Stripe integration (test/live mode without a
+    # key, or a key whose mode mismatches). Never reveals the key. Mock never raises.
+    get_settings().validate_stripe_config()
 
     # In local SQLite mode: create the ORM tables and seed the demo orders
     # (LK-AE-1024..1027) so tracking/cancel/change flows and the dashboard have
@@ -110,6 +115,8 @@ app.include_router(settings_route.router, dependencies=_ADMIN)
 app.include_router(users.router, dependencies=_ADMIN)  # user management (admin only)
 app.include_router(webhooks.router)
 app.include_router(evolution_webhooks.router)
+# Stripe Invoicing settlement webhook — never auth-gated; signature-verified.
+app.include_router(stripe_webhooks.router)
 app.include_router(seo_agents.router, dependencies=_ADMIN)
 app.include_router(service_taxonomy.router, dependencies=_ADMIN)
 app.include_router(catalogue.router, dependencies=_OPS)
@@ -118,6 +125,8 @@ app.include_router(catalogue.router, dependencies=_OPS)
 app.include_router(admin_pricing.router)
 # Public pricing — UNAUTHENTICATED, read-only, published data only (for the website).
 app.include_router(public_pricing.router)
+# Website Order-Now intent capture (spec §24) — public; outreach is consent-gated in-code.
+app.include_router(web_intents.router)
 # Facility (partner) dashboard — every endpoint scoped to the caller's facility.
 app.include_router(facility.router, dependencies=[Depends(deps.require_facility_scope)])
 # Facility order photos (intake + pre-dispatch) — same blanket facility scope.

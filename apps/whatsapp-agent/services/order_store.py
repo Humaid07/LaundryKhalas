@@ -20,6 +20,7 @@ import re
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Order
@@ -145,16 +146,30 @@ _DEMO_ORDERS = [
 
 
 async def seed_demo_orders(db: AsyncSession) -> None:
-    """Insert the demo orders if they aren't there yet. Safe to call on
-    every startup - matches by order_id, never duplicates."""
+    """Insert the demo orders if they aren't there yet. Idempotent AND
+    race-tolerant: on a shared database (e.g. the file-backed test DB, where a
+    leaked connection from another test can insert a demo row between our
+    existence check and the flush) a UNIQUE(order_id) violation is treated as
+    'already seeded' — the per-row SAVEPOINT rolls back and we skip it — instead
+    of propagating and breaking the caller's transaction. Each insert flushes
+    inside its own nested transaction so a pending add never surfaces as an
+    autoflush IntegrityError on the next iteration's SELECT. Safe to call on
+    every startup; matches by order_id and never duplicates."""
     for data in _DEMO_ORDERS:
         result = await db.execute(select(Order).where(Order.order_id == data["order_id"]))
         if result.scalar_one_or_none() is not None:
             continue
-        order = Order(source_channel="whatsapp", is_demo=True, **data)
+        from settings import get_settings
+        order = Order(source_channel="whatsapp", is_demo=True,
+                      rule_version=get_settings().whatsapp_service_ruleset_version, **data)
         if order.status == COMPLETED:
             order.completed_at = datetime.now(timezone.utc)
-        db.add(order)
+        try:
+            async with db.begin_nested():
+                db.add(order)
+        except IntegrityError:
+            # Another connection already seeded this order_id — demo data, fine.
+            pass
     await db.commit()
 
 
@@ -345,9 +360,22 @@ def to_dict(order: Order) -> dict:
         "change_request": order.change_request,
         "amount": order.amount,
         "currency": order.currency,
+        # Order-discount snapshot (spec §§15, 29).
+        "eligible_subtotal": getattr(order, "eligible_subtotal", None),
+        "discount_percentage": getattr(order, "discount_percentage", None),
+        "discount_amount": getattr(order, "discount_amount", None),
+        "discount_reason": getattr(order, "discount_rule_code", None),
+        "rule_version": getattr(order, "rule_version", None),
+        "saved_address_reuse": getattr(order, "address_source", None) == "saved_reuse",
         "facility": order.facility,
         "driver": order.driver,
         "payment": order.payment,
+        # Stripe-first payment surfacing (spec §§13, 29). Backend-authoritative.
+        "payment_preference": getattr(order, "payment_preference", "UNDECIDED"),
+        "cash_on_delivery": getattr(order, "payment_preference", None) == "CASH_ON_DELIVERY",
+        "payment_status": getattr(order, "payment_status", "unpaid"),
+        "payment_followup_stage": getattr(order, "payment_followup_stage", 0),
+        "stripe_hosted_invoice_url": getattr(order, "stripe_hosted_invoice_url", None),
         "source_channel": order.source_channel,
         "is_demo": order.is_demo,
         "created_at": order.created_at,

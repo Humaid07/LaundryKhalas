@@ -116,6 +116,13 @@ def to_read(row: dict, *, include_address: bool = False) -> dict:
         "change_request": row.get("change_request"),
         "amount": float(row["amount"]) if row.get("amount") is not None else None,
         "currency": "AED",
+        # Order-discount snapshot (spec §§15, 29).
+        "eligible_subtotal": float(row["eligible_subtotal"]) if row.get("eligible_subtotal") is not None else None,
+        "discount_percentage": float(row["discount_percentage"]) if row.get("discount_percentage") is not None else None,
+        "discount_amount": float(row["discount_amount"]) if row.get("discount_amount") is not None else None,
+        "discount_reason": row.get("discount_rule_code"),
+        "rule_version": row.get("rule_version"),
+        "saved_address_reuse": row.get("address_source") == "saved_reuse",
         # Item-level catalogue pricing (task spec §8-10/§17). None on legacy orders.
         "line_items": row.get("line_items") or None,
         "catalogue_category": row.get("catalogue_category_name"),
@@ -123,11 +130,18 @@ def to_read(row: dict, *, include_address: bool = False) -> dict:
         "facility": row.get("facility"),
         "driver": row.get("driver"),
         "payment": row.get("payment_status"),
+        # Stripe-first payment surfacing (spec §§13, 29). Backend-authoritative.
+        "payment_preference": row.get("payment_preference") or "UNDECIDED",
+        "cash_on_delivery": row.get("payment_preference") == "CASH_ON_DELIVERY",
+        "payment_status": row.get("payment_status") or "unpaid",
+        "payment_followup_stage": row.get("payment_followup_stage") or 0,
+        "stripe_hosted_invoice_url": row.get("stripe_hosted_invoice_url"),
         "source_channel": row.get("source_channel") or "whatsapp",
         "is_demo": bool(row.get("is_demo")),
         # Dashboard-only joined fields (present on list_for_dashboard rows; None on
         # the plain list/get queries that don't join conversations/customers).
         "customer_phone": row.get("customer_masked_phone"),
+        "assigned_persona": row.get("assigned_persona"),
         "needs_attention": bool(row.get("needs_attention")),
         "conversation_status": row.get("conversation_status"),
         "human_takeover": row.get("conversation_status") == "human_takeover",
@@ -240,6 +254,7 @@ async def list_for_dashboard(
     offset_ph = p(max(0, (max(1, page) - 1) * page_size))
     rows = await database.fetch(
         f"select o.*, cust.masked_phone as customer_masked_phone, "
+        f"cust.assigned_ai_persona_name as assigned_persona, "
         f"c.status as conversation_status, c.assigned_team as conversation_team, "
         f"{_ATTENTION_SQL} as needs_attention {base} "
         f"order by {order_by} limit {limit_ph} offset {offset_ph}",
@@ -248,14 +263,65 @@ async def list_for_dashboard(
     return [to_read(r) for r in rows], total
 
 
+# crm lifecycle stage → §29 dashboard vocabulary. An order-detail always has an order,
+# so the brand-new NEW_PROSPECT case doesn't arise here; a 0-order "lead" with an order
+# record is a returning prospect (e.g. a draft that isn't a completed order yet).
+_LIFECYCLE_TO_SPEC29 = {
+    "b2b_lead": "B2B_LEAD",
+    "repeat_customer": "EXISTING_CUSTOMER",
+    "active_customer": "ACTIVE_CUSTOMER",
+    "complaint_open": "EXISTING_CUSTOMER",
+    "inactive": "EXISTING_CUSTOMER",
+    "lead": "RETURNING_PROSPECT",
+}
+
+
 async def get_read(order_id: str) -> dict | None:
     row = await database.fetchrow(
-        _SELECT + " where upper(replace(order_id,' ','')) = upper(replace($1,' ','')) ",
+        "select o.*, cust.assigned_ai_persona_name as assigned_persona "
+        "from orders o left join customers cust on cust.id = o.customer_id "
+        " where upper(replace(o.order_id,' ','')) = upper(replace($1,' ','')) ",
         order_id,
     )
+    if row is None:
+        return None
     # Secure single-order detail: the full pickup address IS included here (and
     # only here) — list responses never expose it.
-    return to_read(row, include_address=True) if row else None
+    read = to_read(row, include_address=True)
+    # §29 customer-lifecycle enrichment — computed from CRM facts, mapped to the spec
+    # vocabulary. Best-effort: a lifecycle lookup must never break the order detail.
+    customer_id = row.get("customer_id")
+    if customer_id:
+        try:
+            from db.repositories import crm_repo
+            from services import crm_segments
+            facts = await crm_repo.gather_facts(str(customer_id))
+            read["customer_lifecycle"] = _LIFECYCLE_TO_SPEC29.get(
+                crm_segments.compute_lifecycle_stage(facts), "RETURNING_PROSPECT")
+        except Exception:  # noqa: BLE001 - enrichment must never break the read
+            pass
+    # §29 cross-entity status enrichment (facility quote/issue, web-intent, abandonment).
+    # Each is a best-effort per-order lookup — a status query must never break the detail.
+    order_uuid = row.get("id")
+    if order_uuid:
+        try:
+            from db.repositories import facility_issues_repo, pending_tasks_repo
+            read["facility_issue_status"] = await facility_issues_repo.status_for_order(str(order_uuid))
+            read["facility_quote_status"] = await pending_tasks_repo.facility_quote_status(str(order_uuid))
+        except Exception:  # noqa: BLE001
+            pass
+    phone = row.get("customer_phone")
+    if phone:
+        try:
+            from services.privacy import normalize_e164
+            num = normalize_e164(phone)
+            if num:
+                from db.repositories import scheduled_followups_repo, web_order_intents_repo
+                read["web_intent_status"] = await web_order_intents_repo.status_for_number(num)
+                read["abandoned_followup_status"] = await scheduled_followups_repo.web_abandonment_status(num)
+        except Exception:  # noqa: BLE001
+            pass
+    return read
 
 
 async def complete(order_id: str) -> dict | None:
@@ -547,6 +613,9 @@ _BOOKING_COLS = frozenset({
     "review_summary_shown_at",
     "facility_handoff_status", "facility_handoff_at", "facility_handoff_attempts",
     "facility_handoff_last_error", "facility_handoff_payload",
+    # Stripe-first payment state — 000040 (spec §13).
+    "payment_preference", "stripe_preference_explained_at", "stripe_no_account_explained_at",
+    "cash_requested_at", "cash_accepted_at", "payment_followup_stage",
 })
 # Columns written by the FSM that are jsonb and need an explicit cast.
 _JSONB_BOOKING_COLS = frozenset({"line_items", "confirmed_notes_snapshot", "facility_handoff_payload"})
@@ -672,14 +741,17 @@ async def confirm_booking(order_uuid: str) -> tuple[dict | None, bool]:
     """Flip the draft to a confirmed operational order EXACTLY once. Returns
     (row, created_now). A redelivered/duplicate confirm returns created_now=False
     and writes no second event — so the operational order is created only once."""
+    from settings import get_settings
     row = await database.fetchrow(
         """
         update orders
-           set status = $2, conversation_state = $3, confirmed_at = now()
+           set status = $2, conversation_state = $3, confirmed_at = now(),
+               rule_version = coalesce(rule_version, $5)
          where id = $1 and status = $4 and conversation_state is distinct from $3
         returning *
         """,
         order_uuid, order_store.PICKUP_SCHEDULED, _BOOKING_CONFIRMED, order_store.DRAFT,
+        get_settings().whatsapp_service_ruleset_version,
     )
     if row is None:
         current = await database.fetchrow(_SELECT + " where id = $1", order_uuid)

@@ -50,27 +50,66 @@ async def _call(execute, tool, **inp):
 # --------------------------------------------------------------------------
 async def test_summary_charges_flat_fee_below_minimum():
     repo = _Repo()
-    repo.row.update({  # 1 shirt @ AED 9 → below the AED 50 minimum
+    repo.row.update({  # 1 shirt @ AED 9 → below the AED 30 minimum
         "line_items": [{"item_code": "CLEAN_PRESS_SHIRT", "quantity": 1}],
         "catalogue_category_code": "CLEAN_PRESS", "catalogue_category_name": "Clean & Press",
     })
     data, err = await _call(make_booking_executor(_ctx(repo)), "get_order_summary")
     assert err is False
     assert data["delivery_free"] is False
-    assert data["delivery_fee_aed"] == 8.0
-    assert data["order_grand_total_aed"] == data["final_price_aed"] + 8.0
+    assert data["delivery_fee_aed"] == 10.0   # ruleset 2026_08_05 (was 8)
+    assert data["order_grand_total_aed"] == data["final_price_aed"] + 10.0
 
 
 async def test_summary_free_delivery_at_or_above_minimum():
     repo = _Repo()
-    repo.row.update({  # 8 shirts @ AED 9 = 72 → free
-        "line_items": [{"item_code": "CLEAN_PRESS_SHIRT", "quantity": 8}],
+    repo.row.update({  # 4 shirts @ AED 9 = 36 → at/above the AED 30 minimum → free
+        "line_items": [{"item_code": "CLEAN_PRESS_SHIRT", "quantity": 4}],
         "catalogue_category_code": "CLEAN_PRESS", "catalogue_category_name": "Clean & Press",
     })
     data, _ = await _call(make_booking_executor(_ctx(repo)), "get_order_summary")
     assert data["delivery_free"] is True
     assert data["delivery_fee_aed"] == 0.0
     assert data["order_grand_total_aed"] == data["final_price_aed"]
+
+
+# --------------------------------------------------------------------------
+# Stripe-first payment tool (§13) — escalation + persistence
+# --------------------------------------------------------------------------
+async def test_set_payment_preference_escalates_and_persists():
+    repo = _Repo()
+    execute = make_booking_executor(_ctx(repo))
+    d1, err = await _call(execute, "set_payment_preference", customer_message="do you accept cash?")
+    assert err is False and d1["handled"] is True
+    assert d1["reply"] == "Our regular payment method is a Stripe link sent on WhatsApp."
+    assert repo.row["payment_preference"] == "UNDECIDED"
+    assert repo.row.get("stripe_preference_explained_at") is not None
+
+    d2, _ = await _call(execute, "set_payment_preference", customer_message="I don't have stripe")
+    assert "do not need a Stripe account" in d2["reply"]
+
+    d3, _ = await _call(execute, "set_payment_preference", customer_message="only cash please")
+    assert d3["reply"] == "No problem. We can arrange cash on delivery."
+    assert repo.row["payment_preference"] == "CASH_ON_DELIVERY"
+    assert repo.row.get("cash_accepted_at") is not None
+    assert d3["stop_pushing"] is True
+
+
+async def test_set_payment_preference_ignores_non_payment_message():
+    repo = _Repo()
+    execute = make_booking_executor(_ctx(repo))
+    d, err = await _call(execute, "set_payment_preference", customer_message="what time is pickup?")
+    assert err is False and d["handled"] is False
+
+
+async def test_save_pickup_address_marks_saved_reuse():
+    # §29: reusing a saved address is recorded so the dashboard can surface it.
+    repo = _Repo()
+    execute = make_booking_executor(_ctx(repo))
+    await _call(execute, "save_pickup_address", address="Villa 12, Dubai Marina", reused_from_saved=True)
+    assert repo.row["address_source"] == "saved_reuse"
+    await _call(execute, "save_pickup_address", address="Flat 3, Downtown Dubai")
+    assert repo.row["address_source"] == "customer"   # a fresh address is not a reuse
 
 
 # --------------------------------------------------------------------------

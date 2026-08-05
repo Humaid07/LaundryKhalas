@@ -78,6 +78,16 @@ export interface Order {
   payment: PaymentStatus;
   createdAt: string;
   items: { name: string; qty: number }[];
+  // Optional §29 dashboard-surfacing fields — populated on live agent orders (via the
+  // backend order-read), absent on mock rows. The cards render each only when present.
+  assigned_persona?: string | null;        // customer's persistent AI persona
+  customer_lifecycle?: string | null;      // NEW_PROSPECT | RETURNING_PROSPECT | EXISTING_CUSTOMER | ACTIVE_CUSTOMER | B2B_LEAD
+  saved_address_reuse?: boolean | null;    // reused a saved pickup address
+  human_takeover?: boolean | null;         // human-intervention active
+  facility_quote_status?: string | null;   // pending | received | none
+  facility_issue_status?: string | null;   // open | resolved | none
+  web_intent_status?: string | null;       // captured | consented | converted
+  abandoned_followup_status?: string | null; // scheduled | sent | cancelled | none
 }
 
 export interface Conversation {

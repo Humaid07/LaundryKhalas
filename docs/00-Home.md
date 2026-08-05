@@ -22,6 +22,44 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — Stripe integration: Payments · Invoicing · Tax (2026-08-05)
+Real Stripe integration behind a **mock-first** boundary (mirrors the LLM layer):
+new `apps/whatsapp-agent/services/payments/` package with one `get_gateway()`
+selector → deterministic `MockStripeGateway` (default, no key/network) or the live
+`StripeProvider` (Invoicing + Stripe Tax) chosen ONLY when `STRIPE_MODE`=test/live
+with a key. Signature-verified idempotent `POST /webhooks/stripe`; migration 000041
++ Order settlement columns; `stripe>=15.4.0`. Best-practices enforced (send_invoice,
+idempotency keys, `automatic_tax` only-when-requested, **never** `payment_method_types`).
+**33 new tests pass** offline. Founder-approved live scope (overrides mock-first for
+this module). Booking-flow wiring, Tax registrations, and applying 000041 to Supabase
+are **deferred**; real sandbox (`acct_1U0Hz7J3O1LiJS3C`) end-to-end awaits interactive
+`stripe login`. Report: `build-reports/2026-08-05-stripe-integration.md` ·
+Architecture: [[stripe-integration]] (`architecture/stripe-integration.md`).
+
+## Latest — WhatsApp Intent Classifier, Stage 1 shadow (2026-08-05)
+New internal routing classifier (`apps/whatsapp-agent/classifier/`): forced-tool
+structured output on a **separate, independently-configurable model**
+(`ANTHROPIC_CLASSIFIER_MODEL`=claude-sonnet-5; main agent untouched). Deterministic
+pre-classification + rule-engine fallback; recommend-only router; backend-resolved
+lifecycle; migration 000039 `whatsapp_message_classifications` (idempotent, RLS
+deny); shadow hook in `evolution_webhooks._process_reply` (fail-open, no routing
+change yet); structlog/metrics observability (no Langfuse in repo). Live Anthropic
+founder-approved 2026-08-05. **1428 tests pass** (75 new); ruff clean. Migration
+NOT yet applied. Stages 2–4 (routing, dashboard panel, eval dataset) deferred.
+Report: `build-reports/2026-08-05-whatsapp-intent-classifier.md` ·
+Design: `superpowers/specs/2026-08-05-whatsapp-classifier-design.md`.
+
+## Latest — Agent & Dashboard Inventory (audit, 2026-08-05)
+Code-verified map of every AI agent and how each coordinates with the dashboards.
+One real live-capable agent (**WhatsApp Operations**, Anthropic-wired, mock by
+default, guarded by deterministic FSM/classifier engines) + an experimental
+LangGraph twin (**Laundry Class**, LLM off) + a 16-agent **mock SEO fleet**; the
+roadmap **Classifier Agent is deferred/not-built**. Admin Operations/Orders/
+Facilities/Pricing are live against the agent; the rest of admin is mock scaffolding.
+Includes honest gaps vs `CLAUDE.md` (no draft-approval queue, no live AI-action-log
+view, Opus-vs-Haiku model drift).
+Report: `build-reports/2026-08-05-agent-and-dashboard-inventory.md`.
+
 ## Latest — Historical WhatsApp Replay Harness (2026-08-04)
 
 A new testing tool, `apps/whatsapp-agent/replay_harness/`, replays every original

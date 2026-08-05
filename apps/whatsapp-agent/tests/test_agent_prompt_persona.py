@@ -78,7 +78,7 @@ def test_currency_overlay_present():
 # --------------------------------------------------------------------------
 @pytest.mark.parametrize("needle", [
     "photo",                # specialty photo-gate
-    "alterations start from AED",   # standard alterations = starting price, no photo (§5)
+    "lookup_alteration_price",      # standard alterations = exact tiered price, no photo (§18)
     "room number",          # hotels
     "15–30 minutes",   # driver contact window
     "reception",            # leave-with fallbacks
@@ -91,9 +91,11 @@ def test_flow_elements_present(needle):
 
 def test_payment_prefers_card_but_allows_cash():
     bp = booking_system_prompt()
-    assert "card payment" in bp
-    assert "cash" in bp
-    assert "do NOT create or promise a payment link" in bp
+    # Stripe-first escalation (spec §13): regular method → no-account → cash fallback.
+    assert "Our regular payment method is a Stripe link sent on WhatsApp." in bp
+    assert "You do not need a Stripe account." in bp
+    assert "We can arrange cash on delivery." in bp
+    assert "create or promise a payment link" in bp
 
 
 # --------------------------------------------------------------------------
