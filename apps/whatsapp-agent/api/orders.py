@@ -9,15 +9,28 @@ mode (the supabase branch only triggers when DATABASE_MODE=supabase).
 """
 from datetime import date
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from channels.evolution_whatsapp import EvolutionWhatsAppChannel
 from db import database, get_db
-from db.repositories import conversations_repo, order_events_repo, orders_repo
+from db.repositories import conversations_repo, messages_repo, order_events_repo, orders_repo
 from schemas import OrderMetrics, OrderPage, OrderRead, OrderStatusUpdate
 from services import notifications, order_photos as photo_svc, order_store
+from services.payments.invoicing import (
+    build_invoice_request,
+    ensure_invoice_for_order,
+    render_payment_message,
+)
+from settings import get_settings
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
+logger = structlog.get_logger()
+
+# Status for a drafted Stripe payment-link message held for operator approval.
+_PENDING_PAYMENT_STATUS = "pending_approval"
 
 
 @router.get("/search", response_model=OrderPage)
@@ -216,3 +229,107 @@ async def update_order_status(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
     return order_store.to_dict(order)
+
+
+# --- Stripe payment link (admin-triggered, spec §13) ------------------------
+# Ops creates a Stripe invoice for a confirmed STRIPE order and queues the pay
+# link as a message held for approval; a second call approves + sends it via the
+# sanctioned human-send path. Supabase-mode only (mirrors the order-detail surface).
+class PaymentLinkApprove(BaseModel):
+    message_id: str
+    operator_name: str | None = None
+
+
+@router.post("/{order_id}/payment-link")
+async def create_payment_link(order_id: str):
+    """Create (once) a Stripe invoice for a confirmed STRIPE order and draft the
+    pay-link message for approval. Idempotent: if a link already exists it is
+    returned without creating a second invoice or a duplicate draft."""
+    if not database.is_supabase_mode():
+        raise HTTPException(status_code=400, detail="Payment links require the Supabase backend.")
+    # Accept either the business order id (LK-AE-1024) or the internal uuid, so the
+    # caller can pass whichever the order object carries (id::text avoids a uuid
+    # parse error when a business id is supplied).
+    row = await database.fetchrow(
+        "select * from orders where order_id = $1 or id::text = $1", order_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    order = dict(row)
+
+    settings = get_settings()
+    request, reason = build_invoice_request(
+        order, automatic_tax=settings.stripe_automatic_tax_effective)
+    already = bool(order.get("stripe_invoice_id"))
+    if request is None and not already:
+        # Genuinely ineligible (not confirmed / not STRIPE / no amount).
+        raise HTTPException(status_code=409, detail=reason or "Order is not eligible for a payment link.")
+
+    result = await ensure_invoice_for_order(order)  # None when already-invoiced (guard) or ineligible
+
+    hosted = result.hosted_invoice_url if result else order.get("stripe_hosted_invoice_url")
+    invoice_id = result.invoice_id if result else order.get("stripe_invoice_id")
+    currency = (result.currency if result else order.get("payment_currency")) or order.get("currency") or "aed"
+    if not hosted:
+        raise HTTPException(status_code=502, detail="Could not obtain a payment link from the payment gateway.")
+
+    # Draft the pending-approval message ONLY when a fresh invoice was just created
+    # (avoids duplicate drafts on a re-click once the link exists).
+    draft = None
+    convo_id = order.get("conversation_id")
+    if result is not None and convo_id:
+        amount_major = (result.amount_due_minor or 0) / 100
+        text = render_payment_message(
+            name=str(order.get("customer_name") or ""), order_id=order_id,
+            amount_major=amount_major, currency=currency, hosted_url=hosted)
+        draft = await messages_repo.add_message(
+            str(convo_id), "agent", text,
+            status=_PENDING_PAYMENT_STATUS,
+            metadata={"kind": "stripe_payment_link", "order_id": order_id, "invoice_id": invoice_id},
+        )
+
+    return {
+        "order_id": order_id,
+        "invoice_id": invoice_id,
+        "hosted_invoice_url": hosted,
+        "currency": currency,
+        "already_existed": result is None,
+        "draft_message": draft,
+    }
+
+
+@router.post("/{order_id}/payment-link/approve")
+async def approve_payment_link(order_id: str, payload: PaymentLinkApprove):
+    """Approve a drafted pay-link message and send it to the customer via the
+    sanctioned human-send path (Evolution). Idempotent: a message that is no
+    longer pending returns a no-op."""
+    if not database.is_supabase_mode():
+        raise HTTPException(status_code=400, detail="Payment links require the Supabase backend.")
+    msg = await database.fetchrow(
+        "select id, conversation_id, message_text, status from messages where id = $1",
+        payload.message_id)
+    if msg is None:
+        raise HTTPException(status_code=404, detail="Draft message not found.")
+    if msg["status"] != _PENDING_PAYMENT_STATUS:
+        return {"status": "already_processed", "send_status": "skipped"}
+
+    convo_id = str(msg["conversation_id"])
+    text = msg["message_text"]
+    # Human-approved send is the sanctioned way to send live WhatsApp in the MVP.
+    await conversations_repo.start_human_takeover(convo_id, payload.operator_name)
+
+    send_status = "stored"
+    settings = get_settings()
+    if settings.evolution_live_ready:
+        phone = await conversations_repo.get_customer_phone(convo_id)
+        if phone:
+            try:
+                sent = await EvolutionWhatsAppChannel.from_settings().send_text(
+                    to_phone=phone, text=text)
+                send_status = sent.status
+            except Exception as exc:  # noqa: BLE001 - report, don't 500
+                logger.warning("payment_link_send_failed", order=order_id, error=str(exc))
+                send_status = "send_failed"
+
+    new_status = "sent" if send_status in ("sent", "stored") else "send_failed"
+    await messages_repo.set_status(payload.message_id, new_status)
+    return {"status": new_status, "send_status": send_status}

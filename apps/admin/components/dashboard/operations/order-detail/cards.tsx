@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/dashboard/ui/primitives";
 import { Button } from "@/components/dashboard/ui/Button";
+import { agentApi } from "@/lib/dashboard/whatsapp-agent-api";
 import { orderStatusTone, paymentTone, convStatusTone } from "@/lib/dashboard/status-maps";
 import { qualityTone } from "@/lib/dashboard/operations-data";
 import { formatMoney, formatRelativeTime, maskPhone } from "@/lib/dashboard/formatters";
@@ -124,6 +125,77 @@ export function CustomerSnapshotCard({ order }: { order: Order }) {
 
 /* ------------------------------ Payment snapshot ---------------------------- */
 
+/** Admin-triggered Stripe pay-link: create the invoice, then approve to send.
+ * Shown only for confirmed STRIPE orders; the backend enforces true eligibility
+ * (a non-eligible order returns a 409 whose reason is surfaced here). */
+function PaymentLinkActions({ order }: { order: OrderWithPricing }) {
+  const [link, setLink] = useState<string | null>(order.stripe_hosted_invoice_url ?? null);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onCreate() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await agentApi.createPaymentLink(order.id);
+      setLink(res.hosted_invoice_url);
+      setDraftId(res.draft_message?.id ?? null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create the payment link.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onApprove() {
+    if (!draftId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await agentApi.approvePaymentLink(order.id, draftId);
+      setSent(res.status === "sent");
+      if (res.status !== "sent") setError(`Not sent (${res.send_status}).`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not send the payment link.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-border/60 pt-3">
+      {link ? (
+        <div className="space-y-2">
+          <a
+            href={link}
+            target="_blank"
+            rel="noreferrer"
+            className="block truncate text-xs text-ink underline underline-offset-2 hover:opacity-80"
+          >
+            {link}
+          </a>
+          {sent ? (
+            <p className="text-xxs text-ink-muted">Payment link sent to the customer.</p>
+          ) : draftId ? (
+            <Button variant="primary" size="sm" onClick={onApprove} disabled={busy}>
+              {busy ? "Sending…" : "Approve & send"}
+            </Button>
+          ) : (
+            <p className="text-xxs text-ink-faint">Link ready. Open the conversation to send it.</p>
+          )}
+        </div>
+      ) : (
+        <Button variant="primary" size="sm" onClick={onCreate} disabled={busy}>
+          {busy ? "Creating…" : "Create payment link"}
+        </Button>
+      )}
+      {error && <p className="mt-2 text-xxs text-danger">{error}</p>}
+    </div>
+  );
+}
+
 export function PaymentSnapshotCard({ order }: { order: OrderWithPricing }) {
   const pending = pendingAmount(order);
   const refundRelevant = order.payment === "Refunded" || order.status === "Concern Raised";
@@ -188,6 +260,7 @@ export function PaymentSnapshotCard({ order }: { order: OrderWithPricing }) {
       {pricing?.has_pending_inspection && (
         <p className="mt-3 text-xxs text-ink-muted">Final price pending inspection</p>
       )}
+      {order.payment_preference === "STRIPE" && <PaymentLinkActions order={order} />}
       <p className="mt-3 text-xxs text-ink-faint">Refunds and adjustments require approval before they take effect.</p>
     </SectionCard>
   );

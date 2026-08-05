@@ -477,6 +477,22 @@ export interface OrderPhotosResponseDTO {
   counts: { intake: number; pre_dispatch: number };
 }
 
+/** Response from creating a Stripe payment link for a confirmed STRIPE order. */
+export interface PaymentLinkResponse {
+  order_id: string;
+  invoice_id: string | null;
+  hosted_invoice_url: string | null;
+  currency: string;
+  already_existed: boolean;
+  draft_message: { id: string } | null;
+}
+
+/** Response from approving + sending a drafted pay-link message. */
+export interface PaymentLinkApproveResponse {
+  status: string;       // sent | send_failed | already_processed
+  send_status: string;  // sent | stored | send_failed | skipped
+}
+
 export const agentApi = {
   baseUrl: BASE_URL,
 
@@ -597,6 +613,19 @@ export const agentApi = {
       method: "PATCH",
       body: JSON.stringify({ status, actor_name }),
     }),
+
+  // --- Stripe payment link (admin-triggered; confirmed STRIPE orders) ---
+  // Create the invoice + queue the pay-link message for approval.
+  createPaymentLink: (id: string) =>
+    request<PaymentLinkResponse>(`/api/orders/${encodeURIComponent(id)}/payment-link`, {
+      method: "POST",
+    }),
+  // Approve the drafted pay-link message and send it to the customer.
+  approvePaymentLink: (id: string, message_id: string, operator_name?: string) =>
+    request<PaymentLinkApproveResponse>(
+      `/api/orders/${encodeURIComponent(id)}/payment-link/approve`,
+      { method: "POST", body: JSON.stringify({ message_id, operator_name }) },
+    ),
 
   // --- Intent classifier (read + Operations correction) ---
   listClassifications: (conversationId: string) =>
