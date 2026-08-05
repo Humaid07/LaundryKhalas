@@ -93,6 +93,13 @@ Supabase-only (the SQLite detail uses `order_store`); pytest asserts the fields 
   + `to_read`, added to `OrderRead` + `OrderDTO`, rendered in `CustomerSnapshotCard`. Tests: the
   tool marks reuse vs a fresh address; the order detail surfaces the flag.
 
+## Correction — classifier tests are green (2026-08-06)
+Earlier build reports in this series describe test runs "excluding the 3 classifier files."
+That exclusion was **precautionary**, from before the race-proof `seed_demo_orders` fix
+(Phase 2a) landed — the classifier files' failures were the shared-DB seed-collision, not a
+real defect. With the fix in place, the **full backend suite including the classifier tests
+(nothing excluded) passes: 1561 passed, 0 failed.** `pytest` (no args) runs them by default.
+
 ## §29 status — COMPLETE
 Every §29 order-detail field now has a backend source AND a render: payment
 (method/status/Stripe-link/follow-up), discount (%+reason), rule-set version, price type,
