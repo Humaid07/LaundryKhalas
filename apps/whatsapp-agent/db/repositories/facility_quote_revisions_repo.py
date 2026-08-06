@@ -132,6 +132,20 @@ async def set_customer_decision(revision_id: str, *, status: str) -> dict | None
     return to_read(row)
 
 
+async def latest_pending_for_order(order_uuid: str) -> dict | None:
+    """The most recent quote AWAITING a customer decision (status customer_pending)
+    for the order, or None. Customer-safe (facility fee stripped) — this is what the
+    agent relays. Never returns another order's quote (filtered by order_id)."""
+    if not order_uuid:
+        return None
+    row = await database.fetchrow(
+        f"select {_COLS} from facility_quote_revisions "
+        "where order_id = $1::uuid and status = 'customer_pending' "
+        "order by quote_version desc, created_at desc limit 1",
+        order_uuid)
+    return to_read(row)  # include_fee defaults False → customer-safe
+
+
 async def status_for_order(order_uuid: str) -> str:
     """The revised-quote status for one order: pending | customer_pending |
     approved | none. Best-effort for the facility order view."""

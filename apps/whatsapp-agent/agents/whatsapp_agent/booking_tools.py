@@ -337,6 +337,20 @@ BOOKING_TOOL_SCHEMAS: list[dict] = [
                                      "value": {"type": "string"},
                                      "always": {"type": "boolean"}},
                       "required": ["preference_type", "value"], "additionalProperties": False}},
+    {"name": "get_pending_facility_quote",
+     "description": "Check whether the facility has confirmed a price that is awaiting the customer's "
+                    "approval on the CURRENT active order. Returns the exact confirmed price + a short "
+                    "line to send. Call this before telling a customer a facility price; NEVER invent a "
+                    "facility-confirmed price yourself.",
+     "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
+    {"name": "respond_to_facility_quote",
+     "description": "Record the customer's decision on the facility-confirmed price for the CURRENT active "
+                    "order (decision 'approved' or 'declined'). Only call after get_pending_facility_quote "
+                    "shows a pending price and the customer clearly said yes/proceed or no. The backend "
+                    "records the versioned approval and, on approval, authorises the facility to proceed.",
+     "input_schema": {"type": "object",
+                      "properties": {"decision": {"type": "string", "enum": ["approved", "declined"]}},
+                      "required": ["decision"], "additionalProperties": False}},
     {"name": "get_order_summary",
      "description": "Return the itemised order summary with the final customer price (5% already included).",
      "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
@@ -1176,6 +1190,34 @@ def make_booking_executor(ctx: BookingContext):
                         # Only claim it's remembered when the backend actually saved it.
                         "note": ("Preference saved." if result.get("action") in ("created", "updated")
                                  else "Not saved as durable memory.")})
+
+        if name in ("get_pending_facility_quote", "respond_to_facility_quote"):
+            # Facility-confirmed price relay — backend-authoritative, order-scoped.
+            from db import database
+            if not database.is_supabase_mode():
+                return _ok({"pending": False, "reason": "unavailable"})
+            order = await ctx.repo.get_open_for_conversation(ctx.conversation_id)
+            if not order or not order.get("id"):
+                return _err("There's no active order with a facility quote to respond to.")
+            from services import facility_quote_workflow
+            pending = await facility_quote_workflow.get_pending_quote_for_order(str(order["id"]))
+            if name == "get_pending_facility_quote":
+                if not pending:
+                    return _ok({"pending": False,
+                                "note": "No facility-confirmed price is awaiting approval yet."})
+                return _ok({"pending": True, "final_price": pending["final_price"],
+                            "currency": pending["currency"], "reply": pending["relay_text"]})
+            # respond_to_facility_quote
+            if not pending:
+                return _err("There's no facility-confirmed price awaiting approval on this order.")
+            decision = str(ti.get("decision", "")).strip().lower()
+            if decision not in ("approved", "declined"):
+                return _err("Ask the customer to confirm clearly whether to proceed.")
+            result = await facility_quote_workflow.apply_customer_decision(
+                str(order["id"]), order.get("order_id"), decision=decision, actor_label="Customer")
+            return _ok({"recorded": bool(result.get("ok")), "decision": result.get("decision"),
+                        "final_price": pending["final_price"], "currency": pending["currency"],
+                        "processing_authorized": bool(result.get("unblocked"))})
 
         if name == "save_service_selection":
             # NOTE: this tool is NOT in _WRITE_TOOLS, so ``row`` may be None (no
