@@ -12,7 +12,8 @@ from db import database
 
 _COLS = (
     "id, order_id, order_item_id, facility_id, facility_issue_id, facility_fee, "
-    "currency, reason, customer_price, status, created_by_user_id, created_by_label, "
+    "currency, reason, customer_price, status, request_status, quote_version, "
+    "created_by_user_id, created_by_label, "
     "reviewed_by, reviewed_at, customer_decided_at, created_at, updated_at"
 )
 
@@ -32,6 +33,8 @@ def to_read(row: dict | None, *, include_fee: bool = True) -> dict | None:
         "reason": row.get("reason"),
         "customer_price": float(row["customer_price"]) if row.get("customer_price") is not None else None,
         "status": row.get("status"),
+        "request_status": row.get("request_status"),
+        "quote_version": int(row["quote_version"]) if row.get("quote_version") is not None else 1,
         "created_by_label": row.get("created_by_label"),
         "reviewed_by": row.get("reviewed_by"),
         "reviewed_at": row.get("reviewed_at"),
@@ -144,6 +147,19 @@ async def latest_pending_for_order(order_uuid: str) -> dict | None:
         "order by quote_version desc, created_at desc limit 1",
         order_uuid)
     return to_read(row)  # include_fee defaults False → customer-safe
+
+
+async def mark_sent_to_customer(revision_id: str) -> dict | None:
+    """Mark a revision as SENT_TO_CUSTOMER — but ONLY if it hasn't been sent yet.
+    Returns the row when this call performed the send (so the caller sends exactly
+    once), or None when it was already sent (idempotent guard for the proactive
+    push)."""
+    row = await database.fetchrow(
+        f"update facility_quote_revisions set request_status = 'SENT_TO_CUSTOMER', updated_at = now() "
+        "where id = $1 and coalesce(request_status,'') <> 'SENT_TO_CUSTOMER' "
+        f"returning {_COLS}",
+        revision_id)
+    return to_read(row)
 
 
 async def status_for_order(order_uuid: str) -> str:

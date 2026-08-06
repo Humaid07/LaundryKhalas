@@ -86,7 +86,11 @@ async def review_revision(revision_id: str, body: dict = Body(...)):
             notes="Revised quote approved; awaiting customer approval.",
             metadata={"revision_id": revision_id},
         )
-        return updated
+        # Proactively push the facility-confirmed price to the customer on WhatsApp
+        # (best-effort, gated + idempotent; never breaks the ops action).
+        from services import quote_outbound
+        push = await quote_outbound.send_customer_quote(rev["order_id"], order_ref=rev.get("order_ref"))
+        return {**(updated or {}), "customer_push": push}
 
     if decision == "rejected":
         if not quote_revision_svc.can_transition(rev["status"], "ops_rejected"):
