@@ -36,6 +36,7 @@ def test_parse_plain_text():
             "longitude": None,
             "media_kind": "text",
             "location_event": None,
+            "message_timestamp": None,
         }
     ]
 

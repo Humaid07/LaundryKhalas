@@ -14,9 +14,9 @@ from db import database
 from services import order_notes as policy
 
 _COLS = (
-    "id, order_id, conversation_id, category, text, source, source_message_id, "
-    "confidence, status, customer_confirmed, is_amendment, dedupe_key, superseded_by, "
-    "created_at, updated_at"
+    "id, order_id, conversation_id, category, text, priority, source, source_message_id, "
+    "confidence, status, customer_confirmed, is_amendment, order_item_id, facility_issue_id, "
+    "dedupe_key, superseded_by, created_at, updated_at"
 )
 
 
@@ -26,12 +26,15 @@ def to_read(row: dict) -> dict:
         "order_id": str(row["order_id"]) if row.get("order_id") else None,
         "category": row.get("category"),
         "text": row.get("text"),
+        "priority": row.get("priority") or "NORMAL",
         "source": row.get("source"),
         "source_message_id": row.get("source_message_id"),
         "confidence": float(row["confidence"]) if row.get("confidence") is not None else None,
         "status": row.get("status"),
         "customer_confirmed": bool(row.get("customer_confirmed")),
         "is_amendment": bool(row.get("is_amendment")),
+        "order_item_id": row.get("order_item_id"),
+        "facility_issue_id": str(row["facility_issue_id"]) if row.get("facility_issue_id") else None,
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
     }
@@ -153,3 +156,38 @@ async def confirm_active(order_uuid: str) -> list[dict]:
 
 async def grouped_active(order_uuid: str) -> dict[str, list[str]]:
     return policy.group_active_by_category(await list_active(order_uuid))
+
+
+async def add_amendment(
+    order_uuid: str,
+    *,
+    category: str,
+    text: str,
+    order_item_id: str | None = None,
+    facility_issue_id: str | None = None,
+    priority: str = "IMPORTANT",
+    source: str = "OPERATIONS",
+    conversation_id: str | None = None,
+) -> dict | None:
+    """Persist a customer clarification ANSWER as a post-confirmation amendment,
+    linked to the affected item + the facility issue that asked. Never overwrites
+    the original confirmed note (this is an additive ACTIVE amendment row that also
+    bumps notes_version, invalidating the facility's review). Idempotent by the
+    note dedupe_key. Returns the PII-safe view, or None on a de-dup conflict."""
+    dedupe = policy.dedupe_key(order_uuid, category, text)
+    row = await database.fetchrow(
+        "insert into order_notes (order_id, conversation_id, category, text, priority, "
+        "source, is_amendment, order_item_id, facility_issue_id, customer_confirmed, "
+        "dedupe_key, is_test_data) "
+        "values ($1,$2,$3,$4,$5,$6,true,$7,$8,true,$9,false) "
+        "on conflict (order_id, dedupe_key) where status = 'ACTIVE' do nothing "
+        f"returning {_COLS}",
+        order_uuid, conversation_id, category, text, priority, source,
+        order_item_id, facility_issue_id, dedupe,
+    )
+    if not row:
+        return None
+    await _audit(order_uuid, "order_amendment_added", note_text=text,
+                 metadata={"category": category, "order_item_id": order_item_id,
+                           "facility_issue_id": facility_issue_id, "source": source})
+    return to_read(row)

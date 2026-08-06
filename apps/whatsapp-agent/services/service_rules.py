@@ -31,6 +31,49 @@ _PHOTO_CATEGORIES = frozenset({"BAG_CARE", "RESTORATION"})
 _SPECIALIST_CATEGORIES = frozenset({"RESTORATION", "BAG_CARE"})
 _PHOTO_KEYWORDS = ("designer", "leather", "wedding", "suede")
 
+# --- photo policy (5 levels) — a photo NEVER blocks eligible pickup ----------
+PHOTO_OPTIONAL = "PHOTO_OPTIONAL"                     # may proceed without; don't proactively ask
+PHOTO_RECOMMENDED = "PHOTO_RECOMMENDED"               # ask ONCE; pickup proceeds without it
+PHOTO_REQUIRED_BEFORE_PROCESSING = "PHOTO_REQUIRED_BEFORE_PROCESSING"  # pickup ok; facility inspects/captures before work
+PHOTO_REQUIRED_FOR_REMOTE_EXACT_QUOTE = "PHOTO_REQUIRED_FOR_REMOTE_EXACT_QUOTE"  # exact remote quote needs it; pickup proceeds provisional
+PHOTO_NOT_REQUIRED = "PHOTO_NOT_REQUIRED"             # never ask
+
+PHOTO_POLICIES = (
+    PHOTO_OPTIONAL, PHOTO_RECOMMENDED, PHOTO_REQUIRED_BEFORE_PROCESSING,
+    PHOTO_REQUIRED_FOR_REMOTE_EXACT_QUOTE, PHOTO_NOT_REQUIRED,
+)
+# Policies where the agent should ask the customer for a photo (ONCE).
+_ASK_POLICIES = frozenset({
+    PHOTO_RECOMMENDED, PHOTO_REQUIRED_BEFORE_PROCESSING, PHOTO_REQUIRED_FOR_REMOTE_EXACT_QUOTE,
+})
+
+
+def derive_photo_policy(*, mode: str, category: str, item_code_low: str, specialist: bool) -> str:
+    """Deterministic 5-level photo policy. Core invariant: NO policy blocks pickup.
+
+    - non-specialist + exact published price → NOT_REQUIRED (e.g. standard alterations, wash & fold).
+    - specialist + facility-quote (no published price) → REQUIRED_FOR_REMOTE_EXACT_QUOTE.
+    - specialist otherwise → RECOMMENDED (ask once; proceed either way).
+    - everything else → OPTIONAL (don't proactively ask).
+    """
+    if not specialist and mode == EXACT:
+        return PHOTO_NOT_REQUIRED
+    if specialist and mode == FACILITY_QUOTE:
+        return PHOTO_REQUIRED_FOR_REMOTE_EXACT_QUOTE
+    if specialist:
+        return PHOTO_RECOMMENDED
+    return PHOTO_OPTIONAL
+
+
+def photo_blocks_pickup(policy: str) -> bool:
+    """A photo requirement is NEVER a pickup barrier (spec §1/§2)."""
+    return False
+
+
+def should_request_photo(policy: str) -> bool:
+    """Whether the agent should ask for a photo (at most once)."""
+    return policy in _ASK_POLICIES
+
 
 @dataclass(frozen=True)
 class ServiceRule:
@@ -42,6 +85,7 @@ class ServiceRule:
     base_price: float | None
     minimum_charge: float | None
     photo_required: bool
+    photo_policy: str
     inspection_required: bool
     facility_quote_required: bool
     express_eligible: bool
@@ -74,7 +118,8 @@ def resolve_rule(item_code: str, *, market: str = "AE") -> ServiceRule | None:
     mode = pricing_mode(item)
     cat = item.get("category_code") or ""
     low = (item_code or "").lower()
-    photo = cat in _PHOTO_CATEGORIES or any(k in low for k in _PHOTO_KEYWORDS)
+    specialist = cat in _SPECIALIST_CATEGORIES or any(k in low for k in _PHOTO_KEYWORDS)
+    photo_policy = derive_photo_policy(mode=mode, category=cat, item_code_low=low, specialist=specialist)
     currency = (catalogue.market_currency(market)
                 if market and market != "AE" else catalogue.currency())
     return ServiceRule(
@@ -85,7 +130,9 @@ def resolve_rule(item_code: str, *, market: str = "AE") -> ServiceRule | None:
         unit=item.get("pricing_unit", "ITEM"),
         base_price=item.get("current_price"),
         minimum_charge=item.get("minimum_charge"),
-        photo_required=bool(photo),
+        # Back-compat boolean = "should the agent ask for a photo" (never blocks pickup).
+        photo_required=should_request_photo(photo_policy),
+        photo_policy=photo_policy,
         inspection_required=bool(item.get("requires_inspection")),
         facility_quote_required=(mode == FACILITY_QUOTE),
         express_eligible=cat in _EXPRESS_CATEGORIES,

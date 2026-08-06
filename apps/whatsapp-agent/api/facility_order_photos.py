@@ -11,7 +11,7 @@ frontend fetches it as a blob), so photos are never exposed on an open URL.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Response, UploadFile
 
 from api import deps
 from api.facility import _fid, _require_manage, _require_supabase_write
@@ -61,6 +61,9 @@ async def upload_order_photos(
     order_id: str,
     stage: str = Form(...),
     files: list[UploadFile] = File(...),
+    order_item_id: str | None = Form(None),
+    caption: str | None = Form(None),
+    source: str | None = Form(None),
     principal: dict = Depends(deps.require_facility_scope),
 ):
     _require_supabase_write()
@@ -83,10 +86,36 @@ async def upload_order_photos(
             order_ref=row.get("order_id"),
             actor_id=(principal or {}).get("id"),
             actor_name=_actor(principal),
+            order_item_id=order_item_id,
+            caption=caption,
+            source=source,
         )
     except photo_svc.PhotoValidationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc))
     return {"photos": photos, "stage": stage, "uploaded": len(photos)}
+
+
+@router.patch("/orders/{order_id}/photos/{photo_id}/link")
+async def link_order_photo(
+    order_id: str,
+    photo_id: str,
+    body: dict = Body(...),
+    principal: dict = Depends(deps.require_facility_scope),
+):
+    """Link (or unlink) a photo to a line item. Body: ``{order_item_id, caption?}``;
+    a null/absent ``order_item_id`` unlinks it back to General Order Photos."""
+    _require_supabase_write()
+    fid = _fid(principal)
+    await _resolve_order(fid, order_id)
+    linked = await photo_svc.link_photo_to_item(
+        photo_id, fid,
+        order_item_id=(body or {}).get("order_item_id"),
+        caption=(body or {}).get("caption"),
+        actor_name=_actor(principal),
+    )
+    if linked is None:
+        raise HTTPException(status_code=404, detail="Photo not found for this facility.")
+    return linked
 
 
 @router.delete("/orders/{order_id}/photos/{photo_id}")

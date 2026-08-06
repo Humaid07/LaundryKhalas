@@ -325,6 +325,18 @@ BOOKING_TOOL_SCHEMAS: list[dict] = [
                     "Never decide the payment method, create a link, or invent wording yourself.",
      "input_schema": {"type": "object", "properties": {"customer_message": {"type": "string"}},
                       "required": ["customer_message"], "additionalProperties": False}},
+    {"name": "save_customer_preference",
+     "description": "Save a durable customer preference the customer EXPLICITLY stated (e.g. 'always "
+                    "WhatsApp me, do not call', 'I always use the Marina address', a preferred payment "
+                    "or service). The BACKEND validates and stores it with the right scope; it never "
+                    "erases existing memory and preserves history. Set always=true only when the "
+                    "customer said it applies every time (not just this order). Do NOT call for a "
+                    "temporary or order-specific instruction, and never store a guess.",
+     "input_schema": {"type": "object",
+                      "properties": {"preference_type": {"type": "string"},
+                                     "value": {"type": "string"},
+                                     "always": {"type": "boolean"}},
+                      "required": ["preference_type", "value"], "additionalProperties": False}},
     {"name": "get_order_summary",
      "description": "Return the itemised order summary with the final customer price (5% already included).",
      "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
@@ -544,8 +556,12 @@ def booking_system_prompt() -> str:
         "keep it intact and continue with next_missing_field from the tool — do NOT ask which "
         "service they need again. Send ONE reply that handles the unsupported request and then "
         "asks only for the real next detail.\n"
-        "- Bespoke/specialty items (bespoke:true): don't quote a price — ask for a photo + the "
-        "customer's area and create the AWAITING_CUSTOMER_PHOTO task so the team quotes it.\n"
+        "- Bespoke/specialty items (bespoke:true): never invent an exact price. A photo helps the "
+        "estimate, so you may ask for one ONCE, but do NOT block the booking if the customer cannot "
+        "send it. Give only an approved starting price or range if the tool provides one, say the "
+        "exact price is confirmed after the facility checks the item, collect the area, and continue "
+        "the pickup (create the facility quote request; use AWAITING_CUSTOMER_PHOTO only to note a "
+        "skipped photo, never as a booking blocker).\n"
         "- Route-to-specialist (route_to_specialist:true): villa/home/deep cleaning, wedding dresses, or "
         "luxury/couture care are handled by a specialist team — NEVER quote them. Warmly acknowledge, ask for "
         "the capture_fields the tool lists (in one short message), then call route_to_specialist with the "
@@ -598,8 +614,11 @@ def booking_system_prompt() -> str:
         "Press / Dry Cleaning (per garment) are commonly confused — if it's unclear, ask one "
         "quick question to pin it down before quoting.\n"
         "- Specialty items — shoes, bags/leather, carpets & rugs, curtains, soft toys, and "
-        "specialist leather/shoe/bag restoration — need a PHOTO before any quote. Ask for a clear "
-        "photo first; do not quote a specialty item from description alone.\n"
+        "specialist leather/shoe/bag restoration — a clear photo helps the estimate, so you may ask "
+        "for one ONCE. Do NOT block the booking if the customer will not or cannot send it, and do "
+        "NOT ask again. Never invent an exact price from a description: give only an approved "
+        "starting price or range if available, say the exact price is confirmed after the facility "
+        "checks the item, and continue the pickup.\n"
         "- Standard alterations & garment repairs (hemming, shortening, lengthening, taking in or "
         "letting out the waist, tightening, loosening, fitting, a zip or button replacement, a "
         "simple seam or tear repair) are ROUTINE — do NOT ask for a photo, do NOT demand "
@@ -1134,6 +1153,30 @@ def make_booking_executor(ctx: BookingContext):
             return _ok({"saved": True, "customer_name": name_val,
                         "workflow": workflow_state_block(await _current_row())})
 
+        if name == "save_customer_preference":
+            # Durable customer memory — backend-authoritative, validated, PATCH-safe.
+            from db import database
+            if not (ctx.customer and ctx.customer.get("id")):
+                return _err("No customer record yet; cannot save a preference.")
+            if not database.is_supabase_mode():
+                return _ok({"saved": False, "reason": "memory_store_unavailable"})
+            ptype = str(ti.get("preference_type", "")).strip()
+            value = str(ti.get("value", "")).strip()
+            if not ptype or not value:
+                return _err("Need a preference_type and value the customer actually stated.")
+            from services import customer_memory_service, customer_memory_store
+            scope = (customer_memory_store.CUSTOMER_GLOBAL if ti.get("always")
+                     else customer_memory_store.resolve_scope(value, default=customer_memory_store.ORDER_ONLY))
+            result = await customer_memory_service.save_confirmed_customer_memory(
+                str(ctx.customer["id"]), memory_type=ptype.upper(), memory_key=ptype.lower(),
+                memory_value=value, scope=scope, customer_confirmed=True,
+                source_order_id=(row or {}).get("id"))
+            return _ok({"saved": result.get("action") in ("created", "updated"),
+                        "action": result.get("action"), "scope": scope,
+                        # Only claim it's remembered when the backend actually saved it.
+                        "note": ("Preference saved." if result.get("action") in ("created", "updated")
+                                 else "Not saved as durable memory.")})
+
         if name == "save_service_selection":
             # NOTE: this tool is NOT in _WRITE_TOOLS, so ``row`` may be None (no
             # draft yet). We classify FIRST and only create a draft (via _apply)
@@ -1210,10 +1253,12 @@ def make_booking_executor(ctx: BookingContext):
                     "supported": True, "bespoke": True, "requested": requested,
                     "workflow": workflow_state_block(row) if row else _NEW_STATE,
                     "guidance": (
-                        "This is a bespoke/specialty item that the team must quote after seeing it. Do NOT "
-                        "quote or invent a price. Warmly ask the customer to share a clear photo of the item "
-                        "and their area/location, and call create_pending_task with AWAITING_CUSTOMER_PHOTO "
-                        "so the team follows up with a tailored quote."),
+                        "This is a bespoke/specialty item the facility must quote after checking it. Never "
+                        "invent an exact price. A photo helps, so you may ask for one ONCE, but do NOT block "
+                        "the booking or ask again if the customer cannot send it. Give only an approved "
+                        "starting price or range if available, say the exact price will be confirmed after "
+                        "the facility checks the item, collect the area/location, and continue the pickup so "
+                        "the item is collected and the facility quote request is created."),
                 })
 
             if res.kind is service_resolution.ServiceKind.AMBIGUOUS:

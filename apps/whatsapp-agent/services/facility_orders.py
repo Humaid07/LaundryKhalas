@@ -10,8 +10,25 @@ order via a facility-SCOPED UPDATE, writes an ``order_events`` audit row
 from __future__ import annotations
 
 from db import database
-from db.repositories import facility_orders_repo, order_events_repo
+from db.repositories import (
+    facility_issues_repo,
+    facility_order_reviews_repo,
+    facility_orders_repo,
+    order_events_repo,
+    order_notes_repo,
+    order_photos_repo,
+)
 from services import facility_notifications as facility_notify
+from services import facility_order_view as order_view_svc
+
+# Actions that may not proceed until the facility has acknowledged an up-to-date
+# review of the order details, notes and photos (spec: "Start Processing" gate).
+_REVIEW_GATED_ACTIONS = frozenset({"start_cleaning"})
+
+# Actions that advance the order toward delivery — blocked while a blocking issue
+# (price revision / customer response required) is open, so an order is never
+# shipped with an unresolved clarification (spec: "pause the affected stage").
+_ISSUE_GATED_ACTIONS = frozenset({"mark_ready", "confirm_handoff"})
 
 # action -> {from: allowed current statuses, to: new status or None, event: audit type}.
 # ``to=None`` records the action as an event WITHOUT changing status (accept / QC).
@@ -41,6 +58,27 @@ class InvalidFacilityAction(ValueError):
     """Unknown action, or the order's current status doesn't allow the action."""
 
 
+class ReviewNotAcknowledged(ValueError):
+    """A processing action was attempted before the facility acknowledged an
+    up-to-date review of the order details, notes and photos."""
+
+
+class ProcessingBlocked(ValueError):
+    """An order cannot advance toward delivery because a blocking issue (price
+    revision / customer response required) is still open."""
+
+
+async def _review_is_current(facility_id: str, order_uuid: str) -> bool:
+    """True when a live acknowledgement matches the order's current version
+    signals. Fail-closed: any error resolving the review blocks processing so the
+    facility never starts work on unreviewed details."""
+    notes_all = await order_notes_repo.list_all(order_uuid)
+    photo_count = len(await order_photos_repo.list_for_order(order_uuid))
+    versions = order_view_svc.compute_versions(notes_all=notes_all, photo_count=photo_count)
+    review = await facility_order_reviews_repo.latest_for_order(facility_id, order_uuid)
+    return bool(order_view_svc.build_review_ack(review, versions).get("up_to_date"))
+
+
 async def apply_action(facility_id: str, order_id: str, action: str, *, actor_label: str) -> dict:
     """Validate + apply a facility action. Raises ``ForbiddenFacilityAction`` for
     a forbidden action, ``InvalidFacilityAction`` for an unknown action / illegal
@@ -59,6 +97,22 @@ async def apply_action(facility_id: str, order_id: str, action: str, *, actor_la
     if current not in spec["from"]:
         raise InvalidFacilityAction(
             f"'{action}' is not allowed from status '{current}'."
+        )
+
+    # Review gate: a facility cannot START PROCESSING until it has acknowledged an
+    # up-to-date review of the order details, notes and photos (backend-enforced,
+    # never trusting the client). Runs only after the status check so an illegal
+    # transition still fails first.
+    if action in _REVIEW_GATED_ACTIONS and not await _review_is_current(facility_id, str(row["id"])):
+        raise ReviewNotAcknowledged(
+            "Acknowledge the order details, notes and photos before processing."
+        )
+
+    # Issue gate: don't let an order advance to ready/handoff while a blocking
+    # issue (needs a price revision or a customer response) is still open.
+    if action in _ISSUE_GATED_ACTIONS and await facility_issues_repo.has_blocking_open_issue(str(row["id"])):
+        raise ProcessingBlocked(
+            "Resolve the open issue (customer response / price revision) before this step."
         )
 
     to_status = spec["to"]

@@ -69,6 +69,22 @@ class Settings(BaseSettings):
     # WhatsApp orders are is_demo=false, so they always show regardless.
     enable_demo_data: bool = False
 
+    # --- Advanced routing engine (ONE shared engine; test/prod isolated) ---
+    # Production-safe defaults: engine off, no test facilities/drivers/routing.
+    advanced_routing_enabled: bool = False
+    advanced_routing_mode: str = "off"          # off | shadow | canary | live
+    advanced_routing_canary_percentage: int = 0  # 0..100 (deterministic cohort)
+    advanced_routing_fallback_to_legacy: bool = True
+    advanced_routing_require_decision_snapshot: bool = True
+    # Trial-facility / test-order isolation gates.
+    enable_test_facilities: bool = False
+    enable_test_drivers: bool = False
+    allow_test_facility_routing: bool = False
+    allow_production_facility_routing: bool = True
+    allow_test_facilities_for_production: bool = False   # MUST stay false
+    allow_production_facilities_for_test: bool = False   # MUST stay false
+    allow_test_order_creation: bool = False
+
     # Supabase connection. DATABASE_URL (below) is the backend-only Postgres DSN.
     # The service role key is BACKEND-ONLY and must never reach the frontend.
     supabase_url: str = ""
@@ -147,6 +163,15 @@ class Settings(BaseSettings):
     # approved by the founder 2026-08-05 (overrides the mock-first default for
     # THIS component only). Feature-flagged for staged rollout + instant rollback
     # without any DB change.
+    # Freshness window for inbound WhatsApp messages. On an Evolution/Baileys
+    # socket reconnect, WhatsApp re-delivers a BACKLOG of old messages via
+    # messages.upsert; each carries its ORIGINAL (old) send time. Any inbound
+    # older than this many seconds is treated as a history-sync artefact and
+    # skipped, so the agent NEVER auto-replies to a message the customer didn't
+    # just send (prevents unsolicited sends → keeps the number safe). 0 disables
+    # the guard. Missing/unparseable timestamps fail OPEN (processed as live).
+    whatsapp_max_inbound_message_age_seconds: int = 120
+
     whatsapp_classifier_enabled: bool = True
     # Stage 1 default: classify + persist + log, but DO NOT control routing.
     whatsapp_classifier_shadow_mode: bool = True

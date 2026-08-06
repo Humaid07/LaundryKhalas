@@ -14,6 +14,7 @@ method, or private notes (CLAUDE.md §7).
 from __future__ import annotations
 
 from services import order_store
+from services import required_work as required_work_svc
 from settings import get_settings
 from db import database
 from db.repositories import order_photos_repo
@@ -95,14 +96,35 @@ def to_facility_read(row: dict) -> dict:
     total = row.get("estimated_total")
     if total is None:
         total = row.get("amount")
+    # Card-preview extras (grounded, cheap): the required-work summary from the
+    # confirmed line items (no notes query — the detail view adds inspection
+    # lines), an EXPRESS/STANDARD priority, and the FACILITY fee only (never the
+    # customer amount / margin). ``important_note_count`` is attached by the list
+    # SELECT subquery. Best-effort so a malformed snapshot never breaks the list.
+    try:
+        required = required_work_svc.build_required_work(row, [])
+    except Exception:  # noqa: BLE001 — the summary is additive to the card
+        required = []
+    fee_total = row.get("facility_fee_total")
+    hay = f"{row.get('turnaround_text','')} {row.get('service','')}".lower()
+    priority = "EXPRESS" if (row.get("is_express") or "express" in hay) else "STANDARD"
     return {
         "order_id": row.get("order_id"),
         "status": status,
         "status_label": order_store.status_label(status),
+        "priority": priority,
         "service": row.get("service_display_name") or row.get("service"),
         "service_id": row.get("service_id"),
         "category": row.get("catalogue_category_name"),
         "items": _item_breakdown(row),
+        "required_work_summary": required,
+        "important_note_count": int(row.get("important_note_count") or 0),
+        "facility_fee": {
+            "total": float(fee_total) if isinstance(fee_total, (int, float)) else None,
+            "currency": row.get("facility_fee_currency") or "AED",
+        },
+        "expected_completion_at": row.get("estimated_delivery_end_at")
+                                  or row.get("estimated_delivery_start_at"),
         # Area/city only — NEVER the full pickup address.
         "area": row.get("pickup_area") or row.get("area"),
         "city": row.get("city"),
@@ -166,7 +188,10 @@ def _bucket_where(bucket: str, next_param_index: int) -> tuple[str, list]:
 
 _SELECT_COLS = (
     "o.*, (select count(*) from facility_issues fi "
-    "where fi.order_id = o.id and fi.status not in ('resolved','closed')) as open_issue_count"
+    "where fi.order_id = o.id and fi.status not in ('resolved','closed')) as open_issue_count, "
+    "(select count(*) from order_notes n where n.order_id = o.id and n.status = 'ACTIVE' "
+    "and n.category in ('EXISTING_DAMAGE','INSPECTION_REQUIREMENT','SPECIAL_CARE','STAIN_NOTE')) "
+    "as important_note_count"
 )
 
 
@@ -226,14 +251,21 @@ async def _attach_photo_counts(rows: list[dict], serialized: list[dict]) -> None
     here (e.g. table not yet migrated) degrades to zeros, never breaks the list."""
     uuids = [str(r["id"]) for r in rows if r.get("id")]
     counts: dict[str, dict[str, int]] = {}
+    preview_ids: dict[str, list[str]] = {}
     try:
         counts = await order_photos_repo.counts_for_orders(uuids)
     except Exception:  # noqa: BLE001 — photo counts are a non-critical badge
         counts = {}
+    try:
+        preview_ids = await order_photos_repo.preview_ids_for_orders(uuids)
+    except Exception:  # noqa: BLE001 — card thumbnails are a non-critical badge
+        preview_ids = {}
     for r, item in zip(rows, serialized):
         c = counts.get(str(r.get("id")), {})
         item["intake_photo_count"] = int(c.get("intake", 0))
         item["pre_dispatch_photo_count"] = int(c.get("pre_dispatch", 0))
+        item["photo_count"] = sum(int(v) for v in c.values())
+        item["preview_photo_ids"] = preview_ids.get(str(r.get("id")), [])
 
 
 async def get(facility_id: str, order_id: str) -> dict | None:

@@ -166,6 +166,7 @@ export interface FacilityIssueDTO {
   id: string;
   facility_id: string;
   facility_name: string;
+  order_id: string | null;
   order_ref: string | null;
   issue_type: string;
   title: string;
@@ -174,8 +175,48 @@ export interface FacilityIssueDTO {
   priority: string;   // urgent | high | medium | low
   status: string;     // open | acknowledged | waiting_on_facility | waiting_on_internal_team | resolved | closed
   assigned_internal_owner: string | null;
+  order_item_id: string | null;
+  requires_customer_response: boolean;
+  requires_photo: boolean;
+  requires_price_revision: boolean;
+  photo_ids: string[];
   created_at: string;
   updated_at: string;
+}
+
+/** A captured customer-feedback event for Operations review. Global feedback never
+ *  auto-changes behaviour — it must be approved before it becomes a rule candidate. */
+export interface FeedbackEventDTO {
+  id: string;
+  customer_id: string | null;
+  conversation_id: string | null;
+  order_id: string | null;
+  order_item_id: string | null;
+  feedback_type: string;
+  scope: string;            // customer | global | unknown
+  affected_service: string | null;
+  affected_reply: string | null;
+  raw_text: string | null;
+  status: string;           // new | reviewed | approved | rejected | duplicate
+  created_at: string;
+}
+
+/** A facility revised-quote record (Operations review). facility_fee is internal;
+ *  customer_price is the only figure the customer ever sees. */
+export interface QuoteRevisionDTO {
+  id: string;
+  order_id: string | null;
+  order_item_id: string | null;
+  facility_id: string;
+  facility_issue_id: string | null;
+  facility_fee: number | null;
+  currency: string;
+  reason: string | null;
+  customer_price: number | null;
+  status: string;
+  created_by_label: string | null;
+  reviewed_by: string | null;
+  created_at: string;
 }
 
 /** A single message on a facility-issue thread (facility ↔ internal team). */
@@ -579,6 +620,56 @@ export const agentApi = {
     request<FacilityIssueDTO>(`/api/internal/facility-issues/${id}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status, assigned_internal_owner: owner }),
+    }),
+  /** Record a customer's answer to a facility clarification as an order amendment. */
+  answerFacilityClarification: (
+    id: string,
+    answer: string,
+    opts?: { category?: string; order_item_id?: string | null },
+  ) =>
+    request<{ amendment: unknown; issue_status: string }>(
+      `/api/internal/facility-issues/${id}/clarification-answer`,
+      { method: "POST", body: JSON.stringify({ answer, ...opts }) },
+    ),
+
+  // --- Customer feedback review (Operations) ---
+  listFeedback: (status?: string) =>
+    request<FeedbackEventDTO[]>(`/api/internal/feedback${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  approveFeedbackAsMemory: (
+    id: string,
+    body: { customer_id: string; memory_type: string; memory_key: string; memory_value: string; scope: string; actor?: string },
+  ) =>
+    request<{ action: string }>(`/api/internal/feedback/${id}/approve-memory`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  queueGlobalFeedback: (id: string, target: string, proposed_change?: string) =>
+    request<{ id: string; target: string; status: string }>(`/api/internal/feedback/${id}/queue-global`, {
+      method: "POST",
+      body: JSON.stringify({ target, proposed_change }),
+    }),
+  rejectFeedback: (id: string, duplicate?: boolean, actor?: string) =>
+    request<FeedbackEventDTO>(`/api/internal/feedback/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ duplicate, actor }),
+    }),
+
+  // --- Facility revised quotes (Operations review) ---
+  listQuoteRevisions: (status?: string) =>
+    request<QuoteRevisionDTO[]>(`/api/internal/quote-revisions${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  reviewQuoteRevision: (
+    id: string,
+    decision: "approved" | "rejected",
+    margin?: { margin_type?: string; margin_value?: number },
+  ) =>
+    request<QuoteRevisionDTO>(`/api/internal/quote-revisions/${id}/review`, {
+      method: "POST",
+      body: JSON.stringify({ decision, ...margin }),
+    }),
+  quoteRevisionCustomerDecision: (id: string, decision: "approved" | "rejected") =>
+    request<QuoteRevisionDTO>(`/api/internal/quote-revisions/${id}/customer-decision`, {
+      method: "POST",
+      body: JSON.stringify({ decision }),
     }),
 
   // --- Service taxonomy health ---

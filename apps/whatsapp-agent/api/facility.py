@@ -25,15 +25,25 @@ from db.repositories import (
     facility_issue_messages_repo,
     facility_issues_repo,
     facility_notifications_repo,
+    facility_order_reviews_repo,
     facility_orders_repo,
+    facility_quote_revisions_repo,
     facility_settings_repo,
     order_events_repo,
+    order_notes_repo,
+    order_photos_repo,
 )
 from services import facility_bank
 from services import facility_drivers as driver_svc
+from services import facility_handoff
+from services import facility_issue_types as issue_types_svc
+from services import facility_order_view as order_view_svc
 from services import facility_orders as facility_actions
+from services import order_notes as _notes_mod
+from services import quote_revision as quote_revision_svc
 from services import rating_service
 from services.facility_bank import BankValidationError
+from settings import get_settings
 from schemas import BankDetailsUpsert
 
 router = APIRouter(prefix="/api/facility", tags=["facility"])
@@ -160,11 +170,9 @@ async def facility_order_detail(
     # via the centralized facility-handoff serializer (privacy firewall). Best-effort.
     additional_notes: dict = {}
     handoff_extra: dict = {}
+    view: dict = {}
     if row:
         try:
-            from db.repositories import order_notes_repo
-            from services import facility_handoff, order_notes as _notes_mod
-            from settings import get_settings
             active = await order_notes_repo.list_active(str(row["id"]))
             additional_notes = _notes_mod.group_active_by_category(active)
             share = facility_handoff.config_from_settings(get_settings())
@@ -176,12 +184,48 @@ async def facility_order_detail(
                 "location_pin": payload.get("location_pin"),
                 "location_pin_status": payload.get("location_pin_status"),
             }
+            view = await _assemble_order_view(fid, dict(row), active, issues)
         except Exception:  # noqa: BLE001 — notes/address are additive to the detail
             pass
 
     return {**order, "timeline": timeline, "related_issues": issues,
             "driver_assignment": assignment, "driver": driver,
-            "additional_notes": additional_notes, **handoff_extra}
+            "additional_notes": additional_notes, **handoff_extra, "view": view}
+
+
+async def _assemble_order_view(fid: str, row: dict, active_notes: list[dict], issues: list[dict]) -> dict:
+    """Gather the structured inputs and build the centralized facility order view
+    (required work, prioritised notes, photos, finance, actions, review ack).
+    Best-effort per-source: a missing/not-yet-migrated table degrades that section
+    to empty rather than failing the whole detail response."""
+    order_uuid = str(row["id"])
+
+    async def _safe(coro, default):
+        try:
+            return await coro
+        except Exception:  # noqa: BLE001 — each source is additive
+            return default
+
+    notes_all = await _safe(order_notes_repo.list_all(order_uuid), active_notes)
+    photo_rows = await _safe(order_photos_repo.list_for_order(order_uuid), [])
+    photos = [order_photos_repo.to_read(p) for p in photo_rows]
+    review = await _safe(facility_order_reviews_repo.latest_for_order(fid, order_uuid), None)
+    all_revs = await _safe(facility_quote_revisions_repo.list_for(facility_id=fid), [])
+    quote_revisions = [r for r in all_revs if r.get("order_id") == order_uuid]
+    fee_snapshot = row.get("facility_fee_snapshot")
+
+    return order_view_svc.build_facility_order_view(
+        order=row,
+        active_notes=active_notes,
+        notes_all=notes_all,
+        photos=photos,
+        issues=issues,
+        fee_snapshot=fee_snapshot,
+        review=review,
+        share=facility_handoff.config_from_settings(get_settings()),
+        customer=None,
+        quote_revisions=quote_revisions,
+    )
 
 
 @router.patch("/orders/{order_id}/status")
@@ -200,10 +244,118 @@ async def facility_order_action(
         return await facility_actions.apply_action(fid, order_id, action, actor_label=actor_label)
     except facility_actions.ForbiddenFacilityAction as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+    except facility_actions.ReviewNotAcknowledged as exc:
+        # 409 Conflict: the order is in a valid status but a precondition (review
+        # acknowledgement) is unmet — the client should acknowledge, then retry.
+        raise HTTPException(status_code=409, detail=str(exc))
+    except facility_actions.ProcessingBlocked as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     except facility_actions.InvalidFacilityAction as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except LookupError:
         raise HTTPException(status_code=404, detail="Order not found for this facility.")
+
+
+@router.post("/orders/{order_id}/quote-revision")
+async def facility_submit_quote_revision(
+    order_id: str,
+    body: dict = Body(...),
+    principal: dict = Depends(deps.require_facility_scope),
+):
+    """Facility proposes a revised FEE for out-of-standard work. This opens a
+    PRICE_REVISION_REQUIRED issue (blocking) and a quote-revision record for
+    Operations to review. The customer price is NOT set here (Operations computes
+    it from the margin rule) and the customer total is never changed silently."""
+    _require_supabase_write()
+    fid = _fid(principal)
+    facility_fee = (body or {}).get("facility_fee")
+    if not quote_revision_svc.validate_fee(facility_fee):
+        raise HTTPException(status_code=400, detail="A positive 'facility_fee' is required.")
+    row = await facility_orders_repo.get_row(fid, order_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Order not found for this facility.")
+    order_uuid = str(row["id"])
+    order_item_id = (body or {}).get("order_item_id")
+    reason = (body or {}).get("reason") or (body or {}).get("note")
+    label = (principal or {}).get("full_name") or "Facility"
+
+    # Open the blocking price-revision issue (registry drives the flags).
+    spec = issue_types_svc.resolve("PRICE_REVISION_REQUIRED")
+    issue = await facility_issues_repo.create(
+        facility_id=fid, issue_type=spec.key,
+        message=reason or "Facility submitted a revised fee for out-of-standard work.",
+        title=spec.label, severity=spec.severity, priority=spec.priority,
+        order_uuid=order_uuid, order_ref=row.get("order_id"), order_item_id=order_item_id,
+        requires_customer_response=spec.requires_customer_response,
+        requires_photo=spec.requires_photo, requires_price_revision=True,
+        created_by_user_id=(principal or {}).get("id"), created_by_label=label,
+    )
+    revision = await facility_quote_revisions_repo.create(
+        order_uuid=order_uuid, facility_id=fid, facility_fee=facility_fee,
+        order_item_id=order_item_id, facility_issue_id=str((issue or {}).get("id")),
+        currency=(body or {}).get("currency", "AED"), reason=reason,
+        created_by_user_id=(principal or {}).get("id"), created_by_label=label,
+    )
+    await order_events_repo.create(
+        order_uuid=order_uuid, event_type="facility_quote_revision_submitted",
+        actor_type="facility", actor_name=label,
+        notes="Facility submitted a revised fee for review.",
+        metadata={"revision_id": str((revision or {}).get("id")), "order_item_id": order_item_id,
+                  "facility_id": fid},
+    )
+    return revision
+
+
+@router.get("/orders/{order_id}/quote-revisions")
+async def facility_order_quote_revisions(
+    order_id: str, principal: dict = Depends(deps.require_facility_scope)
+):
+    """This facility's revised-quote records for the order (its own fee visible)."""
+    if not database.is_supabase_mode():
+        return []
+    fid = _fid(principal)
+    row = await facility_orders_repo.get_row(fid, order_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Order not found for this facility.")
+    revs = await facility_quote_revisions_repo.list_for(facility_id=fid)
+    return [r for r in revs if r.get("order_id") == str(row["id"])]
+
+
+@router.post("/orders/{order_id}/acknowledge-review")
+async def facility_acknowledge_review(
+    order_id: str,
+    principal: dict = Depends(deps.require_facility_scope),
+):
+    """Record that the facility reviewed this order's details, notes and photos.
+
+    Stamps the current version signals so a later critical note / photo /
+    amendment invalidates the acknowledgement and forces a re-review before
+    processing. Idempotent by content — a repeated click returns the existing
+    acknowledgement rather than stacking duplicates."""
+    _require_supabase_write()
+    fid = _fid(principal)
+    row = await facility_orders_repo.get_row(fid, order_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Order not found for this facility.")
+    order_uuid = str(row["id"])
+    notes_all = await order_notes_repo.list_all(order_uuid)
+    photo_count = len(await order_photos_repo.list_for_order(order_uuid))
+    versions = order_view_svc.compute_versions(notes_all=notes_all, photo_count=photo_count)
+    review = await facility_order_reviews_repo.acknowledge(
+        facility_id=fid,
+        order_uuid=order_uuid,
+        facility_user_id=(principal or {}).get("id"),
+        order_version=versions["order_version"],
+        notes_version=versions["notes_version"],
+        photo_version=versions["photo_version"],
+    )
+    await order_events_repo.create(
+        order_uuid=order_uuid, event_type="facility_order_details_acknowledged",
+        actor_type="facility",
+        actor_name=(principal or {}).get("full_name") or (principal or {}).get("email") or "Facility",
+        notes="Facility acknowledged order details, notes and photos.",
+    )
+    return {"review_acknowledgement": order_view_svc.build_review_ack(review, versions)}
 
 
 @router.post("/orders/{order_id}/notes")
@@ -228,6 +380,13 @@ async def facility_order_note(
     return event or {}
 
 
+@router.get("/issue-types")
+async def facility_issue_types(principal: dict = Depends(deps.require_facility_scope)):
+    """The canonical issue-type catalogue (key + label + derived flags) for the
+    Raise-an-Issue form. Backend-authoritative so the client can't invent types."""
+    return {"issue_types": issue_types_svc.catalogue()}
+
+
 @router.post("/orders/{order_id}/issues")
 async def facility_order_issue(
     order_id: str,
@@ -236,22 +395,53 @@ async def facility_order_issue(
 ):
     _require_supabase_write()
     fid = _fid(principal)
-    issue_type = (body or {}).get("issue_type")
+    issue_type_raw = (body or {}).get("issue_type")
     message = (body or {}).get("message")
-    if not issue_type or not message:
+    if not issue_type_raw or not message:
         raise HTTPException(status_code=400, detail="'issue_type' and 'message' are required.")
     row = await facility_orders_repo.get_row(fid, order_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Order not found for this facility.")
+
+    # Resolve the canonical type + its operational flags (backend-authoritative —
+    # a client cannot silently escalate an issue to a price revision).
+    spec = issue_types_svc.resolve(issue_type_raw)
     label = (principal or {}).get("full_name") or "Facility"
-    return await facility_issues_repo.create(
-        facility_id=fid, issue_type=issue_type, message=message,
-        title=(body or {}).get("title"),
-        severity=(body or {}).get("severity", "medium"),
-        priority=(body or {}).get("priority", "normal"),
+    order_item_id = (body or {}).get("order_item_id")
+
+    # Attach already-uploaded issue photos (validated: must be this facility's).
+    raw_ids = (body or {}).get("photo_ids") or []
+    photo_ids: list[str] = []
+    for pid in raw_ids if isinstance(raw_ids, list) else []:
+        photo = await order_photos_repo.get(str(pid), fid)
+        if photo:
+            photo_ids.append(str(photo["id"]))
+
+    issue = await facility_issues_repo.create(
+        facility_id=fid, issue_type=spec.key, message=message,
+        title=(body or {}).get("title") or spec.label,
+        severity=(body or {}).get("severity") or spec.severity,
+        priority=(body or {}).get("priority") or spec.priority,
         order_uuid=str(row["id"]), order_ref=row.get("order_id"),
+        order_item_id=order_item_id,
+        requires_customer_response=spec.requires_customer_response,
+        requires_photo=spec.requires_photo,
+        requires_price_revision=spec.requires_price_revision,
+        photo_ids=photo_ids,
         created_by_user_id=(principal or {}).get("id"), created_by_label=label,
     )
+
+    # Audit + surface to Operations (the order enters the attention lane; the event
+    # shows on the timeline). PII-safe metadata only.
+    await order_events_repo.create(
+        order_uuid=str(row["id"]), event_type="facility_issue_created",
+        actor_type="facility", actor_name=label,
+        notes=f"Facility raised: {spec.label}.",
+        metadata={"issue_type": spec.key, "issue_id": str((issue or {}).get("id")),
+                  "order_item_id": order_item_id, "blocking": spec.blocking,
+                  "facility_id": fid},
+    )
+    return issue
 
 
 # --------------------------------------------------------------------------

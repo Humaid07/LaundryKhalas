@@ -63,10 +63,15 @@ def test_s4_express_after_cutoff_not_rejected():
     assert "standard" in PROMPT.lower() and "quote_express" in PROMPT
 
 
-# 5) Specialty photo-gate — request a photo before quoting specialty items.
-def test_s5_specialty_photo_gate_in_prompt():
-    assert "PHOTO before any quote" in PROMPT
-    assert "do not quote a specialty item from description alone" in PROMPT
+# 5) Specialty photo is OPTIONAL — a photo helps but never blocks pickup
+#    (updated 2026-08-06: photo-optional booking spec reverses the old hard gate).
+def test_s5_specialty_photo_is_optional_not_a_gate():
+    assert "photo helps the estimate" in PROMPT
+    assert "Do NOT block the booking" in PROMPT
+    assert "confirmed after the facility checks the item" in PROMPT
+    # The old hard photo gate must be gone.
+    assert "PHOTO before any quote" not in PROMPT
+    assert "do not quote a specialty item from description alone" not in PROMPT
 
 
 # 6) Address capture — booking not confirmable without address + name.

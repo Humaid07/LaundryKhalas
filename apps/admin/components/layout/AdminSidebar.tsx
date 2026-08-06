@@ -9,6 +9,7 @@ import {
   ShoppingBag,
   ScrollText,
   Send,
+  MessageSquareWarning,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon; exact?: boolea
   { href: "/admin/conversations", label: "Conversations", icon: MessageSquare },
   { href: "/admin/approvals", label: "Approvals", icon: ClipboardCheck },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
+  { href: "/admin/feedback", label: "Feedback Review", icon: MessageSquareWarning },
   { href: "/admin/ai-logs", label: "AI Action Logs", icon: ScrollText },
   { href: "/admin/mock-whatsapp", label: "WhatsApp Console", icon: Send },
 ];

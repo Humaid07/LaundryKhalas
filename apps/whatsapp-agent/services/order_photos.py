@@ -35,6 +35,19 @@ _UPLOAD_EVENT = {
     "pre_dispatch": "pre_dispatch_photos_uploaded",
 }
 
+# stage → the facility-facing photo SOURCE when the uploader doesn't specify one.
+_STAGE_SOURCE = {
+    "intake": "FACILITY_BEFORE_PROCESSING",
+    "pre_dispatch": "FACILITY_AFTER_PROCESSING",
+    "issue_photo": "FACILITY_ISSUE",
+    "damage_report": "INSPECTION",
+}
+
+# Stages the facility may upload to (DB CHECK also enforces this vocabulary).
+# intake/pre_dispatch are the proof stages; issue_photo/damage_report back the
+# Raise-an-Issue + inspection flows.
+_UPLOAD_STAGES = frozenset({"intake", "pre_dispatch", "issue_photo", "damage_report"})
+
 # content-type → file extension.
 _EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
@@ -126,18 +139,25 @@ async def add_photos(
     order_ref: str | None = None,
     actor_id: str | None = None,
     actor_name: str | None = None,
+    order_item_id: str | None = None,
+    caption: str | None = None,
+    source: str | None = None,
     is_test_data: bool = True,
 ) -> list[dict]:
     """Validate + store (local or Cloudflare R2) + persist a batch of photos for
     one order+stage, then write ONE order event. Validation is all-or-nothing: if
     any file is invalid nothing is stored. Returns the PII-safe photo views.
 
+    ``order_item_id`` optionally links the batch to a specific line item; ``source``
+    is the facility-facing provenance (defaults from the stage).
+
     Files go to the configured MEDIA_STORAGE_PROVIDER via ``media_storage``; when
     provider=r2 but credentials are missing the storage layer raises 503 (never a
     silent local fallback for a lost upload)."""
-    if stage not in order_photos_repo.STAGES:
+    if stage not in _UPLOAD_STAGES:
         raise PhotoValidationError(
-            f"Unknown stage '{stage}'. Use 'intake' or 'pre_dispatch'.", status_code=422)
+            f"Unknown stage '{stage}'. Allowed: {', '.join(sorted(_UPLOAD_STAGES))}.",
+            status_code=422)
     if not files:
         raise PhotoValidationError("No files were uploaded.", status_code=422)
 
@@ -174,6 +194,9 @@ async def add_photos(
                 order_uuid=order_uuid,
                 facility_id=facility_id,
                 stage=stage,
+                order_item_id=order_item_id,
+                caption=caption,
+                source=source or _STAGE_SOURCE.get(stage),
                 storage_provider=stored["provider"],
                 storage_key=stored["object_key"],
                 bucket=stored.get("bucket"),
@@ -200,7 +223,7 @@ async def add_photos(
     # ONE audit event for the batch (PII-safe metadata only).
     await order_events_repo.create(
         order_uuid=order_uuid,
-        event_type=_UPLOAD_EVENT[stage],
+        event_type=_UPLOAD_EVENT.get(stage, "order_photos_uploaded"),
         actor_type="facility",
         actor_name=actor_name or "Facility",
         notes=f"{len(saved)} {stage.replace('_', '-')} photo(s) uploaded.",
@@ -218,6 +241,32 @@ async def add_photos(
 async def list_photos(order_uuid: str, *, stage: str | None = None) -> list[dict]:
     rows = await order_photos_repo.list_for_order(order_uuid, stage=stage)
     return [order_photos_repo.to_read(r) for r in rows]
+
+
+async def link_photo_to_item(
+    photo_id: str,
+    facility_id: str,
+    *,
+    order_item_id: str | None,
+    caption: str | None = None,
+    actor_name: str | None = None,
+) -> dict | None:
+    """Link (or unlink with order_item_id=None) a facility's photo to a line item.
+    Returns the PII-safe view + writes an audit event, or None if the photo isn't
+    this facility's live photo."""
+    row = await order_photos_repo.set_item_link(
+        photo_id, facility_id, order_item_id=order_item_id, caption=caption)
+    if not row:
+        return None
+    await order_events_repo.create(
+        order_uuid=str(row["order_id"]),
+        event_type="order_photo_relinked",
+        actor_type="facility",
+        actor_name=actor_name or "Facility",
+        notes=("Photo linked to an item." if order_item_id else "Photo unlinked from its item."),
+        metadata={"photo_id": str(row["id"]), "order_item_id": order_item_id, "facility_id": facility_id},
+    )
+    return order_photos_repo.to_read(row)
 
 
 async def read_content(photo_id: str, facility_id: str) -> tuple[bytes, str, str] | None:

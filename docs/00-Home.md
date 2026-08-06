@@ -22,6 +22,64 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — Facility Quotation + Photo-Optional Booking + Feedback-Aware Memory (2026-08-06)
+Photos never block eligible pickup: new 5-level `photo_policy` in `service_rules.py`
+(`photo_blocks_pickup()==False`), the agent asks once and continues with an approved
+starting price/range (`services/provisional_pricing.py`, 11 pricing states; provisional
+never called final). Facility-quote workflow EXTENDS `facility_quote_revisions`:
+`quote_pricing.calculate_customer_price_from_facility_quote` (reuses `apply_margin`,
+immutable snapshot, Claude never computes markup) + Operations-review gate + versioned
+idempotent customer approvals (fee/markup never customer-facing). Durable **customer
+memory** (`customer_memory` + history, PATCH: null-never-erases / correction+history /
+ORDER_ONLY isolation) via `save_confirmed_customer_memory`, exposed to the agent as the
+`save_customer_preference` tool. **Feedback capture** at the Evolution webhook (11 types,
+idempotent) + Ops **Feedback Review** admin page (`/api/internal/feedback`) — global
+feedback never auto-changes behaviour. §27 WhatsApp system prompt updated (photo-optional,
+provisional-not-final, per-order isolation, ask-which-order, backend-validated memory, no
+self-training). Migration **000050 applied**; ~60 new backend tests green; admin tsc+lint
+clean. Report: `build-reports/2026-08-06-quotation-photo-memory.md` · spec
+`superpowers/specs/2026-08-06-facility-quotation-photo-memory-design.md`. Remaining: live
+outbound quote-relay agent tool + full §31 matrix + facility quote-card polish.
+
+## Latest — Advanced Routing Engine + Trial Facilities (2026-08-06)
+ONE shared, production-capable routing engine (`services/routing/`) extending
+`facility_matching.py` and wired into `assign_facility_for_order` with off/shadow/
+canary/live modes (default **off** — production behaviour unchanged). Hard
+eligibility (full rejection-code set) runs before **Bayesian weighted-rating**
+scoring; a real **driver-availability model** separates total vs available drivers
+(shift/break/leave/offline/assignment-limit/express). Environment-isolated
+candidate loaders (test orders ↔ test facilities only), `routing_decisions`
+snapshots (incl. shadow legacy-vs-advanced comparison), atomic idempotent
+assignment, legacy fallback, and a correct-no-eligible→Operations-manual case.
+**11 trial TEST facilities + 21 drivers** seeded idempotently
+(`scripts/seed_test_facilities_and_drivers.py`; TEST-guarded reset). Simulator +
+monitoring APIs under `/api/internal/routing/*`. Migration **000049 applied**; seed
+applied; **~90 routing unit/integration tests green + 5/5 live routing E2E** on the
+dev/test Supabase. Report:
+`build-reports/2026-08-06-advanced-routing-engine.md` · spec
+`superpowers/specs/2026-08-06-advanced-routing-engine-design.md`. Remaining: admin
+simulator + routing-monitoring UI (APIs complete). See [[whatsapp-agent-architecture]].
+
+## Latest — Facility Order Experience Redesign (2026-08-06)
+Redesigned the Facility Dashboard order card + detail view and wired them to real
+backend data via a centralized PII-safe **order-view serializer**
+(`services/facility_order_view.py`). The card/detail now lead with **Required Work**
+(deterministic, never LLM), prioritized **Important Notes**, on-card **photo
+thumbnails** + a full-size **lightbox**, per-item details (Wash&Fold / carpet /
+shoe-bag-leather), a versioned **review-acknowledgement** that gates Start
+Processing (frontend + backend), an 18-type **Raise-an-Issue** flow (item link +
+photo attach) surfacing into Operations with a stage **pause**, **clarification**
+answers recorded as audit-preserving order **amendments**, and a
+facility→Ops→customer **revised-quote** workflow (deterministic margin calc; facility
+fee/margin never exposed to the customer). Migrations **000046–000048** (apply
+pending). 11 new backend test files (~90 tests) green; both dashboards tsc+lint clean.
+Reports: `build-reports/2026-08-06-facility-order-experience-redesign.md` ·
+`weekly-reports/week-05-report.md` ·
+`presentation-notes/week-05-facility-order-experience-demo.md` · spec
+`superpowers/specs/2026-08-06-facility-order-cards-redesign-design.md` · runbook
+`checklists/apply-migration-000046-facility-order-experience.md`. See
+[[whatsapp-agent-architecture]] · [[admin-ui-architecture]].
+
 ## Latest — Stripe integration: Payments · Invoicing · Tax (2026-08-05)
 Real Stripe integration behind a **mock-first** boundary (mirrors the LLM layer):
 new `apps/whatsapp-agent/services/payments/` package with one `get_gateway()`

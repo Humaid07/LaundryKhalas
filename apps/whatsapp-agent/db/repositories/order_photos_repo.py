@@ -19,7 +19,8 @@ from db import database
 STAGES = ("intake", "pre_dispatch")
 
 _SELECT_COLS = (
-    "id, order_id, facility_id, stage, storage_provider, bucket, storage_key, public_url, "
+    "id, order_id, order_item_id, facility_id, stage, source, caption, "
+    "storage_provider, bucket, storage_key, public_url, "
     "file_name, content_type, file_size, checksum_sha256, width, height, "
     "source_channel, visibility_scope, status, "
     "uploaded_by_user_id, uploaded_by_name, metadata, created_at, deleted_at"
@@ -30,7 +31,10 @@ def to_read(row: dict) -> dict:
     """PII-safe API view of one photo row. No storage_key / user id / customer data."""
     return {
         "id": str(row["id"]),
+        "order_item_id": row.get("order_item_id"),
         "stage": row.get("stage"),
+        "source": row.get("source"),
+        "caption": row.get("caption"),
         "file_name": row.get("file_name"),
         "content_type": row.get("content_type"),
         "file_size": row.get("file_size"),
@@ -58,6 +62,9 @@ async def create(
     file_name: str,
     content_type: str,
     file_size: int,
+    order_item_id: str | None = None,
+    caption: str | None = None,
+    source: str | None = None,
     bucket: str | None = None,
     public_url: str | None = None,
     checksum_sha256: str | None = None,
@@ -76,17 +83,21 @@ async def create(
     return await database.fetchrow(
         f"""
         insert into order_photos
-            (order_id, facility_id, stage, storage_provider, bucket, storage_key, public_url,
+            (order_id, order_item_id, caption, source, facility_id, stage,
+             storage_provider, bucket, storage_key, public_url,
              file_name, content_type, file_size, checksum_sha256, width, height,
              source_channel, visibility_scope, status,
              uploaded_by_user_id, uploaded_by_name,
              metadata, is_test_data, is_demo, environment, seed_source, created_by_seed)
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                $14, $15, $16, $17, $18, $19::jsonb,
-                $20, false, 'dev', $21, $22)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                $17, $18, $19, $20, $21, $22::jsonb,
+                $23, false, 'dev', $24, $25)
         returning {_SELECT_COLS}
         """,
         order_uuid,
+        order_item_id,
+        caption,
+        source,
         facility_id,
         stage,
         storage_provider,
@@ -109,6 +120,30 @@ async def create(
         seed_source,
         created_by_seed,
     )
+
+
+async def set_item_link(
+    photo_id: str, facility_id: str, *, order_item_id: str | None, caption: str | None = None
+) -> dict | None:
+    """Link (or unlink, with order_item_id=None) a photo to a line item, SCOPED to
+    the facility. Optionally sets a caption. Returns the updated PII-safe row, or
+    None if the photo isn't this facility's live photo. Idempotent — relinking to
+    the same item is a harmless no-op update."""
+    if caption is None:
+        row = await database.fetchrow(
+            f"update order_photos set order_item_id = $3 "
+            "where id = $1 and facility_id = $2 and deleted_at is null "
+            f"returning {_SELECT_COLS}",
+            photo_id, facility_id, order_item_id,
+        )
+    else:
+        row = await database.fetchrow(
+            f"update order_photos set order_item_id = $3, caption = $4 "
+            "where id = $1 and facility_id = $2 and deleted_at is null "
+            f"returning {_SELECT_COLS}",
+            photo_id, facility_id, order_item_id, caption,
+        )
+    return row
 
 
 async def list_for_order(order_uuid: str, *, stage: str | None = None) -> list[dict]:
@@ -167,6 +202,26 @@ async def soft_delete(photo_id: str, facility_id: str) -> dict | None:
         f"returning {_SELECT_COLS}",
         photo_id, facility_id,
     )
+
+
+async def preview_ids_for_orders(order_uuids: list[str], *, limit: int = 3) -> dict[str, list[str]]:
+    """First ``limit`` live photo ids per order for the order-list card thumbnails —
+    ONE grouped query for the whole page (no N+1). Returns
+    ``{order_uuid: [photo_id, ...]}`` (oldest first) for orders that have any."""
+    if not order_uuids:
+        return {}
+    rows = await database.fetch(
+        "select id, order_id from ("
+        "  select id, order_id, "
+        "         row_number() over (partition by order_id order by created_at asc) as rn "
+        "  from order_photos where order_id = any($1::uuid[]) and deleted_at is null"
+        ") ranked where rn <= $2",
+        order_uuids, int(limit),
+    )
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        out.setdefault(str(r["order_id"]), []).append(str(r["id"]))
+    return out
 
 
 async def counts_for_orders(order_uuids: list[str]) -> dict[str, dict[str, int]]:

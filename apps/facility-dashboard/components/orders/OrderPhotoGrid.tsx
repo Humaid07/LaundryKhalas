@@ -129,7 +129,9 @@ export function OrderPhotoGrid({
             photo={p}
             canManage={canManage}
             deleting={del.isPending && pendingId === p.id}
-            onDelete={() => del.mutate(p.id)}
+            onDelete={() => {
+              if (window.confirm("Remove this photo? This cannot be undone.")) del.mutate(p.id);
+            }}
           />
         ))}
       </div>

@@ -293,6 +293,15 @@ export interface FacilityOrder {
   /** Live (non-deleted) proof-photo counts per stage — drives the card badge. */
   intake_photo_count?: number | null;
   pre_dispatch_photo_count?: number | null;
+  photo_count?: number | null;
+  /** First few live photo ids for the card thumbnail strip (grouped, no N+1). */
+  preview_photo_ids?: string[];
+  /** Card-preview extras served by the list serializer. */
+  required_work_summary?: string[];
+  important_note_count?: number | null;
+  facility_fee?: { total?: number | null; currency?: string | null } | null;
+  priority?: "STANDARD" | "EXPRESS" | string | null;
+  expected_completion_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   [key: string]: unknown;
@@ -367,6 +376,178 @@ export interface FacilityOrderDetail extends FacilityOrder {
   pickup_address_full?: Record<string, string> | null;
   location_pin?: { latitude?: number; longitude?: number; type?: string; name?: string } | null;
   location_pin_status?: string | null;
+  /** The centralized, structured facility order view (Area 1 serializer). Present
+   *  on the detail response; drives the redesigned hierarchy. */
+  view?: FacilityOrderView | null;
+}
+
+export type NotePriority = "NORMAL" | "IMPORTANT" | "CRITICAL";
+
+export interface FacilityViewNote {
+  id: string;
+  category: string;
+  priority: NotePriority;
+  text?: string | null;
+  item_id?: string | null;
+  source?: string | null;
+  source_message_id?: string | null;
+  customer_confirmed?: boolean;
+  is_amendment?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface FacilityViewPhoto {
+  id: string;
+  item_id?: string | null;
+  stage?: string | null;
+  source?: string | null;
+  media_type?: string | null;
+  caption?: string | null;
+  uploaded_by?: string | null;
+  created_at?: string | null;
+  provider?: string | null;
+  url?: string | null;
+  width?: number | null;
+  height?: number | null;
+}
+
+export interface WashFoldDetail {
+  bags?: number | null;
+  estimated_weight?: number | null;
+  confirmed_weight?: number | null;
+  pricing_tier?: string | null;
+  separation_notes?: string | null;
+}
+
+export interface DimensionDetail {
+  estimated_measure?: number | null;
+  confirmed_sqm?: number | null;
+  rate_per_sqm?: number | null;
+  minimum_charge?: number | null;
+  measurement_status?: string | null;
+}
+
+export interface SpecialistDetail {
+  material?: string | null;
+  cleaning_requirement?: string | null;
+  repair_requirement?: string | null;
+  inspection_status?: string | null;
+  quotation_status?: string | null;
+}
+
+export interface FacilityViewItem {
+  id: string;
+  name: string;
+  category?: string | null;
+  category_label?: string | null;
+  quantity?: number | null;
+  measure?: number | null;
+  service?: string | null;
+  service_subtype?: string | null;
+  instruction?: string | null;
+  colour?: string | null;
+  brand_candidate?: string | null;
+  luxury_flag?: boolean;
+  material?: string | null;
+  stains?: string | null;
+  existing_damage?: string | null;
+  special_handling?: string | null;
+  measurements?: string | null;
+  price_type?: string | null;
+  turnaround?: string | null;
+  requires_quote?: boolean;
+  inspection_required?: boolean;
+  facility_fee?: number | null;
+  photo_count?: number;
+  item_status?: string | null;
+  wash_fold?: WashFoldDetail;
+  dimension?: DimensionDetail;
+  specialist?: SpecialistDetail;
+}
+
+export interface ReviewVersions {
+  notes_version: number;
+  photo_version: number;
+  order_version: number;
+}
+
+export interface ReviewAcknowledgement {
+  acknowledged: boolean;
+  up_to_date: boolean;
+  required: boolean;
+  acknowledged_at?: string | null;
+  acknowledged_versions?: ReviewVersions;
+  current_versions?: ReviewVersions;
+  invalidation_reason?: string | null;
+}
+
+export interface FacilityViewAction {
+  action: string;
+  label: string;
+  enabled: boolean;
+  requires_ack: boolean;
+  reason?: string | null;
+  primary: boolean;
+}
+
+export interface QuoteRevision {
+  id: string;
+  order_id?: string | null;
+  order_item_id?: string | null;
+  facility_issue_id?: string | null;
+  facility_fee?: number | null;
+  currency?: string | null;
+  reason?: string | null;
+  customer_price?: number | null;
+  status: string;
+  created_by_label?: string | null;
+  reviewed_by?: string | null;
+  created_at?: string | null;
+}
+
+export interface FacilityOrderView {
+  order: {
+    id?: string | null;
+    order_number?: string | null;
+    status: string;
+    status_label?: string | null;
+    priority?: string | null;
+    service_summary?: string | null;
+    service_id?: string | null;
+    required_work_summary: string[];
+    pickup_window?: { start?: string | null; end?: string | null; date?: string | null; label?: string | null };
+    expected_completion_at?: string | null;
+    expected_completion_text?: string | null;
+    turnaround_text?: string | null;
+    item_count?: number;
+    currency?: string | null;
+  };
+  items: FacilityViewItem[];
+  notes: Record<string, FacilityViewNote[]>;
+  critical_notes: FacilityViewNote[];
+  photos: { all: FacilityViewPhoto[]; by_item: Record<string, FacilityViewPhoto[]>; general: FacilityViewPhoto[]; count: number };
+  customer: { name?: string; phone?: string };
+  location: {
+    typed_address?: Record<string, string>;
+    area?: string | null;
+    city?: string | null;
+    pin?: { latitude?: number; longitude?: number; type?: string; name?: string } | null;
+    pin_status?: string | null;
+  };
+  facility_finance: {
+    fee_total?: number | null;
+    currency?: string | null;
+    per_item: Array<{ name?: string | null; fee?: number | null }>;
+    complete?: boolean;
+    payout_status?: string | null;
+  };
+  issues: FacilityIssue[];
+  available_actions: FacilityViewAction[];
+  next_action?: FacilityViewAction | null;
+  review_acknowledgement: ReviewAcknowledgement;
+  quote_revisions: QuoteRevision[];
+  versions: ReviewVersions;
 }
 
 export interface FacilityFinanceSummary {
@@ -638,6 +819,19 @@ export interface RaiseIssuePayload {
   severity?: string;
   priority?: string;
   related_order_id?: string;
+  order_item_id?: string | null;
+  photo_ids?: string[];
+}
+
+export interface IssueTypeOption {
+  key: string;
+  label: string;
+  severity: string;
+  priority: string;
+  requires_customer_response: boolean;
+  requires_photo: boolean;
+  requires_price_revision: boolean;
+  blocking: boolean;
 }
 
 // --- bank details ---
@@ -750,8 +944,29 @@ export const facilityApi = {
       method: "POST",
       body: JSON.stringify({ note }),
     }),
+  /** Acknowledge that the facility reviewed this order's details, notes and
+   *  photos. Required (and version-stamped) before Start Processing. */
+  acknowledgeReview: (id: string) =>
+    request<{ review_acknowledgement: ReviewAcknowledgement }>(
+      `/api/facility/orders/${id}/acknowledge-review`,
+      { method: "POST" },
+    ),
   raiseOrderIssue: (id: string, payload: RaiseIssuePayload) =>
     request<FacilityIssue>(`/api/facility/orders/${id}/issues`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  issueTypes: async (): Promise<IssueTypeOption[]> => {
+    const res = await request<{ issue_types?: IssueTypeOption[] }>("/api/facility/issue-types");
+    return res?.issue_types ?? [];
+  },
+  /** Submit a revised facility fee for out-of-standard work (opens a
+   *  price-revision issue + a quote-revision record for Operations). */
+  submitQuoteRevision: (
+    id: string,
+    payload: { facility_fee: number; order_item_id?: string | null; currency?: string; reason?: string },
+  ) =>
+    request<QuoteRevision>(`/api/facility/orders/${id}/quote-revision`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -761,15 +976,29 @@ export const facilityApi = {
     request<OrderPhotosResponse>(
       `/api/facility/orders/${id}/photos${qs({ stage })}`,
     ),
-  uploadOrderPhotos: (id: string, stage: OrderPhotoStage, files: File[]) => {
+  uploadOrderPhotos: (
+    id: string,
+    stage: OrderPhotoStage | "issue_photo" | "damage_report",
+    files: File[],
+    opts?: { orderItemId?: string | null; caption?: string | null; source?: string | null },
+  ) => {
     const form = new FormData();
     form.set("stage", stage);
     files.forEach((f) => form.append("files", f));
+    if (opts?.orderItemId) form.set("order_item_id", opts.orderItemId);
+    if (opts?.caption) form.set("caption", opts.caption);
+    if (opts?.source) form.set("source", opts.source);
     return requestForm<{ photos: FacilityOrderPhoto[]; stage: string; uploaded: number }>(
       `/api/facility/orders/${id}/photos`,
       form,
     );
   },
+  /** Link (or unlink with orderItemId=null) a photo to a line item. */
+  linkOrderPhoto: (id: string, photoId: string, orderItemId: string | null, caption?: string) =>
+    request<FacilityViewPhoto>(`/api/facility/orders/${id}/photos/${photoId}/link`, {
+      method: "PATCH",
+      body: JSON.stringify({ order_item_id: orderItemId, caption }),
+    }),
   deleteOrderPhoto: (id: string, photoId: string) =>
     request<{ deleted: boolean; id: string }>(
       `/api/facility/orders/${id}/photos/${photoId}`,

@@ -82,6 +82,41 @@ def _utcnow() -> _dt.datetime:
     return _dt.datetime.now(_dt.timezone.utc)
 
 
+def _is_stale_inbound(message_timestamp: int | None, max_age_seconds: int,
+                      *, now_epoch: float | None = None) -> bool:
+    """True when an inbound message is older than the freshness window — i.e. a
+    history-sync backlog item re-delivered on reconnect, NOT a live turn.
+
+    Pure + injectable ``now_epoch`` for testing. Fails OPEN: a disabled guard
+    (max_age_seconds <= 0) or a missing/unparseable timestamp is never stale, so
+    a real message is never dropped on a parse quirk — only clearly-old messages
+    are skipped. A small negative skew (clock drift) is tolerated."""
+    if max_age_seconds <= 0 or message_timestamp is None:
+        return False
+    now = now_epoch if now_epoch is not None else _utcnow().timestamp()
+    return (now - float(message_timestamp)) > float(max_age_seconds)
+
+
+def _turn_is_stale(turn: dict | None, max_age_seconds: int, *, now=None) -> bool:
+    """True when a BUFFERED turn's last message is older than the freshness
+    window — i.e. leftover history-sync/backlog residue, not a live pending turn.
+    Used so restart recovery never re-drives (and replies to) a stale turn.
+
+    Fails OPEN (disabled window, missing/naive timestamp) so a genuine pending
+    turn is still recovered. ``last_message_at`` is a tz-aware timestamptz."""
+    if max_age_seconds <= 0 or not turn:
+        return False
+    last_at = turn.get("last_message_at") or turn.get("first_message_at")
+    if last_at is None:
+        return False
+    now = now or _utcnow()
+    try:
+        age = (now - last_at).total_seconds()
+    except TypeError:  # naive/aware mismatch → don't drop a real turn
+        return False
+    return age > float(max_age_seconds)
+
+
 _TURN_BUFFER: TurnBuffer | None = None
 
 
@@ -115,6 +150,15 @@ async def recover_pending_turns() -> int:
     live = settings.agent_replies_enabled and settings.evolution_live_ready
 
     async def _recovery_processor(conversation_id, combined, turn):
+        # Never re-drive a STALE buffered turn on restart. A turn whose last
+        # message is older than the freshness window is history-sync/backlog
+        # residue (or the customer moved on long ago), so replying would be an
+        # unsolicited send. This mirrors the webhook's live-message guard for the
+        # recovery path, which does not pass through that check.
+        if _turn_is_stale(turn, settings.whatsapp_max_inbound_message_age_seconds):
+            logger.info("recovery_skipped_stale_turn", conversation=conversation_id,
+                        turn=(turn or {}).get("turn_id"))
+            return None
         convo = await conversations_repo.get_conversation(conversation_id)
         if not convo or convo.get("status") == "human_takeover":
             return None
@@ -604,6 +648,19 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
         except Exception as exc:  # noqa: BLE001 — the safety gate must never crash a turn
             logger.warning("abuse_gate_error", sender=masked, error=str(exc))
 
+    # --- Feedback capture (best-effort, non-blocking) ------------------------
+    # Detect explicit customer corrections / preferences / complaints and persist
+    # them for validated memory + Operations review. This NEVER changes behaviour
+    # here (global feedback is only queued) and never breaks the turn (§22/§26).
+    if database.is_supabase_mode():
+        try:
+            from services import customer_feedback_service
+            await customer_feedback_service.create_customer_feedback_event(
+                text, customer_id=customer.get("id"), conversation_id=convo["id"],
+                provider="evolution", provider_message_id=(last_inbound_msg or {}).get("id"))
+        except Exception as exc:  # noqa: BLE001 - feedback capture must never break the turn
+            logger.debug("feedback_capture_failed", error=str(exc))
+
     inbound_obj = booking_flow.Inbound(
         text=text, selection_id=combined.selection_id,
         latitude=combined.latitude, longitude=combined.longitude,
@@ -942,6 +999,20 @@ async def receive_evolution_webhook(request: Request):
         if await messages_repo.wa_message_seen(wa_id):
             duplicates += 1
             logger.info("evolution_duplicate_ignored", sender=masked, wa_message_id=bool(wa_id))
+            continue
+
+        # Stale-message guard: WhatsApp re-delivers a BACKLOG of old messages when
+        # the Evolution socket reconnects. They carry their original (old) send
+        # time, so anything past the freshness window is a history-sync artefact,
+        # not a live turn — skip it entirely (no store, no reply) so the agent
+        # never messages a customer who didn't just write in. Missing timestamps
+        # fail open (processed as live). See settings for the window.
+        msg_ts = msg.get("message_timestamp")
+        if _is_stale_inbound(msg_ts, settings.whatsapp_max_inbound_message_age_seconds):
+            skipped += 1
+            logger.info("evolution_inbound_skipped", sender=masked, allowed_sender=True,
+                        agent_mode=mode, no_auto_reply_reason="stale_history_sync",
+                        message_age_seconds=round(_utcnow().timestamp() - float(msg_ts)))
             continue
 
         text = msg.get("text") or ""

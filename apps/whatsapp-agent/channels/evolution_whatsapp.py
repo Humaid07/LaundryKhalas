@@ -226,6 +226,31 @@ def _extract_location(message: dict) -> tuple[float | None, float | None]:
     return None, None
 
 
+def _parse_message_timestamp(value) -> int | None:
+    """Evolution's ``messageTimestamp`` (Unix SECONDS) — the original send time of
+    the message. Tolerates int, numeric string, or a protobuf-Long dict
+    (``{"low": ...}``). Returns None when absent/unparseable so the caller can
+    fail open (treat as live) rather than dropping a message on a parse quirk."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    if isinstance(value, dict):
+        low = value.get("low")
+        try:
+            return int(low) if low is not None else None
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def parse_evolution_webhook(payload: dict) -> list[dict]:
     """Flatten an Evolution webhook payload into inbound customer messages
     ``[{phone, text, name, wa_message_id}]``.
@@ -278,6 +303,10 @@ def parse_evolution_webhook(payload: dict) -> list[dict]:
                 "latitude": latitude,
                 "longitude": longitude,
                 "media_kind": kind.value,
+                # Original send time (Unix seconds). Used to drop history-sync
+                # backlog re-delivered on socket reconnect (see webhook staleness
+                # guard) so the agent never replies to an old, non-live message.
+                "message_timestamp": _parse_message_timestamp(msg.get("messageTimestamp")),
                 # Raw location object (name/address/live flag) for structured capture.
                 "location_event": message.get("liveLocationMessage") or message.get("locationMessage"),
             }

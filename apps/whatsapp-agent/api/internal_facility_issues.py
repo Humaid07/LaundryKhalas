@@ -10,7 +10,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, HTTPException
 
 from db import database
-from db.repositories import facility_issue_messages_repo, facility_issues_repo
+from db.repositories import (
+    facility_issue_messages_repo,
+    facility_issues_repo,
+    order_events_repo,
+    order_notes_repo,
+)
 from services import facility_notifications as facility_notify
 
 router = APIRouter(prefix="/api/internal/facility-issues", tags=["facility-issues"])
@@ -73,6 +78,41 @@ async def reply(issue_id: str, body: dict = Body(...)):
             str(issue["facility_id"]), issue, message_id=str((msg or {}).get("id")),
         )
     return msg or {}
+
+
+@router.post("/{issue_id}/clarification-answer")
+async def clarification_answer(issue_id: str, body: dict = Body(...)):
+    """Record the customer's answer to a facility clarification as an order
+    AMENDMENT — linked to the affected item + this issue, never overwriting the
+    original confirmed instruction. The amendment bumps the notes version, so the
+    facility must re-acknowledge before continuing. The ball returns to the
+    facility (status → waiting_on_facility)."""
+    _require_supabase_write()
+    answer = (body or {}).get("answer")
+    if not answer:
+        raise HTTPException(status_code=400, detail="An 'answer' is required.")
+    issue = await facility_issues_repo.get(issue_id)
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Issue not found.")
+    order_id = issue.get("order_id")
+    if not order_id:
+        raise HTTPException(status_code=422, detail="This issue is not linked to an order.")
+    note = await order_notes_repo.add_amendment(
+        str(order_id),
+        category=(body or {}).get("category") or "ITEM_HANDLING",
+        text=str(answer).strip(),
+        order_item_id=(body or {}).get("order_item_id") or issue.get("order_item_id"),
+        facility_issue_id=issue_id,
+        source="OPERATIONS",
+    )
+    await order_events_repo.create(
+        order_uuid=str(order_id), event_type="facility_clarification_answered",
+        actor_type="operations", actor_name="LaundryKhalas Team",
+        notes="Customer clarification recorded as an amendment.",
+        metadata={"issue_id": issue_id, "note_id": str((note or {}).get("note_id"))},
+    )
+    await facility_issues_repo.set_status(issue_id, "waiting_on_facility")
+    return {"amendment": note, "issue_status": "waiting_on_facility"}
 
 
 @router.patch("/{issue_id}/status")
