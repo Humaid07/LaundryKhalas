@@ -12,6 +12,8 @@ logs/
 *.egg-info/
 # Locally-stored facility order photos (dev storage — never commit uploads)
 storage/order-photos/
-# WhatsApp pairing QR (sensitive linking artifact, regenerated on pairing)
+# WhatsApp pairing / login QR (sensitive linking artifact, regenerated on pairing)
 whatsapp-pairing-qr.png
+whatsapp-qr.png
 *-pairing-qr.png
+*-qr.png
