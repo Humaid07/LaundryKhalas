@@ -22,6 +22,29 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — Knowledge Reinforcement (rules→config + redacted retrieval KB) + Dev Facility Switcher (2026-08-08)
+Two-phase knowledge reinforcement plus a dev-only facility switcher, all on `main`.
+**Phase 1** folds the per-service rulebook into the catalogue/SLA/routing **configs**
+(curtain/alterations/mascot/restoration SLAs, new `LEATHER_CARE` category,
+wedding-dress→quotable, evening-dress pricing, B2B same-day keywords) so rules are
+data, not prompt prose. **Phase 2** adds a PII-free precedent KB: `services/chat_kb.py`
+embeds queries **locally** (fastembed/bge-small — no external vendor) and does a
+pgvector cosine lookup; migration **000051** (`chat_knowledge_base`, HNSW, RLS deny-all)
+**deployed** to dev/test Supabase and populated with **4,034 redacted chunks across 489
+chats** (AE 3,382 / QA 652). `scripts/index_chat_kb.py` parses→redacts→chunks→embeds→
+upserts (idempotent, resumable); `services/sanitize.py` gained targeted
+`scrub_conversational_names()`; the agent gets a `search_past_conversations` tool wired
+for **guidance only** (never a price/policy source). Indexer gotcha fixed:
+`EMBED_BATCH=16` (the default 256 padded to bge-small's 512-token max → minutes/batch,
+looked "hung"). fastembed is an opt-in `[kb]` extra (lazy, fails soft). Retrieval
+verified (top cosine 0.71–0.81), **0 PII leaks**. Dev **facility switcher**: header
+dropdown + `GET /api/facility/switchable` + `X-Facility-Id` override (dev-gated, never
+in prod auth). Full suite **1,807 passed**. Reports:
+`weekly-reports/week-06-report.md` ·
+`build-reports/2026-08-08-knowledge-reinforcement-phase1-rules.md` ·
+`build-reports/2026-08-08-knowledge-reinforcement-phase2-retrieval.md` ·
+`build-reports/2026-08-07-facility-switcher-dev.md`. Commits `8141326`/`473ab43`/`4d6feea`.
+
 ## Latest — Facility Quotation + Photo-Optional Booking + Feedback-Aware Memory (2026-08-06)
 Photos never block eligible pickup: new 5-level `photo_policy` in `service_rules.py`
 (`photo_blocks_pickup()==False`), the agent asks once and continues with an approved
