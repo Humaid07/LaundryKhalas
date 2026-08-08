@@ -70,6 +70,20 @@ def shape_saved_address(addr: dict | None) -> dict | None:
     }
 
 
+def next_location_ask(shaped: dict | None) -> str | None:
+    """Which single piece of pickup location to ask for next, before slots are shown
+    (spec §11). Returns 'address' (typed address missing), 'pin' (address known but the
+    location pin missing), or None (both present — proceed to backend slot selection).
+    Only ever asks for the ONE missing piece; never re-asks what is already confirmed."""
+    has_addr = bool(shaped and shaped.get("typed_address"))
+    has_pin = bool(shaped and shaped.get("pin_available"))
+    if has_addr and has_pin:
+        return None
+    if has_addr and not has_pin:
+        return "pin"
+    return "address"
+
+
 def build_returning_customer_context(
     customer: dict | None,
     *,
