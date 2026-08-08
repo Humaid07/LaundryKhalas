@@ -22,6 +22,22 @@ It contains:
 Every Claude Code session in this repo should read `CLAUDE.md` first and
 follow it for the remainder of the task.
 
+## Latest — WhatsApp Agent Behaviour Corrections (2026-08-08)
+Brand normalized to **Laundry Khalas** everywhere customer-facing; the 9 behaviour rules
+are now a **versioned `behaviour_rules` section in the canonical `whatsapp_agent_rules.json`**,
+rendered into the live Sonnet prompt via `rules.behaviour_rule_texts()` (the primary path
+previously hardcoded them). Replies are now **1–3 backend-validated WhatsApp messages**
+(`services/reply_segmentation.py`), the agent no longer appends an unnecessary booking CTA
+(`services/conversion_guard.py`), and declining a discount is a plain decline that queues a
+**5–7 min backend-approved discount-objection follow-up** (`DISCOUNT_OBJECTION`) → the
+sweeper re-runs the negotiation engine (never the AI) to send an approved offer, raise a
+**silent `CUSTOMER_CONVERSION_REVIEW`** pending task, or suppress. Pickup stays backend-slot
+only (address+pin first via `customer_memory.next_location_ask`; never an open-ended time).
+No DB migration. Full suite **1,871 passed**. Phased commits `1504f4c`/`47a3e03`/`9efa32d`/`2725489`.
+Reports: `build-reports/2026-08-08-whatsapp-behaviour-corrections.md` ·
+spec `superpowers/specs/2026-08-08-whatsapp-behaviour-corrections-design.md` ·
+plan `superpowers/plans/2026-08-08-whatsapp-behaviour-corrections.md`.
+
 ## Latest — Knowledge Reinforcement (rules→config + redacted retrieval KB) + Dev Facility Switcher (2026-08-08)
 Two-phase knowledge reinforcement plus a dev-only facility switcher, all on `main`.
 **Phase 1** folds the per-service rulebook into the catalogue/SLA/routing **configs**
