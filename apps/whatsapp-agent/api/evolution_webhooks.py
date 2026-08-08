@@ -63,6 +63,7 @@ from services import (
     order_store,
     post_confirmation,
     reply_style,
+    reply_segmentation,
     voice_fallback,
 )
 from services.auto_reply import SENDER_NOT_ALLOWED, should_auto_reply
@@ -799,9 +800,16 @@ async def _process_reply(convo: dict, customer: dict, combined, *, phone: str,
         fresh = await orders_repo.get_active_draft(convo["id"])
         state = (fresh or {}).get("conversation_state") or booking_flow.WAITING_FOR_SERVICE
         if live:
-            await _deliver(channel, phone, convo["id"],
-                           booking_flow.BookingReply(text=reply_text, state=state),
-                           turn_id=turn_id)
+            # No-CTA guard (§16) + segmentation (§3/§20): finalize_reply strips a
+            # repeated trailing CTA when a recent agent message already asked one, then
+            # splits the reply into up to 3 validated, ordered messages. Each segment
+            # gets a distinct sha1(turn_id|state|body) idem key so ordered multi-send
+            # is safe against redelivery.
+            agent_msgs = [t for (sender, t) in history if sender == "agent"][-4:]
+            for seg in reply_segmentation.finalize_reply(reply_text, agent_msgs):
+                await _deliver(channel, phone, convo["id"],
+                               booking_flow.BookingReply(text=seg, state=state),
+                               turn_id=turn_id)
         logger.info("anthropic_turn_delivered", sender=masked,
                     tools=(ctx.tool_calls or []),
                     provider=(result.provider if result else "fallback"),
