@@ -89,6 +89,18 @@ async def _dev_facility_id() -> str | None:
     )
 
 
+async def _facility_exists(facility_id: str) -> bool:
+    """True if a facility row with this id exists. Best-effort: any DB error
+    (e.g. table absent in a non-Supabase environment) is treated as 'no', so an
+    unknown/invalid override is ignored rather than raising."""
+    try:
+        return bool(await database.fetchval(
+            "select exists(select 1 from facilities where id = $1)", facility_id
+        ))
+    except Exception:
+        return False
+
+
 async def require_facility_scope(request: Request) -> dict:
     """Facility-app guard. Returns the principal augmented with a resolved
     ``facility_id`` and 403s if the caller isn't bound to a facility. Every
@@ -104,7 +116,15 @@ async def require_facility_scope(request: Request) -> dict:
     settings = get_settings()
     user = await current_user(request)
     if not settings.require_auth:
-        facility_id = (user or {}).get("facility_id") or await _dev_facility_id()
+        # Dev-only facility switcher: honor an X-Facility-Id header when it names
+        # a real facility, so the dashboard can move between facilities without
+        # editing .env. Gated to this (auth-off) branch — a client-supplied
+        # facility is NEVER trusted once REQUIRE_AUTH is on (see below).
+        override = (request.headers.get("x-facility-id") or "").strip()
+        facility_id = None
+        if override and await _facility_exists(override):
+            facility_id = override
+        facility_id = facility_id or (user or {}).get("facility_id") or await _dev_facility_id()
         if not facility_id:
             raise HTTPException(status_code=403,
                                 detail="No facility is configured for this environment.")

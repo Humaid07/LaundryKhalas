@@ -12,6 +12,7 @@ import { toneChip, toneDot } from "@/components/ui/tones";
 import { BrandWordmark } from "@/components/shell/Brand";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { NotificationCenter } from "./NotificationCenter";
+import { FacilitySwitcher } from "./FacilitySwitcher";
 
 /**
  * FacilityHeader — sticky top bar: brand/facility name + operating-status chip +
@@ -64,6 +65,7 @@ export function FacilityHeader() {
           </div>
 
           <div className="flex items-center gap-2">
+            <FacilitySwitcher currentId={profile?.id} />
             <span
               className={cn(
                 "hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xxs font-semibold sm:inline-flex",

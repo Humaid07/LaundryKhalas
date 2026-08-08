@@ -7,9 +7,17 @@
  * permissive — the backend returns plain JSON dicts and we only type the fields
  * the UI renders, so older/newer payloads still type-check.
  */
-import { clearSession, getToken } from "./auth-token";
+import { clearSession, getDevFacilityId, getToken } from "./auth-token";
 
 const BASE_URL = process.env.NEXT_PUBLIC_FACILITY_API_URL ?? "http://localhost:8100";
+
+/** Dev-only facility switcher: attach the selected facility as X-Facility-Id.
+ *  The backend honors it only when REQUIRE_AUTH is off, so this is inert in
+ *  production. Returns {} when no facility is selected. */
+function devFacilityHeader(): Record<string, string> {
+  const id = getDevFacilityId();
+  return id ? { "X-Facility-Id": id } : {};
+}
 
 export class FacilityApiError extends Error {
   status: number;
@@ -28,6 +36,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...devFacilityHeader(),
         ...(init?.headers ?? {}),
       },
     });
@@ -77,7 +86,7 @@ async function requestForm<T>(path: string, form: FormData): Promise<T> {
     res = await fetch(`${BASE_URL}${path}`, {
       method: "POST",
       body: form,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...devFacilityHeader() },
     });
   } catch {
     throw new FacilityApiError(0, "Could not reach the LaundryKhalas backend (:8100). Is it running?");
@@ -901,6 +910,13 @@ export interface DriverRatingRow {
   latest: PartnerEvaluation | null;
 }
 
+/** A facility the dev switcher can select. Dev-only; empty list in production. */
+export interface SwitchableFacility {
+  id: string;
+  name: string;
+  city: string;
+}
+
 export const facilityApi = {
   baseUrl: BASE_URL,
 
@@ -919,6 +935,18 @@ export const facilityApi = {
     return { ...(facility ?? {}), ...(role ? { role } : {}) } as FacilityProfile;
   },
   overview: () => request<FacilityOverview>("/api/facility/overview"),
+
+  // --- Dev-only facility switcher ---
+  // Lists facilities to switch between; the backend returns [] when auth is on
+  // (production) so the dropdown self-hides. Never throws — a failure yields [].
+  switchableFacilities: async (): Promise<SwitchableFacility[]> => {
+    try {
+      const res = await request<SwitchableFacility[]>("/api/facility/switchable");
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
+  },
 
   // --- Orders ---
   // The backend returns a paginated envelope { orders, total, ... }; unwrap to

@@ -106,6 +106,21 @@ async def facility_me(request: Request, principal: dict = Depends(deps.require_f
     return {"facility": profile, "role": (principal or {}).get("role")}
 
 
+@router.get("/switchable")
+async def facility_switchable(principal: dict = Depends(deps.require_facility_scope)):
+    """Dev-only: list active facilities for the dashboard's facility switcher.
+    Returns [] when auth is on (never expose the facility list in production) or
+    outside Supabase mode. Pairs with the X-Facility-Id override honored by
+    deps.require_facility_scope in the auth-off branch."""
+    if get_settings().require_auth or not database.is_supabase_mode():
+        return []
+    rows = await database.fetch(
+        "select id::text as id, name, coalesce(city, '') as city from facilities "
+        "where is_active order by created_at asc"
+    )
+    return [{"id": r["id"], "name": r["name"], "city": r["city"]} for r in rows]
+
+
 @router.get("/overview")
 async def facility_overview(request: Request, principal: dict = Depends(deps.require_facility_scope)):
     if not database.is_supabase_mode():
