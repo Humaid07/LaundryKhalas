@@ -218,17 +218,16 @@ async def test_adding_an_item_preserves_the_saved_service():
 
 
 # --- specialty request routes to a human specialist, not an invented price ---
-async def test_wedding_dress_routes_to_specialist_without_saving_service():
-    # A wedding dress is a route-to-specialist category (spec §2.8) — it wins over
-    # both the bespoke photo-flow and catalogue aliasing, so it is handed to a
-    # specialist rather than quoted. (Previously asserted the bespoke path; the
-    # specialty router now owns this phrase.)
+async def test_villa_cleaning_routes_to_specialist_without_saving_service():
+    # A route-to-specialist category (villa/home cleaning) is handed to a
+    # specialist rather than quoted, so no order is saved and no price invented.
+    # (Wedding dress used to exercise this path; it is now quoted From AED 150.)
     repo = FakeOrdersRepo(None)
     execute = make_booking_executor(_ctx(repo))
     data, err = await _call(execute, "save_service_selection",
-                            service="Can you clean a heavily embroidered wedding dress?")
+                            service="I need a villa deep cleaning")
     assert err is False and data.get("route_to_specialist") is True
-    assert data.get("routing_category") == "WEDDING_DRESS"
+    assert data.get("routing_category") == "HOME_CLEANING"
     assert repo.row is None and repo.start_calls == 0       # no order, no invented price
 
 

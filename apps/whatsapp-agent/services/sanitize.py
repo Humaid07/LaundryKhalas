@@ -48,6 +48,45 @@ def sanitize_text(text: str | None, *, mask_names: bool = False,
     return s
 
 
+# --- Conversational name scrubbing (targeted, low-lossy) --------------------
+# General name detection is too lossy to attempt (see sanitize_text). But names
+# volunteered right after an introduction phrase ("I'm Ahmed", "this is Sara",
+# "my name is ...") are both high-signal PII and easy to catch precisely. We mask
+# ONLY the capitalised token(s) following such a phrase, skipping common words that
+# are not names, so retrieval quality is preserved. Used when redacting real chats
+# for the retrieval KB (scripts/index_chat_kb.py).
+_INTRO_NAME = re.compile(
+    r"(?P<lead>(?i:\b(?:i['’]?m|i\s+am|this\s+is|my\s+name\s+is|myself|name\s+is|i\s+am\s+called|call\s+me))\s+)"
+    r"(?P<name>[A-Z][a-z]{1,19}(?:\s+[A-Z][a-z]{1,19})?)"
+)
+# Capitalised words that follow an intro phrase but are NOT names.
+_NOT_A_NAME = frozenset({
+    "ok", "okay", "yes", "no", "yeah", "here", "there", "fine", "good", "great",
+    "sorry", "thanks", "thank", "sir", "madam", "sure", "done", "now", "not",
+    "just", "still", "also", "from", "waiting", "ready", "coming", "going",
+    "looking", "calling", "asking", "sending", "interested", "the", "sending",
+    "at", "in", "on", "for", "with", "customer", "agent", "laundry", "khalas",
+})
+
+
+def scrub_conversational_names(text: str | None) -> str:
+    """Mask first names volunteered after an introduction phrase → '[NAME]'.
+
+    Deterministic and targeted: only capitalised tokens following an explicit
+    intro phrase are masked, and only when the first token is not a common
+    non-name word. Leaves the intro phrase intact ('this is [NAME]')."""
+    if not text:
+        return ""
+
+    def _repl(m: re.Match) -> str:
+        first = m.group("name").split()[0].lower()
+        if first in _NOT_A_NAME:
+            return m.group(0)  # not a name — leave untouched
+        return m.group("lead") + "[NAME]"
+
+    return _INTRO_NAME.sub(_repl, str(text))
+
+
 # Record fields that must always be dropped entirely (never masked-in-place).
 _DROP_FIELDS = frozenset({
     "phone", "phone_e164", "customer_phone", "email", "customer_email",

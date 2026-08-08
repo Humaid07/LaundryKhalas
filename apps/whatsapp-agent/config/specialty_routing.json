@@ -14,15 +14,6 @@
         "kitchen cleaning", "bathroom cleaning", "general cleaning"
       ]
     },
-    "WEDDING_DRESS": {
-      "label": "wedding dress",
-      "acknowledgement": "Wedding dresses are handled by our specialist garment team so we can care for them properly. Let me take a few details and have them follow up with you.",
-      "capture": ["dress type/material", "any stains or damage", "area", "event date if any"],
-      "terms": [
-        "wedding dress", "wedding gown", "bridal gown", "bridal dress",
-        "bridal wear", "wedding suit"
-      ]
-    },
     "LUXURY_BESPOKE": {
       "label": "luxury / bespoke garment care",
       "acknowledgement": "That's a specialist piece, so our luxury garment-care team will look after it. Let me capture a few details and have them reach out.",

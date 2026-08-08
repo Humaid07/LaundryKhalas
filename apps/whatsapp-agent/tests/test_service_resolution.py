@@ -31,13 +31,20 @@ def test_ambiguous_ironing_asks_for_clarification():
     assert _kind("I need ironing") is K.AMBIGUOUS
 
 
-def test_wedding_dress_routes_to_specialist():
-    # Spec §2.8: wedding dresses are handled by a specialist (route-to-human),
-    # NOT quoted — routing wins over both the bespoke photo-flow and Clean & Press.
+def test_wedding_dress_is_quoted_from_150():
+    # Founder 2026-08 rules: a plain wedding dress is QUOTED (From AED 150 +
+    # inspection/photo), no longer routed to a human.
+    res = sr.classify_service_request("clean my wedding dress")
+    assert res.kind is K.ALIAS
+    assert res.is_supported and res.routing_category is None
+
+
+def test_embellished_wedding_dress_goes_to_bespoke_photo_flow():
+    # Heavy embellishment still triggers the bespoke photo-flow (facility quote),
+    # not a plain catalogue quote.
     res = sr.classify_service_request("Can you clean a heavily embroidered wedding dress?")
-    assert res.kind is K.ROUTE
-    assert res.routing_category == "WEDDING_DRESS"
-    assert not res.is_supported  # routed, not booked/quoted as a standard service
+    assert res.kind is K.BESPOKE
+    assert not res.is_supported
 
 
 def test_bespoke_specialty_marker_still_routes_to_bespoke_flow():

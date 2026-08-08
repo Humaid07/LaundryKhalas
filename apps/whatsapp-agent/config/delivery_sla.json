@@ -19,14 +19,16 @@
     {"code": "SLA_SOFT_TOY_DEFAULT", "match": {"category_code": "SOFT_TOY"}, "min_hours": 24, "max_hours": 24, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "24 hours"},
     {"code": "SLA_SHOE_CARE", "match": {"category_code": "SHOE_CARE"}, "min_hours": 48, "max_hours": 72, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "2–3 days"},
     {"code": "SLA_BAG_CARE", "match": {"category_code": "BAG_CARE"}, "min_hours": 48, "max_hours": 72, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "2–3 days"},
-    {"code": "SLA_ALTERATIONS", "match": {"category_code": "ALTERATIONS"}, "min_hours": 48, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "2 days"},
-    {"code": "SLA_RESTORATION", "match": {"category_code": "RESTORATION"}, "min_hours": 48, "max_hours": 72, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "2–3 days"},
+    {"code": "SLA_ALTERATIONS", "match": {"category_code": "ALTERATIONS"}, "min_hours": 24, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "1–2 days"},
+    {"code": "SLA_RESTORATION", "match": {"category_code": "RESTORATION"}, "min_hours": 48, "max_hours": 120, "day_type": "CALENDAR", "express_eligible": false, "priority": 10, "display_text": "2–5 days"},
 
     {"code": "SLA_CARPET", "match": {"item_codes": ["HOME_CARE_CARPET_REGULAR_SQM", "HOME_CARE_CARPET_WOOL_SQM"]}, "min_hours": 48, "max_hours": 120, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "2–5 days"},
     {"code": "SLA_SOFA_COVER", "match": {"item_codes": ["HOME_CARE_SOFA_COVER_REGULAR", "HOME_CARE_SOFA_COVER_LARGE"]}, "min_hours": 24, "max_hours": 24, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "24 hours"},
     {"code": "SLA_DUVET_BLANKET", "match": {"item_codes": ["HOME_CARE_DUVET", "HOME_CARE_COMFORTER", "HOME_CARE_COMFORTER_COVER", "HOME_CARE_BLANKET", "HOME_CARE_BLANKET_LARGE"]}, "min_hours": 24, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "1–2 days"},
-    {"code": "SLA_MASCOT", "match": {"item_codes": ["SOFT_TOY_MASCOT"]}, "min_hours": 48, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "2 days"},
-    {"code": "SLA_WEDDING_EVENING_DRESS", "match": {"item_codes": ["CLEAN_PRESS_DRESS_EVENING"]}, "min_hours": 24, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "1–2 days"}
+    {"code": "SLA_MASCOT", "match": {"item_codes": ["SOFT_TOY_MASCOT"]}, "min_hours": 48, "max_hours": 72, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "2–3 days"},
+    {"code": "SLA_CURTAIN", "match": {"item_codes": ["HOME_CARE_CURTAIN_SQM"]}, "min_hours": 72, "max_hours": 96, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "3–4 days"},
+    {"code": "SLA_WEDDING_EVENING_DRESS", "match": {"item_codes": ["CLEAN_PRESS_DRESS_EVENING"]}, "min_hours": 24, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "1–2 days"},
+    {"code": "SLA_WEDDING_DRESS", "match": {"item_codes": ["CLEAN_PRESS_DRESS_WEDDING"]}, "min_hours": 24, "max_hours": 72, "day_type": "CALENDAR", "express_eligible": false, "priority": 100, "display_text": "1–3 days"}
   ],
   "default_rule": {"code": "SLA_DEFAULT", "min_hours": 24, "max_hours": 48, "day_type": "CALENDAR", "express_eligible": false, "priority": 0, "display_text": "1–2 days"}
 }

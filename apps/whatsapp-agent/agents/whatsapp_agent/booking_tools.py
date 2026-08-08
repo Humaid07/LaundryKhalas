@@ -35,6 +35,7 @@ from agents.whatsapp_agent import tools as slot_tools
 from services import booking_flow as bf
 from services import (
     catalogue,
+    chat_kb,
     order_confirmation,
     order_store,
     post_confirmation,
@@ -278,6 +279,15 @@ BOOKING_TOOL_SCHEMAS: list[dict] = [
      "input_schema": {"type": "object",
                       "properties": {"category_code": {"type": "string"}},
                       "required": ["category_code"], "additionalProperties": False}},
+    {"name": "search_past_conversations",
+     "description": "Search redacted past customer conversations for precedent on how a similar request was "
+                    "handled (e.g. how a service was explained, an objection answered, a process described). "
+                    "Use it for GUIDANCE on phrasing/handling — it is NOT a source of prices or policy. "
+                    "Never quote a price, turnaround, or promise from a snippet; prices come only from the "
+                    "catalogue/pricing tools. Snippets are PII-free.",
+     "input_schema": {"type": "object",
+                      "properties": {"query": {"type": "string"}},
+                      "required": ["query"], "additionalProperties": False}},
     {"name": "save_customer_name",
      "description": "Save the customer's confirmed name. Only call with a name the customer actually gave — "
                     "never a WhatsApp profile name they didn't confirm.",
@@ -1150,6 +1160,11 @@ def make_booking_executor(ctx: BookingContext):
                 {"item_code": it["item_code"], "name": it["canonical_name"],
                  "price_label": catalogue.item_price_label(it)}
                 for it in catalogue.items_for_category(code)]})
+
+        if name == "search_past_conversations":
+            snippets = await chat_kb.search(str(ti.get("query", "")), market=ctx.market)
+            return _ok({"snippets": snippets,
+                        "note": "Guidance only — never quote a price/turnaround/policy from these."})
 
         if name == "save_customer_name":
             name_val = bf.validate_name(str(ti.get("name", "")))

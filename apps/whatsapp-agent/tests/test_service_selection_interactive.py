@@ -35,8 +35,8 @@ def test_service_options_come_from_catalogue_categories():
     cat_codes = [c["code"] for c in catalogue.categories()]
     opt_ids = [o.id.split(":", 1)[1] for o in bf._service_options()]
     assert opt_ids == cat_codes
-    # Carpet Cleaning + Curtain Cleaning promoted to top-level categories (spec §3).
-    assert len(opt_ids) == 11
+    # Carpet + Curtain promoted to top-level (spec §3); Leather Care added 2026-08.
+    assert len(opt_ids) == 12
 
 
 # 2 — the interactive LIST payload carries the correct service row ids ----------

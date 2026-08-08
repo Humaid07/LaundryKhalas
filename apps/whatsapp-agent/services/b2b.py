@@ -30,6 +30,8 @@ _KEYWORD_TYPE: tuple[tuple[tuple[str, ...], str], ...] = (
     (("uniform", "staff clothing", "workwear", "scrubs"), "uniform"),
     (("partner", "partnership", "become a facility", "supply you", "vendor"), "facility_partnership"),
     (("bulk", "outsourc", "large volume", "wholesale", "contract"), "bulk_outsourcing"),
+    (("gym", "spa", "salon", "clinic", "factory", "manufacturing", "warehouse", "kitchen linen"),
+     "commercial_laundry"),
     (("commercial laundry", "commercial", "business laundry", "company laundry", "b2b"), "commercial_laundry"),
 )
 
@@ -70,9 +72,10 @@ def acknowledgement(business_type: str) -> str:
     }.get(business_type, "business laundry")
     msg = (
         f"Thanks for reaching out about {label}. I've passed this to our commercial "
-        "partnerships team, who'll get in touch. To help them prepare, could you share "
-        "your company name, business email, the services you need, your approximate weekly "
-        "volume, how often you need collection, and your location?"
+        "partnerships team, who'll get back to you the same day, before close of business. "
+        "To help them prepare, could you share your company name, business email, the "
+        "services you need, your approximate weekly volume, how often you need collection, "
+        "and your location?"
     )
     if business_type == "airbnb":
         msg += (" If it's just a small Airbnb requirement, we may be able to handle it on our "

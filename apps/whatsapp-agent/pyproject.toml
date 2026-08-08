@@ -44,6 +44,14 @@ dev = [
     "pytest-asyncio>=0.23.7",
     "ruff>=0.4.4",
 ]
+# Retrieval KB (Phase 2): local sentence embeddings for the redacted
+# past-conversation index. fastembed pulls in onnxruntime (heavy), so it is an
+# opt-in extra — services/chat_kb.py lazy-imports it and FAILS SOFT when absent
+# (retrieval returns []). Enable in the indexing env and any deploy that should
+# serve `search_past_conversations`:  pip install .[kb]
+kb = [
+    "fastembed>=0.8.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

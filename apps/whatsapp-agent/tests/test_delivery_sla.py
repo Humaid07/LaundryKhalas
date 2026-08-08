@@ -25,6 +25,8 @@ SOFA = "HOME_CARE_SOFA_COVER_REGULAR"
 DUVET = "HOME_CARE_DUVET"
 BLANKET = "HOME_CARE_BLANKET"
 BEDDING = "HOME_CARE_MATTRESS_PROTECTOR"
+CURTAIN = "HOME_CARE_CURTAIN_SQM"
+RESTORATION = "RESTORATION_LIGHT"
 
 
 def _hours(item_code):
@@ -57,12 +59,24 @@ def test_carpet_2_5_days():
     assert _hours(CARPET) == (48, 120)
 
 
-def test_alterations_2_days():
-    assert _hours(ALTERATIONS) == (48, 48)
+def test_alterations_1_to_2_days():
+    # Founder rule (2026-08 docs): tailoring turnaround is 1–2 days.
+    assert _hours(ALTERATIONS) == (24, 48)
 
 
-def test_mascot_2_days():
-    assert _hours(MASCOT) == (48, 48)
+def test_mascot_2_to_3_days():
+    # Founder rule (2026-08 docs): mascots take 2–3 days.
+    assert _hours(MASCOT) == (48, 72)
+
+
+def test_curtain_3_to_4_days():
+    # Founder rule (2026-08 docs): curtains take 3–4 days (was defaulting to 1–2).
+    assert _hours(CURTAIN) == (72, 96)
+
+
+def test_restoration_2_to_5_days():
+    # Founder rule (2026-08 docs): restoration takes 2–5 days.
+    assert _hours(RESTORATION) == (48, 120)
 
 
 def test_toy_cleaning_24h():

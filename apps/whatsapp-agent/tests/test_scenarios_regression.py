@@ -110,10 +110,12 @@ def test_s9_complaint_classified_no_refund_promise():
 # 10) B2B / villa / wedding / bespoke — captured + routed, never quoted.
 def test_s10_route_to_specialist_categories():
     assert specialty_routing.classify("villa deep cleaning").category == "HOME_CLEANING"
-    assert specialty_routing.classify("clean my wedding dress").category == "WEDDING_DRESS"
     assert specialty_routing.classify("re-dye my couture jacket").category == "LUXURY_BESPOKE"
+    # Wedding dress is now QUOTED (From AED 150 + inspection), no longer routed
+    # (founder 2026-08 rules). It must NOT classify as a specialty route.
+    assert specialty_routing.classify("clean my wedding dress") is None
     res = service_resolution.classify_service_request("wedding dress")
-    assert res.kind is service_resolution.ServiceKind.ROUTE and res.is_supported is False
+    assert res.kind is service_resolution.ServiceKind.ALIAS and res.is_supported is True
 
 
 # 11) Standard alterations — routine, priced from a starting price, NOT photo-gated,

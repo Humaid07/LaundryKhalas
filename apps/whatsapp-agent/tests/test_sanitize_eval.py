@@ -24,6 +24,39 @@ def test_names_masked_only_when_requested():
     assert "[NAME]" in sanitize.sanitize_text("Hi I'm Sara", mask_names=True, names=["Sara"])
 
 
+# ------------------- conversational name scrubbing -----------------------
+def test_scrub_masks_intro_names():
+    for phrase, name in [
+        ("Hi I'm Ahmed", "Ahmed"),
+        ("Hello, this is Sara here", "Sara"),
+        ("my name is Mohammed Ali", "Mohammed"),
+        ("call me Fatima", "Fatima"),
+        ("i am Rajesh", "Rajesh"),
+    ]:
+        out = sanitize.scrub_conversational_names(phrase)
+        assert "[NAME]" in out, phrase
+        assert name not in out, phrase
+
+
+def test_scrub_keeps_intro_phrase_and_non_names():
+    # The lead phrase survives; only the name is masked.
+    assert sanitize.scrub_conversational_names("this is Sara") == "this is [NAME]"
+    # Common words after an intro phrase are NOT masked.
+    for benign in ["I'm fine", "this is Ok", "I am Ready", "I'm Here", "this is Good"]:
+        assert "[NAME]" not in sanitize.scrub_conversational_names(benign), benign
+
+
+def test_scrub_no_intro_phrase_leaves_text_untouched():
+    # No blanket masking of capitalised words without an intro phrase.
+    text = "Please collect the Kandoora from Dubai Marina tomorrow"
+    assert sanitize.scrub_conversational_names(text) == text
+
+
+def test_scrub_handles_empty():
+    assert sanitize.scrub_conversational_names("") == ""
+    assert sanitize.scrub_conversational_names(None) == ""
+
+
 def test_sanitize_record_drops_pii_fields_and_scrubs_text():
     rec = {"intent": "book", "text": "call +971501234567 for pickup",
            "phone": "+971501234567", "pickup_address": "Villa 3", "quantity": 4}

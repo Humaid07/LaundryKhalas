@@ -28,8 +28,6 @@ def _fresh():
     ("I need villa cleaning", "HOME_CLEANING"),
     ("deep clean for my apartment", "HOME_CLEANING"),
     ("office cleaning service", "HOME_CLEANING"),
-    ("can you clean my wedding dress", "WEDDING_DRESS"),
-    ("bridal gown cleaning", "WEDDING_DRESS"),
     ("re-dye my couture jacket", "LUXURY_BESPOKE"),
     ("exotic leather bag restoration", "LUXURY_BESPOKE"),
 ])
@@ -48,11 +46,14 @@ def test_ordinary_laundry_not_routed(text):
 # --------------------------------------------------------------------------
 # service_resolution integration — routing wins over catalogue aliasing
 # --------------------------------------------------------------------------
-def test_wedding_dress_routes_not_quoted_as_clean_press():
+def test_wedding_dress_is_quoted_not_routed():
+    # Founder 2026-08 rules: wedding dresses are QUOTED (From AED 150 + inspection/
+    # photo), no longer silently routed to a human. The specialty router no longer
+    # owns this phrase.
     res = service_resolution.classify_service_request("wedding dress")
-    assert res.kind is service_resolution.ServiceKind.ROUTE
-    assert res.routing_category == "WEDDING_DRESS"
-    assert res.is_supported is False   # not a directly-quotable catalogue service
+    assert res.kind is service_resolution.ServiceKind.ALIAS
+    assert res.routing_category is None
+    assert res.is_supported is True    # a directly-quotable catalogue service now
 
 
 def test_villa_cleaning_routes_not_unsupported():
@@ -101,12 +102,14 @@ async def _call(execute, tool, **inp):
 
 
 async def test_save_service_selection_flags_route_without_creating_booking():
+    # Villa/home cleaning is still a route-to-specialist category (wedding dress is
+    # now quoted, so it no longer exercises the routing path).
     repo = _Repo()
     data, err = await _call(make_booking_executor(_ctx(repo)),
-                            "save_service_selection", service="wedding dress")
+                            "save_service_selection", service="villa deep cleaning")
     assert err is False
     assert data["route_to_specialist"] is True
-    assert data["routing_category"] == "WEDDING_DRESS"
+    assert data["routing_category"] == "HOME_CLEANING"
     assert data["capture_fields"]           # non-empty guidance on what to collect
     # No laundry booking was created for the routed request.
     assert not repo.row.get("service_id")
@@ -125,13 +128,13 @@ async def test_route_to_specialist_tool_logs_task_and_acks(monkeypatch):
 
     repo = _Repo()
     data, err = await _call(make_booking_executor(_ctx(repo)),
-                            "route_to_specialist", category="WEDDING_DRESS",
-                            details="ivory silk gown, small wine stain, JLT, event 10 Aug")
+                            "route_to_specialist", category="HOME_CLEANING",
+                            details="3-bed villa deep clean, JLT, prefers weekend")
     assert err is False
     assert data["routed"] is True
     assert data["reference"] == "TASK-99"
     assert captured["task_type"] == "AWAITING_OPERATIONS_RESPONSE"
-    assert "WEDDING_DRESS" in captured["notes"]
+    assert "HOME_CLEANING" in captured["notes"]
     assert "specialist" in data["message"].lower()
 
 

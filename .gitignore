@@ -57,6 +57,9 @@ Thumbs.db
 # --- Local tooling state (Claude Code) ---
 .claude/
 
+# --- External "Project Intelligence" integration descriptor (non-runtime tooling) ---
+.blueprint/
+
 apps/admin/.open-next/
 
 apps/admin/.open-next/

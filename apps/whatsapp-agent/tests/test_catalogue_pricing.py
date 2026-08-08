@@ -38,11 +38,13 @@ def test_catalogue_metadata_matches_fixture():
 def test_categories_imported():
     # Carpet Cleaning + Curtain Cleaning were promoted out of HOME_CARE into their
     # own top-level categories so facilities can accept them individually (spec §3).
+    # LEATHER_CARE added 2026-08 (founder rules doc: leather garments get a
+    # From-price + inspection/photo instead of no quote at all).
     codes = [c["code"] for c in catalogue.categories()]
     assert codes == [
         "CLEAN_PRESS", "PRESS_ONLY", "HOME_CARE", "WASH_FOLD", "SHOE_CARE",
         "BAG_CARE", "SOFT_TOY", "RESTORATION", "ALTERATIONS",
-        "CARPET_CLEANING", "CURTAIN_CLEANING",
+        "CARPET_CLEANING", "CURTAIN_CLEANING", "LEATHER_CARE",
     ]
 
 
@@ -352,3 +354,30 @@ def test_no_price_invented_for_bag_care():
     assert q.lines[0].line_kind == "pending"
     assert q.lines[0].line_total is None
     assert q.subtotal_excluding_vat == 0.0
+
+
+# --- Leather garments (founder 2026-08 docs: From price + inspection/photo) ---
+def test_leather_jacket_resolves_and_is_starting_from():
+    codes, reason = catalogue.resolve_item_alias("leather jacket")
+    assert reason == "ok" and codes == ["LEATHER_JACKET"]
+    rec = catalogue.item_by_code("LEATHER_JACKET")
+    assert rec["current_price"] == 80
+    assert rec["is_starting_price"] is True
+    assert rec["requires_inspection"] is True
+
+
+def test_leather_variants_present():
+    for phrase, code, price in [
+        ("leather trousers", "LEATHER_TROUSERS", 50),
+        ("leather skirt", "LEATHER_SKIRT", 50),
+        ("leather gloves", "LEATHER_GLOVES", 20),
+    ]:
+        codes, reason = catalogue.resolve_item_alias(phrase)
+        assert reason == "ok" and codes == [code], (phrase, codes)
+        assert catalogue.item_by_code(code)["current_price"] == price
+
+
+def test_plain_jacket_still_clean_press_not_leather():
+    # Adding leather must NOT hijack a bare "jacket".
+    codes, _ = catalogue.resolve_item_alias("jacket")
+    assert "LEATHER_JACKET" not in codes
