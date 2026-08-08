@@ -158,6 +158,36 @@ def _booking_from_row(row: dict, ctx: BookingContext) -> bf.Booking:
     )
 
 
+def conversation_signals(text: str | None, row: dict | None) -> dict:
+    """Deterministic per-turn signals injected into the backend state block so the
+    model handles conversion + pickup more intelligently (spec §11/§17). Pure:
+
+      * ``customer_signal`` — PRICE_ENQUIRY (a plain price question, not resistance) vs
+        PRICE_OBJECTION (handle calmly, no pressure), via services.hesitation.
+      * ``pickup_location_needed`` — for an active order, the ONE location detail still
+        required before slots (``address`` | ``pin`` | ``None``), via
+        customer_memory.next_location_ask, so the model asks for only the missing piece.
+    """
+    from services import customer_memory as _cm
+    from services import hesitation as _hes
+
+    out: dict = {}
+    if _hes.is_price_objection(text or ""):
+        out["customer_signal"] = "PRICE_OBJECTION"
+    elif _hes.is_price_enquiry(text or ""):
+        out["customer_signal"] = "PRICE_ENQUIRY"
+    if row is not None:
+        shaped = _cm.shape_saved_address({
+            "address": row.get("pickup_address"),
+            "latitude": row.get("pickup_latitude"),
+            "longitude": row.get("pickup_longitude"),
+            "area": row.get("pickup_area") or row.get("area"),
+            "city": row.get("city"),
+        })
+        out["pickup_location_needed"] = _cm.next_location_ask(shaped)
+    return out
+
+
 def workflow_state_block(row: dict) -> dict:
     """Concise, PII-light structured state for the model (spec §7). Internal DB
     UUIDs are NOT exposed; the public order number is included for reference."""
@@ -707,6 +737,13 @@ def booking_system_prompt() -> str:
         "day. Save today's date (save_pickup_date 'today') and offer windows.\n"
         "- NEVER ask for the pickup day again once it is set / resolved (it won't be in "
         "missing_fields). Preserve every already-resolved field.\n"
+        "- The backend state may include pickup_location_needed: 'address' means ask for the "
+        "typed pickup address, 'pin' means ask only for the WhatsApp location pin, null means "
+        "both are on file — never ask for the one already present, and never ask both at once.\n"
+        "- The backend state may include customer_signal: PRICE_ENQUIRY means the customer just "
+        "asked a price question (answer it plainly, do NOT treat it as resistance or push to "
+        "book); PRICE_OBJECTION means they pushed back on price (stay calm and low-pressure, do "
+        "not repeat a booking ask).\n"
         "- Show ONLY windows returned by get_available_pickup_slots (they are already "
         "filtered for the current time + lead time). Never list a window that has passed, "
         "violates the lead time, or that a tool didn't return. Never invent availability.\n"
@@ -966,6 +1003,10 @@ async def run_booking_turn(ctx: BookingContext, *, text: str,
     )
     if _mem:
         state_block["returning_customer_memory"] = _mem
+    # Deterministic conversation signals (spec §11/§17): price enquiry vs objection, and
+    # which single pickup-location detail is still needed — so the model stays calm on a
+    # plain price question and asks only for the missing address/pin before slots.
+    state_block.update(conversation_signals(text, row))
     from agents.whatsapp_agent.context_assembly import build_cached_messages
     from settings import get_settings as _get_settings
 
