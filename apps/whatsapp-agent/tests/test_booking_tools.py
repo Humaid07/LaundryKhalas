@@ -294,7 +294,12 @@ async def test_negotiate_order_price_reaches_facility_floor(monkeypatch):
     assert repo.row["estimated_total"] == 24.0
 
     d4, _ = await _call(execute, "negotiate_order_price")
-    assert d4["action"] == "escalate"     # below the floor → human
+    # Below the floor → decline plainly (spec §7); no CTA, no "I'll get back to you".
+    # A 5-7 min discount-objection follow-up is queued (Supabase-only; a no-op here),
+    # and a silent conversion review is raised if the customer keeps stalling.
+    assert d4["action"] == "decline_additional_discount"
+    assert d4["reason_code"] == "below_floor"
+    assert "another discount" in d4["customer_safe_summary"].lower()
 
 
 async def test_get_order_summary_quotes_full_price_by_default():

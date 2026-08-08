@@ -28,15 +28,17 @@ SUPPRESSED = "SUPPRESSED"
 
 # --- scheduling: build rows to persist --------------------------------------
 def build_row(conversation_id, followup_type, anchor, *, market="AE", persona=None,
-              order_id=None, customer_phone=None, dedupe_scope=None) -> dict:
+              order_id=None, customer_phone=None, dedupe_scope=None, payload=None) -> dict:
     """A new ``scheduled_followups`` row (dict) ready to persist. ``due_at`` is computed
     by the policy (offset + 10 PM cutoff); ``dedupe_key`` makes it at-most-once.
 
     ``dedupe_scope`` is the identity the dedupe key is scoped to — normally the
     conversation, but for a website abandonment there is no conversation yet, so the web
-    session id is used instead (and ``conversation_id`` stays None until linked)."""
+    session id is used instead (and ``conversation_id`` stays None until linked).
+    ``payload`` is an optional jsonb blob for follow-up-specific state (e.g. the
+    discount-objection quote_version / trigger_message_id)."""
     scope = dedupe_scope if dedupe_scope is not None else conversation_id
-    return {
+    row = {
         "conversation_id": conversation_id,
         "order_id": order_id,
         "customer_phone": customer_phone,
@@ -49,6 +51,24 @@ def build_row(conversation_id, followup_type, anchor, *, market="AE", persona=No
         "market": market,
         "persona": persona,
     }
+    if payload is not None:
+        row["payload"] = payload
+    return row
+
+
+def discount_objection_row(conversation_id, anchor, *, market="AE", persona=None,
+                           order_id=None, customer_phone=None,
+                           quote_version=None, trigger_message_id=None) -> dict:
+    """The single 5-7 min discount-objection follow-up (spec §8). Scheduled when the
+    agent declines a discount / detects price pushback and the customer goes silent.
+    The customer text and the send/suppress/review decision are computed at SEND time by
+    services.discount_followup.decide (the AI never picks a number); ``payload`` carries
+    the state that decision rechecks against."""
+    return build_row(
+        conversation_id, followups.DISCOUNT_OBJECTION, anchor, market=market,
+        persona=persona, order_id=order_id, customer_phone=customer_phone,
+        payload={"quote_version": quote_version, "trigger_message_id": trigger_message_id,
+                 "trigger_type": followups.DISCOUNT_OBJECTION})
 
 
 def payment_silence_rows(conversation_id, anchor, *, market="AE", persona=None,

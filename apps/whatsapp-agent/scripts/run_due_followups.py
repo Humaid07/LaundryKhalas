@@ -71,6 +71,49 @@ async def _suppression_context(row: dict) -> fu.SuppressionContext:
         paid=paid, cash_selected=cash, order_confirmed=confirmed, converted=converted)
 
 
+async def _handle_discount_objection(row: dict) -> tuple[str, str | None]:
+    """Backend re-decision for a due DISCOUNT_OBJECTION follow-up (spec §8/§9). The AI
+    never picks anything: the deterministic discount engine (via discount_followup.decide)
+    says whether to SEND a backend-approved offer, raise a silent conversion REVIEW, or
+    SUPPRESS. Returns (outcome, text) where text is set only for SEND."""
+    from services import discount_followup, negotiation_review
+
+    p = row.get("payload") or {}
+    # Guard against re-offering a quote the customer no longer sees: compare the order
+    # total captured at schedule time with the current one.
+    current_total = None
+    order_id = row.get("order_id")
+    if order_id:
+        o = await database.fetchrow("select estimated_total from orders where order_id = $1", order_id)
+        current_total = float(o["estimated_total"]) if o and o.get("estimated_total") is not None else None
+
+    decision = discount_followup.decide(
+        subtotal=p.get("subtotal") or 0,
+        current_percentage=p.get("current_percentage"),
+        current_rule_code=p.get("current_rule_code"),
+        itemised=bool(p.get("itemised")),
+        facility_cost=p.get("facility_cost"),
+        stored_quote_version=p.get("quote_version"),
+        current_quote_version=current_total,
+        currency=p.get("currency", "AED"))
+
+    if decision.kind == discount_followup.REVIEW:
+        try:
+            await negotiation_review.flag_conversion_review(
+                conversation_id=row.get("conversation_id"), order_id=order_id,
+                reason=decision.reason or "CUSTOMER_CONVERSION_REVIEW",
+                context={"current_price": p.get("subtotal"),
+                         "existing_discount": p.get("current_percentage"),
+                         "facility_cost": p.get("facility_cost"),
+                         "hesitation": "PRICE_OBJECTION"})
+        except Exception as exc:  # noqa: BLE001 - review is best-effort
+            print(f"conversion_review_failed error={exc}")
+        return "review", None
+    if decision.kind == discount_followup.SEND:
+        return "send", decision.text
+    return "suppress", decision.reason
+
+
 def _may_send(phone: str | None) -> bool:
     """The webhook's outbound gate: never when paused; in test mode only to the
     allow-list; otherwise (live) allowed. Sending still requires a configured provider."""
@@ -98,18 +141,51 @@ async def run_due_followups() -> dict:
     for r in due_rows:
         ctx_cache[r["id"]] = await _suppression_context(r)
 
+    sent = suppressed = 0
+
+    # DISCOUNT_OBJECTION follow-ups take a dedicated backend re-decision (send an
+    # approved offer / raise a silent review / suppress) rather than the generic
+    # template-render path. Handle and remove them before generic arbitration.
+    handled_ids: set = set()
+    generic_rows = []
+    for r in due_rows:
+        if r["followup_type"] != fu.DISCOUNT_OBJECTION:
+            generic_rows.append(r)
+            continue
+        handled_ids.add(r["id"])
+        supp, reason = fu.is_suppressed(fu.DISCOUNT_OBJECTION, ctx_cache[r["id"]])
+        if supp:
+            await followups_repo.mark_suppressed(r["id"], reason or "suppressed")
+            suppressed += 1
+            continue
+        outcome, text = await _handle_discount_objection(r)
+        if outcome == "send" and text and _may_send(r.get("customer_phone")):
+            try:
+                await EvolutionWhatsAppChannel.from_settings().send_text(
+                    to_phone=r.get("customer_phone"), text=normalize_customer_reply(text).text)
+                await followups_repo.mark_sent(r["id"])
+                sent += 1
+                print(f"followup_sent type=DISCOUNT_OBJECTION to={mask_phone(r.get('customer_phone'))}")
+            except Exception as exc:  # noqa: BLE001 - never abort the sweep on one send
+                print(f"followup_send_failed type=DISCOUNT_OBJECTION error={exc}")
+        elif outcome == "review":
+            await followups_repo.mark_suppressed(r["id"], "conversion_review")
+            suppressed += 1
+        elif outcome == "suppress":
+            await followups_repo.mark_suppressed(r["id"], text or "not_eligible")
+            suppressed += 1
+        # outcome == "send" but not sendable now (paused / not allow-listed) → leave PENDING.
+
     def ctx_provider(conversation_id, followup_type):
-        for r in due_rows:
+        for r in generic_rows:
             if r.get("conversation_id") == conversation_id and r["followup_type"] == followup_type:
                 return ctx_cache[r["id"]]
         return fu.SuppressionContext()
 
-    plans = sched.plan_batch(due_rows, ctx_provider, now)
+    plans = sched.plan_batch(generic_rows, ctx_provider, now)
     chosen_ids = {p.followup_id for p in plans}
-
-    sent = suppressed = 0
     # Mark the rows the policy actively suppressed (so they don't linger as PENDING).
-    for r in due_rows:
+    for r in generic_rows:
         if r["id"] in chosen_ids:
             continue
         supp, reason = fu.is_suppressed(r["followup_type"], ctx_cache[r["id"]])

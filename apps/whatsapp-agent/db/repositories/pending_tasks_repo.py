@@ -71,6 +71,19 @@ async def create(
     return _serialize(row)
 
 
+async def has_open(conversation_id: str | None, task_type: str) -> bool:
+    """True if an open (unresolved) task of ``task_type`` already exists for this
+    conversation — used to dedupe the silent conversion review (spec §9/§18)."""
+    if not conversation_id:
+        return False
+    row = await database.fetchrow(
+        "select 1 from pending_tasks where conversation_id = $1::uuid "
+        "and task_type = $2 and status = 'open' limit 1",
+        conversation_id, task_type,
+    )
+    return row is not None
+
+
 async def facility_quote_status(order_uuid: str) -> str:
     """The §29 facility-quote status for one order, from its AWAITING_FACILITY_QUOTE task:
     pending | received | none. Best-effort read."""

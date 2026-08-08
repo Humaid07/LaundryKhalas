@@ -1054,6 +1054,38 @@ async def _schedule_quote_inactivity(ctx, row) -> None:
         logger.warning("quote_followup_schedule_failed", error=str(exc))
 
 
+async def _schedule_discount_objection(ctx, row, *, subtotal, current_percentage,
+                                       current_rule_code, itemised, facility_cost,
+                                       currency="AED") -> None:
+    """Queue the §8 5-7 min discount-objection follow-up after the agent has declined a
+    further discount. Supabase-only, idempotent (dedupe_key), never raises. A reply /
+    confirm / cancel / takeover suppresses it; at send time the backend re-runs the
+    discount engine (never the AI) to decide send/review/suppress. The decision inputs
+    are carried in the row payload so the sweeper need not re-price."""
+    try:
+        from db import database
+        if not database.is_supabase_mode():
+            return
+        from db.repositories import scheduled_followups_repo
+        from services import followup_scheduler
+        r = followup_scheduler.discount_objection_row(
+            ctx.conversation_id, ctx.local_now(), market=ctx.market,
+            order_id=(row or {}).get("order_id"),
+            customer_phone=(row or {}).get("customer_phone"),
+            quote_version=(row or {}).get("estimated_total"))
+        r["payload"].update({
+            "subtotal": float(subtotal) if subtotal is not None else None,
+            "current_percentage": float(current_percentage) if current_percentage is not None else None,
+            "current_rule_code": current_rule_code,
+            "itemised": bool(itemised),
+            "facility_cost": float(facility_cost) if facility_cost is not None else None,
+            "currency": currency,
+        })
+        await scheduled_followups_repo.schedule([r])
+    except Exception as exc:  # noqa: BLE001 - a follow-up must never break the reply
+        logger.warning("discount_objection_schedule_failed", error=str(exc))
+
+
 async def _schedule_pickup_reminder(ctx, row) -> None:
     """Queue a pickup reminder ~2h before the confirmed pickup window (operational).
     Supabase-only, only for a FUTURE pickup, idempotent, never raises."""
@@ -1676,14 +1708,20 @@ def make_booking_executor(ctx: BookingContext):
                                               "straight back to you with it."),
                 })
             # below_floor (customer pushing under the minimum selling price) / other →
-            # a human commercial decision.
+            # no further discount right now. Decline plainly and STOP (spec §7 — no CTA,
+            # no "I'll get back to you"). Queue the 5-7 min discount-objection follow-up:
+            # if the customer goes silent the backend re-runs the discount engine and
+            # either sends an approved offer or raises a silent conversion review (§8/§9).
+            await _schedule_discount_objection(
+                ctx, row, subtotal=subtotal, current_percentage=current_pct,
+                current_rule_code=current_rule, itemised=total_known,
+                facility_cost=facility_cost, currency=base_quote.currency)
             return _ok({
-                "action": "escalate",
+                "action": "decline_additional_discount",
                 "pre_discount_total": subtotal,
                 "currency": base_quote.currency,
                 "reason_code": decision.reason,
-                "customer_safe_summary": ("That's the very best price I can offer. Let me check with the team to "
-                                          "see if anything more is possible — I'll get right back to you."),
+                "customer_safe_summary": "I'm sorry, I won't be able to offer another discount at the moment.",
             })
 
         if name == "quote_express":

@@ -33,6 +33,7 @@ _CONFIG_FILE = Path(__file__).resolve().parent.parent / "config" / "followups.js
 PAYMENT_STRIPE = "PAYMENT_STRIPE"
 PAYMENT_CASH = "PAYMENT_CASH"
 QUOTE_INACTIVITY = "QUOTE_INACTIVITY"
+DISCOUNT_OBJECTION = "DISCOUNT_OBJECTION"
 WEB_ABANDONMENT_1 = "WEB_ABANDONMENT_1"
 WEB_ABANDONMENT_2 = "WEB_ABANDONMENT_2"
 WEB_ABANDONMENT_3 = "WEB_ABANDONMENT_3"
@@ -176,9 +177,11 @@ def is_suppressed(followup_type: str, ctx: SuppressionContext) -> tuple[bool, st
             return True, "no_consent"
         if ctx.converted or ctx.order_confirmed:
             return True, "already_converted"
-    if followup_type == QUOTE_INACTIVITY:
+    if followup_type in (QUOTE_INACTIVITY, DISCOUNT_OBJECTION):
         if ctx.order_confirmed:
             return True, "already_ordered"
+        if ctx.paid:
+            return True, "already_paid"
     return False, None
 
 

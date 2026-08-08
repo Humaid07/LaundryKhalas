@@ -10,6 +10,7 @@ replied / opted out" — it drops every still-pending follow-up for that convers
 from __future__ import annotations
 
 import datetime as _dt
+import json as _json
 
 from db import database
 
@@ -39,15 +40,15 @@ async def schedule(rows: list[dict]) -> int:
             """
             insert into scheduled_followups
                 (conversation_id, order_id, customer_phone, followup_type, status,
-                 template_id, dedupe_key, due_at, anchor_at, market, persona)
-            values ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                 template_id, dedupe_key, due_at, anchor_at, market, persona, payload)
+            values ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
             on conflict (dedupe_key) do nothing
             returning id
             """,
             r.get("conversation_id"), r.get("order_id"), r.get("customer_phone"),
             r["followup_type"], r.get("status", "PENDING"), r.get("template_id"),
             r["dedupe_key"], r["due_at"], r.get("anchor_at"), r.get("market", "AE"),
-            r.get("persona"),
+            r.get("persona"), _json.dumps(r["payload"]) if r.get("payload") is not None else None,
         )
         if row is not None:
             inserted += 1

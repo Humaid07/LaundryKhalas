@@ -11,6 +11,7 @@
     "AWAITING_CUSTOMER_PHOTO":      { "due_hours": 24, "follow_up_hours": 12, "escalation_team": "Customer Facing" },
     "AWAITING_CUSTOMER_LOCATION":   { "due_hours": 24, "follow_up_hours": 12, "escalation_team": "Customer Facing" },
     "AWAITING_PAYMENT":             { "due_hours": 24, "follow_up_hours": 6,  "escalation_team": "Customer Facing / Finance" },
-    "AWAITING_COMPLAINT_REVIEW":    { "due_hours": 4,  "follow_up_hours": 2,  "escalation_team": "Customer Facing" }
+    "AWAITING_COMPLAINT_REVIEW":    { "due_hours": 4,  "follow_up_hours": 2,  "escalation_team": "Customer Facing" },
+    "CUSTOMER_CONVERSION_REVIEW":   { "due_hours": 2,  "follow_up_hours": 1,  "escalation_team": "Sales / Customer Facing" }
   }
 }

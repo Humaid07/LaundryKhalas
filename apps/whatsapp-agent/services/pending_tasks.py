@@ -20,6 +20,9 @@ TASK_TYPES = frozenset({
     "AWAITING_DRIVER_CONFIRMATION", "AWAITING_OPERATIONS_RESPONSE",
     "AWAITING_CUSTOMER_PHOTO", "AWAITING_CUSTOMER_LOCATION",
     "AWAITING_PAYMENT", "AWAITING_COMPLAINT_REVIEW",
+    # Silent commercial review when the discount ceiling / margin floor is reached
+    # and the customer keeps objecting (spec §9/§18). Does NOT pause the bot.
+    "CUSTOMER_CONVERSION_REVIEW",
 })
 
 # Safe default SLA when a type is missing from config.
