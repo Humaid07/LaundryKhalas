@@ -1,7 +1,7 @@
 [project]
 name = "laundrykhalaas-whatsapp-agent-standalone"
 version = "0.1.0"
-description = "Standalone LaundryKhalaas WhatsApp Agent - focused laundry/cleaning customer assistant, domain-guarded, mock-first."
+description = "Standalone Laundry Khalas WhatsApp Agent - focused laundry/cleaning customer assistant, domain-guarded, mock-first."
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.111.0",

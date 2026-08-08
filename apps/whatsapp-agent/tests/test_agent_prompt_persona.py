@@ -39,7 +39,7 @@ def test_presents_as_customer_service_rep_not_virtual_assistant():
     # is gone); the phrase now survives only inside the negative disclosure rule
     # ("do not describe yourself as a virtual assistant ...").
     assert "whatsapp virtual assistant" not in low
-    assert "a laundry khalaas customer service representative" in low
+    assert "a laundry khalas customer service representative" in low
     assert "do not describe yourself as a virtual assistant" in low
     assert "customer service representative" in low
     # Human-disclosure rule: don't claim to be human, don't fabricate an identity.

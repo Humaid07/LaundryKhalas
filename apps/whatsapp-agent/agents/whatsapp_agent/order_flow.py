@@ -225,7 +225,7 @@ async def _handle_cancel_confirm(
         await order_store.request_cancellation(db, order)
         await db.commit()
     msg = (
-        "Your cancellation request has been noted. The LaundryKhalas team will "
+        "Your cancellation request has been noted. The Laundry Khalas team will "
         "confirm whether it can still be cancelled. Demo mode — no live "
         "cancellation has been made."
     )

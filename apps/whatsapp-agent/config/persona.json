@@ -3,7 +3,7 @@
   "version": "2026-07-29.2",
   "reveal_ai": false,
   "persona_type": "CUSTOMER_SERVICE_REPRESENTATIVE",
-  "organization": "Laundry Khalaas",
+  "organization": "Laundry Khalas",
   "approved_personas": ["Sara", "Maya", "Zoya", "Hanna", "Sofia", "Max", "Ben"],
   "assignment_mode": "PERSISTENT_PER_CUSTOMER",
   "languages": {

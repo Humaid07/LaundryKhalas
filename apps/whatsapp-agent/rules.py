@@ -27,6 +27,25 @@ def agent_rules() -> dict:
     return _load("whatsapp_agent_rules.json")
 
 
+def brand_name() -> str:
+    """Canonical customer-facing brand name. Source of truth: whatsapp_agent_rules.json."""
+    return str(agent_rules().get("brand_name", "Laundry Khalas"))
+
+
+def behaviour_rules() -> dict:
+    """The canonical, versioned WhatsApp behaviour-rules section (source of truth)."""
+    return agent_rules().get("behaviour_rules", {})
+
+
+def behaviour_rule_texts() -> list[str]:
+    """Active behaviour-rule texts, highest-priority first, for rendering into the
+    live system prompt. Inactive rules are excluded so a rule can be retired via
+    config without editing the prompt code."""
+    rs = [r for r in behaviour_rules().get("rules", []) if r.get("active", True)]
+    rs.sort(key=lambda r: -int(r.get("priority", 0)))
+    return [str(r["text"]).strip() for r in rs if str(r.get("text", "")).strip()]
+
+
 def services_config() -> dict:
     return _load("laundry_services.json")
 

@@ -27,7 +27,7 @@ def _no_dash_formatting(text: str) -> bool:
 
 # --- representative customer replies (spec list) ---------------------------
 REPLIES = [
-    "Hi! I'm Sara from Laundry Khalaas. How can I help with your laundry today?",
+    "Hi! I'm Sara from Laundry Khalas. How can I help with your laundry today?",
     "Sure, we can do a wash and fold for you. What items would you like cleaned?",
     "Please share your full pickup address and your WhatsApp location pin.",
     "Could you drop your WhatsApp location pin so we can route the driver?",

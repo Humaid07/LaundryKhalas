@@ -89,7 +89,7 @@ def assistant_identity(persona: dict | None) -> dict:
         "assistant_identity": {
             "persona_id": p.get("id"),
             "display_name": p.get("name"),
-            "organization": "Laundry Khalaas",
+            "organization": "Laundry Khalas",
             "persona_type": "CUSTOMER_SERVICE_REPRESENTATIVE",
         }
     }

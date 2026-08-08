@@ -122,7 +122,7 @@ class MockProvider(LLMProvider):
                 )
             elif action == "cancel_order_request":
                 text = (
-                    f"Got it — Order {order_id} noted. Our LaundryKhalas team will confirm "
+                    f"Got it — Order {order_id} noted. Our Laundry Khalas team will confirm "
                     "whether it can still be cancelled." + _DEMO_ORDER_TAG
                     if order_id
                     else "Sure. Please share your order ID. Our team will confirm whether the "

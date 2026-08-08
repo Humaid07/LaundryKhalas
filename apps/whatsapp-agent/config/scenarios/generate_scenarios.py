@@ -204,13 +204,13 @@ HIGH_RISK_ALLOWED = ["acknowledge", "ask_order_id", "create_ticket", "flag_human
 # 1. Greeting and menu
 # =========================================================================
 scn("GREETING_001", "greeting", "Hi",
-    "Hi \U0001f44b Welcome to LaundryKhalas. How can we help you today?",
+    "Hi \U0001f44b Welcome to Laundry Khalas. How can we help you today?",
     "greeting", allowed=["acknowledge", "show_main_menu"])
 scn("GREETING_002", "greeting", "Good morning",
-    "Good morning! Welcome to LaundryKhalas. How can we help you today?",
+    "Good morning! Welcome to Laundry Khalas. How can we help you today?",
     "greeting", allowed=["acknowledge", "show_main_menu"])
 scn("GREETING_003", "greeting", "Assalamu alaikum",
-    "Wa alaikum assalam! Welcome to LaundryKhalas. How can we help today?",
+    "Wa alaikum assalam! Welcome to Laundry Khalas. How can we help today?",
     "greeting", allowed=["acknowledge", "show_main_menu"])
 
 # =========================================================================
@@ -676,7 +676,7 @@ scn("ADDITEMS_003", "add_more_items", "Can I add a blanket as well?",
 # 25. Call support
 # =========================================================================
 scn("SUPPORT_001", "call_support", "I need to speak to support",
-    "Sure. I'll connect you with the LaundryKhalas support team shortly. Demo mode — live support is not connected yet.",
+    "Sure. I'll connect you with the Laundry Khalas support team shortly. Demo mode — live support is not connected yet.",
     "call_support", urgency="medium", human=True, dashboard_flag="support_handoff",
     team="customer_facing", priority="medium", alert_title="Support handoff requested",
     allowed=["acknowledge", "offer_support_handoff", "flag_human_intervention"],

@@ -133,7 +133,7 @@ def test_dedupe_key_is_stable():
 
 def test_render_fills_persona_and_passes_style_validator():
     msg = fu.render(fu.WEB_ABANDONMENT_1, persona="Zoya")
-    assert msg.startswith("Hi, I am Zoya from Laundry Khalaas.")
+    assert msg.startswith("Hi, I am Zoya from Laundry Khalas.")
     for ft in fu.FOLLOWUP_TEMPLATES:
         text = fu.render(ft, persona="Sara")
         assert normalize_customer_reply(text).text == text  # no emoji/exclamation/dash

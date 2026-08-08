@@ -1,6 +1,6 @@
 """Deterministic "how does it work" process explanation (spec 2026-08-01 §5).
 
-Detects when a customer is asking how the Laundry Khalaas service works and
+Detects when a customer is asking how the Laundry Khalas service works and
 returns the approved concise four-step guide. Numbered steps are used ONLY here
 (the one scenario where a structured list improves clarity); the wording says
 "one of the nearest suitable facilities" because facility selection depends on
@@ -39,7 +39,7 @@ PROCESS_EXPLANATION = (
 
 
 def is_process_question(text: str | None) -> bool:
-    """True when the message asks how the Laundry Khalaas service works."""
+    """True when the message asks how the Laundry Khalas service works."""
     if not text or not str(text).strip():
         return False
     return bool(_PROCESS_RE.search(str(text)))

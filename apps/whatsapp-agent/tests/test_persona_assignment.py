@@ -115,7 +115,7 @@ def test_backend_assigned_name_drives_assistant_identity_and_prompt_forbids_over
     ident = pa.assistant_identity(pa.persona_from_customer(cust))["assistant_identity"]
     assert ident["display_name"] == "Maya"
     assert ident["persona_type"] == "CUSTOMER_SERVICE_REPRESENTATIVE"
-    assert ident["organization"] == "Laundry Khalaas"
+    assert ident["organization"] == "Laundry Khalas"
     # The stable prompt forbids Claude choosing/inventing a name.
     bp = booking_system_prompt().lower()
     assert "never select, change or invent your own name" in bp

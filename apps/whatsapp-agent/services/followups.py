@@ -50,7 +50,7 @@ FOLLOWUP_TEMPLATES = {
     PAYMENT_STRIPE: "Would you like me to send the Stripe payment link?",
     PAYMENT_CASH: "It looks like Stripe may not be convenient. Shall I arrange cash on delivery?",
     QUOTE_INACTIVITY: "Would you like me to see if I can improve the price for you?",
-    WEB_ABANDONMENT_1: ("Hi, I am {persona} from Laundry Khalaas. I noticed you were about to "
+    WEB_ABANDONMENT_1: ("Hi, I am {persona} from Laundry Khalas. I noticed you were about to "
                         "place an order. Would you like help booking it?"),
     WEB_ABANDONMENT_2: "I can offer 25% off an eligible standard order if you would like to continue.",
     WEB_ABANDONMENT_3: "Would you still like help arranging your laundry pickup?",
